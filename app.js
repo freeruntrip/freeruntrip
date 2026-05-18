@@ -7,4 +7,16 @@ const startBtn = document.getElementById('startBtn');
 
 startBtn.addEventListener('click', function () {
   console.log('러닝 시작 버튼 클릭됨');
+
+  navigator.geolocation.getCurrentPosition(
+    function (position) {
+      console.log('GPS 성공');
+      console.log(position);
+    },
+    function (error) {
+      console.log('GPS 에러 발생');
+      console.log(error);
+    }
+  );
 });
+console.log('파일 저장 테스트');
