@@ -41,6 +41,6 @@ function (error) {
     enableHighAccuracy: true
   }
 );
-});
 console.log('VERCEL TEST SUCCESS');
+});
 
