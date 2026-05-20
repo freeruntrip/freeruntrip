@@ -4,11 +4,11 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
 const startBtn = document.getElementById('startBtn');
-
+let currentMarker;
 startBtn.addEventListener('click', function () {
   console.log('러닝 시작 버튼 클릭됨');
 
-navigator.geolocation.getCurrentPosition(
+navigator.geolocation.watchPosition(
   function (position) {
     console.log('GPS 성공');
     console.log(position);
@@ -20,12 +20,19 @@ navigator.geolocation.getCurrentPosition(
 
     map.setView([latitude, longitude], 16);
 
-    L.marker([latitude, longitude]).addTo(map)
-      .bindPopup('현재 위치')
-      .openPopup();
-  },
+   if (!currentMarker) {
+  currentMarker = L.marker([latitude, longitude]).addTo(map);
 
-  function (error) {
+  currentMarker
+    .bindPopup('현재 위치')
+    .openPopup();
+
+} else {
+  currentMarker.setLatLng([latitude, longitude]);
+}
+},
+
+function (error) {
     console.log('GPS 에러 발생');
     console.log(error);
   },
