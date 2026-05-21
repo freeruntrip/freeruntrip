@@ -5,6 +5,8 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 }).addTo(map);
 const startBtn = document.getElementById('startBtn');
 let currentMarker;
+let routeCoordinates = [];
+let routeLine;
 startBtn.addEventListener('click', function () {
   console.log('러닝 시작 버튼 클릭됨');
 
@@ -17,18 +19,22 @@ navigator.geolocation.watchPosition(
     const longitude = position.coords.longitude;
 
     console.log(latitude, longitude);
+    routeCoordinates.push([latitude, longitude]);
+
+console.log(routeCoordinates);
 
     map.setView([latitude, longitude], 16);
 
    if (!currentMarker) {
   currentMarker = L.marker([latitude, longitude]).addTo(map);
-
+routeLine = L.polyline(routeCoordinates).addTo(map);
   currentMarker
     .bindPopup('현재 위치')
     .openPopup();
 
 } else {
   currentMarker.setLatLng([latitude, longitude]);
+  routeLine.setLatLngs(routeCoordinates);
 }
 },
 
