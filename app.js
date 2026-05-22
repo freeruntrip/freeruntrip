@@ -30,7 +30,6 @@ if (!isRunning) {
 
     console.log('타이머 실행 중:', timer.textContent);
   }, 1000);
-}
 watchId = navigator.geolocation.watchPosition(
   function (position) {
     console.log('GPS 성공');
@@ -68,20 +67,36 @@ function (error) {
     enableHighAccuracy: true
   }
 );
+}
 console.log('VERCEL TEST SUCCESS');
 });
 pauseBtn.addEventListener('click', function () {
   console.log('일시정지 버튼 클릭됨');
   clearInterval(timerInterval);
-isRunning = false;
+  navigator.geolocation.clearWatch(watchId);
+  console.log('pause watchId 종료:', watchId);
+  isRunning = false;
 });
 stopBtn.addEventListener('click', function () {
   console.log('러닝 종료 버튼 클릭됨');
-  clearInterval(timerInterval);
+clearInterval(timerInterval);
 navigator.geolocation.clearWatch(watchId);
 console.log('watchId 종료:', watchId);
+
 seconds = 0;
 timer.textContent = '00:00';
+
+routeCoordinates = [];
+
+if (routeLine) {
+  map.removeLayer(routeLine);
+  routeLine = null;
+}
+
+if (currentMarker) {
+  map.removeLayer(currentMarker);
+  currentMarker = null;
+}
 
 isRunning = false;
 });
