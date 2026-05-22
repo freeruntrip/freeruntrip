@@ -4,12 +4,30 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
 const startBtn = document.getElementById('startBtn');
+const timer = document.getElementById('timer');
+
+let seconds = 0;
+let timerInterval;
+let isRunning = false;
 let currentMarker;
 let routeCoordinates = [];
 let routeLine;
 startBtn.addEventListener('click', function () {
   console.log('러닝 시작 버튼 클릭됨');
+if (!isRunning) {
+  isRunning = true;
 
+  timerInterval = setInterval(function () {
+    seconds++;
+
+    const minutes = String(Math.floor(seconds / 60)).padStart(2, '0');
+    const remainingSeconds = String(seconds % 60).padStart(2, '0');
+
+    timer.textContent = `${minutes}:${remainingSeconds}`;
+
+    console.log('타이머 실행 중:', timer.textContent);
+  }, 1000);
+}
 navigator.geolocation.watchPosition(
   function (position) {
     console.log('GPS 성공');
