@@ -4,6 +4,8 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors'
 }).addTo(map);
 const startBtn = document.getElementById('startBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const stopBtn = document.getElementById('stopBtn');
 const timer = document.getElementById('timer');
 
 let seconds = 0;
@@ -67,4 +69,17 @@ function (error) {
 );
 console.log('VERCEL TEST SUCCESS');
 });
+pauseBtn.addEventListener('click', function () {
+  console.log('일시정지 버튼 클릭됨');
+  clearInterval(timerInterval);
+isRunning = false;
+});
+stopBtn.addEventListener('click', function () {
+  console.log('러닝 종료 버튼 클릭됨');
+  clearInterval(timerInterval);
 
+seconds = 0;
+timer.textContent = '00:00';
+
+isRunning = false;
+});
