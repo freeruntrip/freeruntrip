@@ -14,6 +14,7 @@ let isRunning = false;
 let currentMarker;
 let routeCoordinates = [];
 let routeLine;
+let watchId;
 startBtn.addEventListener('click', function () {
   console.log('러닝 시작 버튼 클릭됨');
 if (!isRunning) {
@@ -30,7 +31,7 @@ if (!isRunning) {
     console.log('타이머 실행 중:', timer.textContent);
   }, 1000);
 }
-navigator.geolocation.watchPosition(
+watchId = navigator.geolocation.watchPosition(
   function (position) {
     console.log('GPS 성공');
     console.log(position);
@@ -77,7 +78,8 @@ isRunning = false;
 stopBtn.addEventListener('click', function () {
   console.log('러닝 종료 버튼 클릭됨');
   clearInterval(timerInterval);
-
+navigator.geolocation.clearWatch(watchId);
+console.log('watchId 종료:', watchId);
 seconds = 0;
 timer.textContent = '00:00';
 
