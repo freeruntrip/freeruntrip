@@ -16,6 +16,8 @@ let routeCoordinates = [];
 let routeLine;
 let watchId;
 let lastValidPosition = null;
+let totalDistance = 0; // meters
+const distanceDisplay = document.getElementById('distance');
 
 const MAX_ACCURACY = 200; // meters
 const MIN_DISTANCE = 5; // meters
@@ -83,6 +85,9 @@ if (lastValidPosition) {
     console.log('이동 거리 너무 짧음, 좌표 무시:', distanceFromLast);
     return;
   }
+    totalDistance += distanceFromLast;
+  distanceDisplay.textContent = (totalDistance / 1000).toFixed(2) + ' km';
+  console.log('총 이동거리:', totalDistance);
 }
 
 lastValidPosition = {
@@ -136,7 +141,8 @@ console.log('watchId 종료:', watchId);
 
 seconds = 0;
 timer.textContent = '00:00';
-
+totalDistance = 0;
+distanceDisplay.textContent = '0.00 km';
 routeCoordinates = [];
 lastValidPosition = null;
 if (routeLine) {
