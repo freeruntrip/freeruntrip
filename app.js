@@ -131,6 +131,7 @@ pauseBtn.addEventListener('click', function () {
   clearInterval(timerInterval);
   navigator.geolocation.clearWatch(watchId);
   console.log('pause watchId 종료:', watchId);
+  watchId = null;
   isRunning = false;
 });
 stopBtn.addEventListener('click', function () {
@@ -138,7 +139,7 @@ stopBtn.addEventListener('click', function () {
 clearInterval(timerInterval);
 navigator.geolocation.clearWatch(watchId);
 console.log('watchId 종료:', watchId);
-
+watchId = null;
 seconds = 0;
 timer.textContent = '00:00';
 totalDistance = 0;
