@@ -124,7 +124,6 @@ function (error) {
   }
 );
 }
-console.log('VERCEL TEST SUCCESS');
 });
 pauseBtn.addEventListener('click', function () {
   console.log('일시정지 버튼 클릭됨');
