@@ -99,7 +99,7 @@ routeCoordinates.push([latitude, longitude]);
 
 console.log(routeCoordinates);
 
-    map.setView([latitude, longitude], 16);
+    map.panTo([latitude, longitude]);
 
    if (!currentMarker) {
   currentMarker = L.marker([latitude, longitude]).addTo(map);
