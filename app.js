@@ -17,6 +17,8 @@ let routeLine;
 let watchId;
 let lastValidPosition = null;
 let totalDistance = 0; // meters
+let recentPositions = [];
+const SMOOTHING_COUNT = 3;
 const distanceDisplay = document.getElementById('distance');
 
 const MAX_ACCURACY = 200; // meters
@@ -41,6 +43,29 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
   return R * c;
+}
+function getSmoothedPosition(latitude, longitude) {
+  recentPositions.push({
+    latitude: latitude,
+    longitude: longitude
+  });
+
+  if (recentPositions.length > SMOOTHING_COUNT) {
+    recentPositions.shift();
+  }
+
+  let latitudeSum = 0;
+  let longitudeSum = 0;
+
+  recentPositions.forEach(function (position) {
+    latitudeSum += position.latitude;
+    longitudeSum += position.longitude;
+  });
+
+  return {
+    latitude: latitudeSum / recentPositions.length,
+    longitude: longitudeSum / recentPositions.length
+  };
 }
 startBtn.addEventListener('click', function () {
   console.log('러닝 시작 버튼 클릭됨');
@@ -89,27 +114,39 @@ if (lastValidPosition) {
   distanceDisplay.textContent = (totalDistance / 1000).toFixed(2) + ' km';
   console.log('총 이동거리:', totalDistance);
 }
+const smoothedPosition = getSmoothedPosition(latitude, longitude);
 
 lastValidPosition = {
-  latitude: latitude,
-  longitude: longitude
+  latitude: smoothedPosition.latitude,
+  longitude: smoothedPosition.longitude
 };
 
-routeCoordinates.push([latitude, longitude]);
+routeCoordinates.push([
+  smoothedPosition.latitude,
+  smoothedPosition.longitude
+]);
 
 console.log(routeCoordinates);
 
-    map.panTo([latitude, longitude]);
-
+map.panTo([
+  smoothedPosition.latitude,
+  smoothedPosition.longitude
+]);
    if (!currentMarker) {
-  currentMarker = L.marker([latitude, longitude]).addTo(map);
+  currentMarker = L.marker([
+  smoothedPosition.latitude,
+  smoothedPosition.longitude
+]).addTo(map);
 routeLine = L.polyline(routeCoordinates).addTo(map);
   currentMarker
     .bindPopup('현재 위치')
     .openPopup();
 
 } else {
-  currentMarker.setLatLng([latitude, longitude]);
+  currentMarker.setLatLng([
+  smoothedPosition.latitude,
+  smoothedPosition.longitude
+]);
   routeLine.setLatLngs(routeCoordinates);
 }
 },
@@ -144,6 +181,7 @@ timer.textContent = '00:00';
 totalDistance = 0;
 distanceDisplay.textContent = '0.00 km';
 routeCoordinates = [];
+recentPositions = [];
 lastValidPosition = null;
 if (routeLine) {
   map.removeLayer(routeLine);
