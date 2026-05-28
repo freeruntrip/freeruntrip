@@ -20,7 +20,7 @@ let totalDistance = 0; // meters
 let recentPositions = [];
 const SMOOTHING_COUNT = 3;
 const distanceDisplay = document.getElementById('distance');
-
+const paceDisplay = document.getElementById('pace');
 const MAX_ACCURACY = 200; // meters
 const MIN_DISTANCE = 5; // meters
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -112,6 +112,19 @@ if (lastValidPosition) {
   }
     totalDistance += distanceFromLast;
   distanceDisplay.textContent = (totalDistance / 1000).toFixed(2) + ' km';
+  if (totalDistance > 0 && seconds > 0) {
+  const paceSeconds = seconds / (totalDistance / 1000);
+
+  const paceMinutes = Math.floor(paceSeconds / 60);
+  const paceRemainingSeconds = Math.floor(paceSeconds % 60);
+
+  paceDisplay.textContent =
+    'Pace: ' +
+    paceMinutes +
+    "'" +
+    String(paceRemainingSeconds).padStart(2, '0') +
+    '"';
+}
   console.log('총 이동거리:', totalDistance);
 }
 const smoothedPosition = getSmoothedPosition(latitude, longitude);
@@ -137,7 +150,13 @@ map.panTo([
   smoothedPosition.latitude,
   smoothedPosition.longitude
 ]).addTo(map);
-routeLine = L.polyline(routeCoordinates).addTo(map);
+routeLine = L.polyline(routeCoordinates, {
+  color: '#1f6feb',
+  weight: 6,
+  opacity: 0.85,
+  lineCap: 'round',
+  lineJoin: 'round'
+}).addTo(map);
   currentMarker
     .bindPopup('현재 위치')
     .openPopup();
@@ -180,6 +199,7 @@ seconds = 0;
 timer.textContent = '00:00';
 totalDistance = 0;
 distanceDisplay.textContent = '0.00 km';
+paceDisplay.textContent = 'Pace: --\'--"';
 routeCoordinates = [];
 recentPositions = [];
 lastValidPosition = null;
