@@ -21,7 +21,7 @@ let recentPositions = [];
 const SMOOTHING_COUNT = 3;
 const distanceDisplay = document.getElementById('distance');
 const paceDisplay = document.getElementById('pace');
-const MAX_ACCURACY = 200; // meters
+const MAX_ACCURACY = 100; // meters
 const MIN_DISTANCE = 5; // meters
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -97,13 +97,13 @@ if (accuracy > MAX_ACCURACY) {
   console.log('GPS 정확도 낮음, 좌표 무시:', accuracy);
   return;
 }
-
+const smoothedPosition = getSmoothedPosition(latitude, longitude);
 if (lastValidPosition) {
   const distanceFromLast = calculateDistance(
     lastValidPosition.latitude,
     lastValidPosition.longitude,
-    latitude,
-    longitude
+    smoothedPosition.latitude,
+smoothedPosition.longitude
   );
 
   if (distanceFromLast < MIN_DISTANCE) {
@@ -127,7 +127,6 @@ if (lastValidPosition) {
 }
   console.log('총 이동거리:', totalDistance);
 }
-const smoothedPosition = getSmoothedPosition(latitude, longitude);
 
 lastValidPosition = {
   latitude: smoothedPosition.latitude,
