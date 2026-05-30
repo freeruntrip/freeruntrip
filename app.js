@@ -140,10 +140,16 @@ routeCoordinates.push([
 
 console.log(routeCoordinates);
 
-map.panTo([
-  smoothedPosition.latitude,
-  smoothedPosition.longitude
-]);
+map.panTo(
+  [
+    smoothedPosition.latitude,
+    smoothedPosition.longitude
+  ],
+  {
+    animate: true,
+    duration: 0.8
+  }
+);
    if (!currentMarker) {
   currentMarker = L.marker([
   smoothedPosition.latitude,
