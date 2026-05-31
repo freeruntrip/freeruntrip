@@ -14,6 +14,7 @@ let isRunning = false;
 let currentMarker;
 let routeCoordinates = [];
 let routeLine;
+let paused = false;
 let watchId;
 let lastValidPosition = null;
 let totalDistance = 0; // meters
@@ -70,6 +71,11 @@ function getSmoothedPosition(latitude, longitude) {
 startBtn.addEventListener('click', function () {
   console.log('러닝 시작 버튼 클릭됨');
 if (!isRunning) {
+  if (paused) {
+  routeCoordinates = [];
+  routeLine = null;
+  paused = false;
+}
   isRunning = true;
 
   timerInterval = setInterval(function () {
@@ -150,7 +156,7 @@ map.panTo(
     duration: 0.8
   }
 );
-   if (!currentMarker) {
+   if (!currentMarker || !routeLine) {
   currentMarker = L.marker([
   smoothedPosition.latitude,
   smoothedPosition.longitude
@@ -192,6 +198,7 @@ pauseBtn.addEventListener('click', function () {
   navigator.geolocation.clearWatch(watchId);
   console.log('pause watchId 종료:', watchId);
   watchId = null;
+  paused = true;
   isRunning = false;
 });
 stopBtn.addEventListener('click', function () {
