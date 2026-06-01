@@ -159,29 +159,33 @@ map.panTo(
     duration: 0.8
   }
 );
-   if (!currentMarker || !routeLine) {
+  if (!currentMarker) {
   currentMarker = L.marker([
-  smoothedPosition.latitude,
-  smoothedPosition.longitude
-]).addTo(map);
-routeLine = L.polyline(routeCoordinates, {
-  color: '#1f6feb',
-  weight: 6,
-  opacity: 0.85,
-  lineCap: 'round',
-  lineJoin: 'round'
-}).addTo(map);
+    smoothedPosition.latitude,
+    smoothedPosition.longitude
+  ]).addTo(map);
 
-routeLines.push(routeLine);
   currentMarker
     .bindPopup('현재 위치')
     .openPopup();
-
 } else {
   currentMarker.setLatLng([
-  smoothedPosition.latitude,
-  smoothedPosition.longitude
-]);
+    smoothedPosition.latitude,
+    smoothedPosition.longitude
+  ]);
+}
+
+if (!routeLine) {
+  routeLine = L.polyline(routeCoordinates, {
+    color: '#1f6feb',
+    weight: 6,
+    opacity: 0.85,
+    lineCap: 'round',
+    lineJoin: 'round'
+  }).addTo(map);
+
+  routeLines.push(routeLine);
+} else {
   routeLine.setLatLngs(routeCoordinates);
 }
 },
