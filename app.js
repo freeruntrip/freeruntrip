@@ -14,6 +14,7 @@ let isRunning = false;
 let currentMarker;
 let routeCoordinates = [];
 let routeLine;
+let routeLines = [];
 let paused = false;
 let watchId;
 let lastValidPosition = null;
@@ -71,9 +72,11 @@ function getSmoothedPosition(latitude, longitude) {
 startBtn.addEventListener('click', function () {
   console.log('러닝 시작 버튼 클릭됨');
 if (!isRunning) {
-  if (paused) {
+if (paused) {
   routeCoordinates = [];
   routeLine = null;
+  lastValidPosition = null;
+  recentPositions = [];
   paused = false;
 }
   isRunning = true;
@@ -168,6 +171,8 @@ routeLine = L.polyline(routeCoordinates, {
   lineCap: 'round',
   lineJoin: 'round'
 }).addTo(map);
+
+routeLines.push(routeLine);
   currentMarker
     .bindPopup('현재 위치')
     .openPopup();
@@ -215,10 +220,12 @@ paceDisplay.textContent = 'Pace: --\'--"';
 routeCoordinates = [];
 recentPositions = [];
 lastValidPosition = null;
-if (routeLine) {
-  map.removeLayer(routeLine);
-  routeLine = null;
-}
+routeLines.forEach(function (line) {
+  map.removeLayer(line);
+});
+
+routeLines = [];
+routeLine = null;
 
 if (currentMarker) {
   map.removeLayer(currentMarker);
