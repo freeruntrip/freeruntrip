@@ -25,6 +25,8 @@ const distanceDisplay = document.getElementById('distance');
 const paceDisplay = document.getElementById('pace');
 const MAX_ACCURACY = 100; // meters
 const MIN_DISTANCE = 5; // meters
+let runRecords = JSON.parse(localStorage.getItem('runRecords')) || [];
+let runStartTime = null;
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371000;
 
@@ -69,9 +71,35 @@ function getSmoothedPosition(latitude, longitude) {
     longitude: longitudeSum / recentPositions.length
   };
 }
+function saveRunRecord() {
+  const runEndTime = new Date();
+
+  const record = {
+    date: runEndTime.toLocaleDateString(),
+    startTime: runStartTime.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
+    }),
+    endTime: runEndTime.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit'
+    }),
+    duration: timer.textContent,
+    distance: (totalDistance / 1000).toFixed(2),
+    pace: paceDisplay.textContent
+  };
+
+  runRecords.push(record);
+  localStorage.setItem('runRecords', JSON.stringify(runRecords));
+
+  console.log('저장된 러닝 기록:', record);
+}
 startBtn.addEventListener('click', function () {
   console.log('러닝 시작 버튼 클릭됨');
 if (!isRunning) {
+    if (seconds === 0) {
+    runStartTime = new Date();
+  }
 if (paused) {
   routeCoordinates = [];
   routeLine = null;
@@ -214,8 +242,10 @@ stopBtn.addEventListener('click', function () {
   console.log('러닝 종료 버튼 클릭됨');
 clearInterval(timerInterval);
 navigator.geolocation.clearWatch(watchId);
+
 console.log('watchId 종료:', watchId);
 watchId = null;
+saveRunRecord();
 seconds = 0;
 timer.textContent = '00:00';
 totalDistance = 0;
