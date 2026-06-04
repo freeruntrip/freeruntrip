@@ -23,6 +23,7 @@ let recentPositions = [];
 const SMOOTHING_COUNT = 3;
 const distanceDisplay = document.getElementById('distance');
 const paceDisplay = document.getElementById('pace');
+const recordsList = document.getElementById('recordsList');
 const MAX_ACCURACY = 100; // meters
 const MIN_DISTANCE = 5; // meters
 let runRecords = JSON.parse(localStorage.getItem('runRecords')) || [];
@@ -92,8 +93,30 @@ function saveRunRecord() {
   runRecords.push(record);
   localStorage.setItem('runRecords', JSON.stringify(runRecords));
 
-  console.log('저장된 러닝 기록:', record);
+renderRunRecords();
+
+console.log('저장된 러닝 기록:', record);
 }
+function renderRunRecords() {
+  recordsList.innerHTML = '';
+
+  runRecords.forEach(function (record) {
+    const recordCard = document.createElement('div');
+    recordCard.className = 'record-card';
+
+    recordCard.innerHTML = `
+      <div>${record.date}</div>
+      <div>${record.startTime} ~ ${record.endTime}</div>
+      <div>${record.distance} km</div>
+      <div>${record.duration}</div>
+      <div>${record.pace}</div>
+    `;
+
+    recordsList.appendChild(recordCard);
+  });
+}
+
+renderRunRecords();
 startBtn.addEventListener('click', function () {
   console.log('러닝 시작 버튼 클릭됨');
 if (!isRunning) {
