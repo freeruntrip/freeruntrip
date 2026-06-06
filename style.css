@@ -7,7 +7,7 @@ height: 100%;
 
 #map {
 width: 100%;
-height: 100vh;
+height: 70vh;
 }
 #controls {
   position: absolute;
@@ -30,4 +30,42 @@ height: 100vh;
   background: white;
   padding: 10px;
   border-radius: 8px;
+}
+#records {
+  padding: 20px;
+  background: white;
+}
+
+#records h2 {
+  margin-top: 0;
+  font-size: 20px;
+}
+
+#recordsList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.record-card {
+  padding: 16px;
+  border-radius: 16px;
+  background: #f7f4ee;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.record-card div:first-child {
+  font-weight: bold;
+  font-size: 18px;
+}
+
+.record-card div:nth-child(3) {
+  font-size: 22px;
+  font-weight: bold;
+}
+
+.record-card div:nth-child(5) {
+  margin-top: 8px;
+  font-weight: bold;
 }
