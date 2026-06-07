@@ -215,10 +215,6 @@ map.panTo(
     smoothedPosition.latitude,
     smoothedPosition.longitude
   ]).addTo(map);
-
-  currentMarker
-    .bindPopup('현재 위치')
-    .openPopup();
 } else {
   currentMarker.setLatLng([
     smoothedPosition.latitude,
