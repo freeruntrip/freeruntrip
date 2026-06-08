@@ -90,7 +90,7 @@ function saveRunRecord() {
     pace: paceDisplay.textContent
   };
 
-  runRecords.push(record);
+  runRecords.unshift(record);
   localStorage.setItem('runRecords', JSON.stringify(runRecords));
 
 renderRunRecords();
@@ -99,6 +99,10 @@ console.log('저장된 러닝 기록:', record);
 }
 function renderRunRecords() {
   recordsList.innerHTML = '';
+
+  runRecords.sort(function (a, b) {
+    return new Date(b.date + ' ' + b.startTime) - new Date(a.date + ' ' + a.startTime);
+  });
 
   runRecords.forEach(function (record) {
     const recordCard = document.createElement('div');
