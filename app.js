@@ -76,33 +76,44 @@ function saveRunRecord() {
   const runEndTime = new Date();
 
   const record = {
+    id: Date.now(),
+
     date: runEndTime.toLocaleDateString(),
+
     startTime: runStartTime.toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit'
     }),
+
     endTime: runEndTime.toLocaleTimeString([], {
       hour: '2-digit',
       minute: '2-digit'
     }),
+
     duration: timer.textContent,
+
     distance: (totalDistance / 1000).toFixed(2),
+
     pace: paceDisplay.textContent
   };
 
   runRecords.unshift(record);
-  localStorage.setItem('runRecords', JSON.stringify(runRecords));
 
-renderRunRecords();
+  localStorage.setItem(
+    'runRecords',
+    JSON.stringify(runRecords)
+  );
 
-console.log('저장된 러닝 기록:', record);
+  renderRunRecords();
+
+  console.log('저장된 러닝 기록:', record);
 }
 function renderRunRecords() {
   recordsList.innerHTML = '';
 
-  runRecords.sort(function (a, b) {
-    return new Date(b.date + ' ' + b.startTime) - new Date(a.date + ' ' + a.startTime);
-  });
+ runRecords.sort(function (a, b) {
+  return (b.id || 0) - (a.id || 0);
+});
 
   runRecords.forEach(function (record) {
     const recordCard = document.createElement('div');
@@ -290,4 +301,6 @@ if (currentMarker) {
 }
 
 isRunning = false;
+runStartTime = null;
+paused = false;
 });
