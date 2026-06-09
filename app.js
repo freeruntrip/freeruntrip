@@ -24,6 +24,15 @@ const SMOOTHING_COUNT = 3;
 const distanceDisplay = document.getElementById('distance');
 const paceDisplay = document.getElementById('pace');
 const recordsList = document.getElementById('recordsList');
+const recordsSection = document.getElementById('records');
+const recordDetail = document.getElementById('recordDetail');
+const backToRecordsBtn = document.getElementById('backToRecordsBtn');
+const detailDate = document.getElementById('detailDate');
+const detailTimeRange = document.getElementById('detailTimeRange');
+const detailEmotionPace = document.getElementById('detailEmotionPace');
+const detailDistance = document.getElementById('detailDistance');
+const detailDuration = document.getElementById('detailDuration');
+const detailNumericPace = document.getElementById('detailNumericPace');
 const MAX_ACCURACY = 100; // meters
 const MIN_DISTANCE = 5; // meters
 let runRecords = JSON.parse(localStorage.getItem('runRecords')) || [];
@@ -144,6 +153,17 @@ function renderRunRecords() {
   ${record.emotionalPace || '마음 환기 Pace'}
 </div>
     `;
+    recordCard.addEventListener('click', function () {
+  detailDate.textContent = record.date;
+  detailTimeRange.textContent = record.startTime + ' ~ ' + record.endTime;
+  detailEmotionPace.textContent = record.emotionalPace || '마음 환기 Pace';
+  detailDistance.textContent = record.distance + ' km';
+  detailDuration.textContent = record.duration;
+  detailNumericPace.textContent = record.pace;
+
+  recordsSection.classList.add('hidden');
+  recordDetail.classList.remove('hidden');
+});
 const paceToggle = recordCard.querySelector('.pace-toggle');
 
 paceToggle.addEventListener('click', function () {
@@ -331,4 +351,8 @@ if (currentMarker) {
 isRunning = false;
 runStartTime = null;
 paused = false;
+});
+backToRecordsBtn.addEventListener('click', function () {
+  recordDetail.classList.add('hidden');
+  recordsSection.classList.remove('hidden');
 });

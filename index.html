@@ -32,6 +32,33 @@
   <h2>저장된 러닝 기록</h2>
   <div id="recordsList"></div>
 </div>
+<div id="recordDetail" class="hidden">
+  <button id="backToRecordsBtn">← 기록 목록으로</button>
+
+  <h2 id="detailDate">러닝 기록</h2>
+  <div id="detailTimeRange"></div>
+
+  <div id="detailEmotionPace">마음 환기 Pace</div>
+
+  <div id="detailStats">
+    <div>
+      <span>거리</span>
+      <strong id="detailDistance">0.00 km</strong>
+    </div>
+
+    <div>
+      <span>시간</span>
+      <strong id="detailDuration">00:00</strong>
+    </div>
+
+    <div>
+      <span>평균 Pace</span>
+      <strong id="detailNumericPace">--'--"</strong>
+    </div>
+  </div>
+
+  <div id="detailMap"></div>
+</div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="app.js"></script>

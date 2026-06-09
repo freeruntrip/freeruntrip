@@ -69,3 +69,66 @@ height: 70vh;
   margin-top: 8px;
   font-weight: bold;
 }
+.hidden {
+  display: none;
+}
+
+#recordDetail {
+  padding: 20px;
+  background: #0f172a;
+  color: white;
+  min-height: 100vh;
+}
+
+#backToRecordsBtn {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 12px;
+  background: #e5e7eb;
+  color: #111827;
+  font-weight: bold;
+}
+
+#detailDate {
+  margin: 8px 0;
+  font-size: 24px;
+}
+
+#detailTimeRange {
+  color: #cbd5e1;
+  margin-bottom: 18px;
+}
+
+#detailEmotionPace {
+  font-size: 26px;
+  font-weight: bold;
+  margin: 20px 0;
+}
+
+#detailStats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+#detailStats div {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 14px;
+  border-radius: 16px;
+}
+
+#detailStats span {
+  display: block;
+  font-size: 12px;
+  color: #cbd5e1;
+  margin-bottom: 6px;
+}
+
+#detailMap {
+  width: 100%;
+  height: 260px;
+  border-radius: 20px;
+  overflow: hidden;
+}
