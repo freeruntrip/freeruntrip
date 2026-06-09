@@ -72,6 +72,21 @@ function getSmoothedPosition(latitude, longitude) {
     longitude: longitudeSum / recentPositions.length
   };
 }
+function getEmotionalPaceLabel() {
+  const labels = [
+    '생각 정리 Pace',
+    '마음 환기 Pace',
+    '퇴근 후 회복 Pace',
+    '감정 정돈 Pace',
+    '오늘도 잘 버틴 Pace',
+    '낭만 충전 Pace',
+    '나를 돌보는 Pace'
+  ];
+
+  const randomIndex = Math.floor(Math.random() * labels.length);
+
+  return labels[randomIndex];
+}
 function saveRunRecord() {
   const runEndTime = new Date();
 
@@ -94,7 +109,8 @@ function saveRunRecord() {
 
     distance: (totalDistance / 1000).toFixed(2),
 
-    pace: paceDisplay.textContent
+    pace: paceDisplay.textContent,
+emotionalPace: getEmotionalPaceLabel()
   };
 
   runRecords.unshift(record);
@@ -124,9 +140,21 @@ function renderRunRecords() {
       <div>${record.startTime} ~ ${record.endTime}</div>
       <div>${record.distance} km</div>
       <div>${record.duration}</div>
-      <div>${record.pace}</div>
+      <div class="pace-toggle" data-showing="emotional">
+  ${record.emotionalPace || '마음 환기 Pace'}
+</div>
     `;
+const paceToggle = recordCard.querySelector('.pace-toggle');
 
+paceToggle.addEventListener('click', function () {
+  if (paceToggle.dataset.showing === 'emotional') {
+    paceToggle.textContent = record.pace;
+    paceToggle.dataset.showing = 'number';
+  } else {
+    paceToggle.textContent = record.emotionalPace || '마음 환기 Pace';
+    paceToggle.dataset.showing = 'emotional';
+  }
+});
     recordsList.appendChild(recordCard);
   });
 }
