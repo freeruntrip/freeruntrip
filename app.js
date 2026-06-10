@@ -29,7 +29,6 @@ const recordDetail = document.getElementById('recordDetail');
 const backToRecordsBtn = document.getElementById('backToRecordsBtn');
 const detailDate = document.getElementById('detailDate');
 const detailTimeRange = document.getElementById('detailTimeRange');
-const detailEmotionPace = document.getElementById('detailEmotionPace');
 const detailDistance = document.getElementById('detailDistance');
 const detailDuration = document.getElementById('detailDuration');
 const detailNumericPace = document.getElementById('detailNumericPace');
@@ -156,17 +155,21 @@ function renderRunRecords() {
     recordCard.addEventListener('click', function () {
   detailDate.textContent = record.date;
   detailTimeRange.textContent = record.startTime + ' ~ ' + record.endTime;
-  detailEmotionPace.textContent = record.emotionalPace || '마음 환기 Pace';
   detailDistance.textContent = record.distance + ' km';
   detailDuration.textContent = record.duration;
   detailNumericPace.textContent = record.pace;
+detailNumericPace.dataset.showing = 'number';
+detailNumericPace.dataset.numericPace = record.pace;
+detailNumericPace.dataset.emotionalPace = record.emotionalPace || '마음 환기 Pace';
 
   recordsSection.classList.add('hidden');
   recordDetail.classList.remove('hidden');
 });
 const paceToggle = recordCard.querySelector('.pace-toggle');
 
-paceToggle.addEventListener('click', function () {
+paceToggle.addEventListener('click', function (event) {
+  event.stopPropagation();
+
   if (paceToggle.dataset.showing === 'emotional') {
     paceToggle.textContent = record.pace;
     paceToggle.dataset.showing = 'number';
@@ -351,6 +354,15 @@ if (currentMarker) {
 isRunning = false;
 runStartTime = null;
 paused = false;
+});
+detailNumericPace.addEventListener('click', function () {
+  if (detailNumericPace.dataset.showing === 'number') {
+    detailNumericPace.textContent = detailNumericPace.dataset.emotionalPace;
+    detailNumericPace.dataset.showing = 'emotional';
+  } else {
+    detailNumericPace.textContent = detailNumericPace.dataset.numericPace;
+    detailNumericPace.dataset.showing = 'number';
+  }
 });
 backToRecordsBtn.addEventListener('click', function () {
   recordDetail.classList.add('hidden');
