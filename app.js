@@ -32,6 +32,11 @@ const detailTimeRange = document.getElementById('detailTimeRange');
 const detailDistance = document.getElementById('detailDistance');
 const detailDuration = document.getElementById('detailDuration');
 const detailNumericPace = document.getElementById('detailNumericPace');
+const detailMapElement = document.getElementById('detailMap');
+
+let detailMap = null;
+let detailRouteLine = null;
+
 const MAX_ACCURACY = 100; // meters
 const MIN_DISTANCE = 5; // meters
 let runRecords = JSON.parse(localStorage.getItem('runRecords')) || [];
@@ -118,7 +123,10 @@ function saveRunRecord() {
     distance: (totalDistance / 1000).toFixed(2),
 
     pace: paceDisplay.textContent,
-emotionalPace: getEmotionalPaceLabel()
+
+    emotionalPace: getEmotionalPaceLabel(),
+
+    routeCoordinates: routeCoordinates.slice()
   };
 
   runRecords.unshift(record);
@@ -131,6 +139,40 @@ emotionalPace: getEmotionalPaceLabel()
   renderRunRecords();
 
   console.log('저장된 러닝 기록:', record);
+}
+function showDetailMap(record) {
+  if (!record.routeCoordinates || record.routeCoordinates.length === 0) {
+    detailMapElement.innerHTML = '';
+    return;
+  }
+
+  if (!detailMap) {
+    detailMap = L.map('detailMap');
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(detailMap);
+  }
+
+  if (detailRouteLine) {
+    detailMap.removeLayer(detailRouteLine);
+  }
+
+  detailRouteLine = L.polyline(record.routeCoordinates, {
+    color: '#facc15',
+    weight: 6,
+    opacity: 0.9,
+    lineCap: 'round',
+    lineJoin: 'round'
+  }).addTo(detailMap);
+
+  detailMap.fitBounds(detailRouteLine.getBounds(), {
+    padding: [20, 20]
+  });
+
+  setTimeout(function () {
+    detailMap.invalidateSize();
+  }, 100);
 }
 function renderRunRecords() {
   recordsList.innerHTML = '';
@@ -164,6 +206,7 @@ detailNumericPace.dataset.emotionalPace = record.emotionalPace || '마음 환기
 
   recordsSection.classList.add('hidden');
   recordDetail.classList.remove('hidden');
+  showDetailMap(record);
 });
 const paceToggle = recordCard.querySelector('.pace-toggle');
 
