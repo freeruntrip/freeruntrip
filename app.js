@@ -411,3 +411,24 @@ backToRecordsBtn.addEventListener('click', function () {
   recordDetail.classList.add('hidden');
   recordsSection.classList.remove('hidden');
 });
+const profileFeedBtn = document.getElementById('profileFeedBtn');
+const profileFeedScreen = document.getElementById('profileFeedScreen');
+const backFromProfileFeedBtn = document.getElementById('backFromProfileFeedBtn');
+const controlsSection = document.getElementById('controls');
+
+profileFeedBtn.addEventListener('click', function () {
+  map.getContainer().style.display = 'none';
+  controlsSection.style.display = 'none';
+  recordsSection.classList.add('hidden');
+  recordDetail.classList.add('hidden');
+
+  profileFeedScreen.classList.remove('hidden');
+});
+
+backFromProfileFeedBtn.addEventListener('click', function () {
+  profileFeedScreen.classList.add('hidden');
+
+  map.getContainer().style.display = 'block';
+  controlsSection.style.display = 'flex';
+  recordsSection.classList.remove('hidden');
+});

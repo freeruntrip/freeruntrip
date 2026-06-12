@@ -22,7 +22,7 @@
     <button id="startBtn">러닝 시작</button>
     <button id="pauseBtn">일시정지</button>
     <button id="stopBtn">러닝 종료</button>
-
+<button id="profileFeedBtn">Record Profile Feed</button>
     <div id="timer">00:00</div>
     <div id="distance">0.00 km</div>
     <div id="pace">Pace: --'--"</div>
@@ -59,8 +59,84 @@
   <div id="detailMap"></div>
 </div>
 
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="app.js"></script>
+<section id="profileFeedScreen" class="screen hidden">
+  <div class="profile-feed-header">
+    <button id="backFromProfileFeedBtn">← Back</button>
+    <h2>Record Profile Feed</h2>
+  </div>
+
+<div class="hero-card">
+
+  <div class="hero-overlay">
+
+    <div class="hero-badge">
+      🌙 Night Runner
+    </div>
+
+    <div class="hero-avatar">
+      F
+    </div>
+
+    <h2 class="hero-name">
+      Hyundong
+    </h2>
+
+    <p class="hero-distance">
+      128.4km · 32 Runs
+    </p>
+
+    <p class="hero-pace">
+      "오늘도 잘 버틴 Pace"
+    </p>
+
+  </div>
+
+</div>
+
+<div class="profile-info-bar">
+
+  <span>
+    <strong>128.4km</strong> Distance
+  </span>
+
+  <span>
+    <strong>32</strong> Runs
+  </span>
+
+  <span>
+    <strong>18</strong> Followers
+  </span>
+
+</div>
+
+  <div class="feed-card featured-runtrip">
+    <p class="card-label">Featured RunTrip</p>
+    <h3>City Night RunTrip</h3>
+    <p>광안리 → 민락수변공원 → 카페</p>
+  </div>
+
+  <div class="recent-feed">
+    <h3>Recent Runs</h3>
+
+    <div class="feed-card small-feed-card">
+      <strong>6.42km</strong>
+      <span>마음 환기 Pace</span>
+    </div>
+
+    <div class="feed-card small-feed-card">
+      <strong>3.12km</strong>
+      <span>퇴근 후 회복 Pace</span>
+    </div>
+
+    <div class="feed-card small-feed-card">
+      <strong>8.05km</strong>
+      <span>오늘도 잘 버틴 Pace</span>
+    </div>
+  </div>
+</section>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="app.js"></script>
 
 </body>
 </html>
