@@ -137,8 +137,9 @@ function saveRunRecord() {
   );
 
   renderRunRecords();
+renderRecordProfileFeed();
 
-  console.log('저장된 러닝 기록:', record);
+console.log('저장된 러닝 기록:', record);
 }
 function showDetailMap(record) {
   if (!record.routeCoordinates || record.routeCoordinates.length === 0) {
@@ -225,7 +226,70 @@ paceToggle.addEventListener('click', function (event) {
   });
 }
 
+function renderRecordProfileFeed() {
+  const profileTotalDistanceHero = document.getElementById('profileTotalDistanceHero');
+  const profileRunCountHero = document.getElementById('profileRunCountHero');
+  const profileTotalDistance = document.getElementById('profileTotalDistance');
+  const profileRunCount = document.getElementById('profileRunCount');
+  const profileFollowers = document.getElementById('profileFollowers');
+  const profileRecentRuns = document.getElementById('profileRecentRuns');
+
+  const runCount = runRecords.length;
+
+  const totalDistanceKm = runRecords.reduce(function (sum, record) {
+    return sum + (Number(record.distance) || 0);
+  }, 0);
+
+  if (profileTotalDistanceHero) {
+    profileTotalDistanceHero.textContent = totalDistanceKm.toFixed(1);
+  }
+
+  if (profileRunCountHero) {
+    profileRunCountHero.textContent = runCount;
+  }
+
+  if (profileTotalDistance) {
+    profileTotalDistance.textContent = totalDistanceKm.toFixed(1) + 'km';
+  }
+
+  if (profileRunCount) {
+    profileRunCount.textContent = runCount;
+  }
+
+  if (profileFollowers) {
+    profileFollowers.textContent = '0';
+  }
+
+  if (!profileRecentRuns) {
+    return;
+  }
+
+  if (runRecords.length === 0) {
+    profileRecentRuns.innerHTML = `
+      <div class="feed-card small-feed-card">
+        <strong>0.00km</strong>
+        <span>아직 저장된 러닝 기록이 없습니다</span>
+      </div>
+    `;
+    return;
+  }
+
+  profileRecentRuns.innerHTML = runRecords
+    .slice(0, 3)
+    .map(function (record) {
+      return `
+        <div class="feed-card small-feed-card">
+          <strong>${record.distance}km</strong>
+          <span>${record.emotionalPace || '마음 환기 Pace'}</span>
+        </div>
+      `;
+    })
+    .join('');
+}
+
 renderRunRecords();
+renderRecordProfileFeed();
+
 startBtn.addEventListener('click', function () {
   console.log('러닝 시작 버튼 클릭됨');
 if (!isRunning) {
