@@ -385,3 +385,9 @@ height: 70vh;
 
   font-weight: 700;
 }
+.pace-mood-option.active {
+  background: #facc15;
+  color: #0f172a;
+  border: 1px solid #facc15;
+  font-weight: 700;
+}

@@ -42,6 +42,11 @@ let detailRouteLine = null;
 const MAX_ACCURACY = 100; // meters
 const MIN_DISTANCE = 5; // meters
 let runRecords = JSON.parse(localStorage.getItem('runRecords')) || [];
+
+let selectedPaceMood =
+  localStorage.getItem('selectedPaceMood') ||
+  '마음 환기 Pace';
+
 let runStartTime = null;
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -88,20 +93,9 @@ function getSmoothedPosition(latitude, longitude) {
   };
 }
 function getEmotionalPaceLabel() {
-  const labels = [
-    '생각 정리 Pace',
-    '마음 환기 Pace',
-    '퇴근 후 회복 Pace',
-    '감정 정돈 Pace',
-    '오늘도 잘 버틴 Pace',
-    '낭만 충전 Pace',
-    '나를 돌보는 Pace'
-  ];
-
-  const randomIndex = Math.floor(Math.random() * labels.length);
-
-  return labels[randomIndex];
+  return selectedPaceMood;
 }
+
 function saveRunRecord() {
   const runEndTime = new Date();
 
@@ -504,4 +498,26 @@ backFromProfileFeedBtn.addEventListener('click', function () {
   map.getContainer().style.display = 'block';
   controlsSection.style.display = 'flex';
   recordsSection.classList.remove('hidden');
+});
+
+const paceMoodOptions = document.querySelectorAll('.pace-mood-option');
+
+paceMoodOptions.forEach(function (button) {
+  button.addEventListener('click', function () {
+
+    paceMoodOptions.forEach(function (btn) {
+  btn.classList.remove('active');
+});
+
+button.classList.add('active');
+
+    selectedPaceMood = button.dataset.mood;
+
+    localStorage.setItem(
+      'selectedPaceMood',
+      selectedPaceMood
+    );
+
+    console.log('선택된 Pace Mood:', selectedPaceMood);
+  });
 });
