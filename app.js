@@ -32,6 +32,8 @@ const detailTimeRange = document.getElementById('detailTimeRange');
 const detailDistance = document.getElementById('detailDistance');
 const detailDuration = document.getElementById('detailDuration');
 const detailNumericPace = document.getElementById('detailNumericPace');
+const detailPaceTitle = document.getElementById('detailPaceTitle');
+const detailPaceHint = document.getElementById('detailPaceHint');
 const detailMapElement = document.getElementById('detailMap');
 
 let detailMap = null;
@@ -200,8 +202,11 @@ function renderRunRecords() {
   detailTimeRange.textContent = record.startTime + ' ~ ' + record.endTime;
   detailDistance.textContent = record.distance + ' km';
   detailDuration.textContent = record.duration;
-  detailNumericPace.textContent = record.pace;
-detailNumericPace.dataset.showing = 'number';
+  detailPaceTitle.textContent = 'Pace Mood';
+detailNumericPace.textContent = record.emotionalPace || '마음 환기 Pace';
+detailPaceHint.textContent = '터치하면 숫자 Pace로 바뀝니다';
+
+detailNumericPace.dataset.showing = 'emotional';
 detailNumericPace.dataset.numericPace = record.pace;
 detailNumericPace.dataset.emotionalPace = record.emotionalPace || '마음 환기 Pace';
 
@@ -464,10 +469,14 @@ paused = false;
 });
 detailNumericPace.addEventListener('click', function () {
   if (detailNumericPace.dataset.showing === 'number') {
+    detailPaceTitle.textContent = 'Pace Mood';
     detailNumericPace.textContent = detailNumericPace.dataset.emotionalPace;
+    detailPaceHint.textContent = '터치하면 숫자 Pace로 바뀝니다';
     detailNumericPace.dataset.showing = 'emotional';
   } else {
+    detailPaceTitle.textContent = 'Average Pace';
     detailNumericPace.textContent = detailNumericPace.dataset.numericPace;
+    detailPaceHint.textContent = '터치하면 Pace Mood로 바뀝니다';
     detailNumericPace.dataset.showing = 'number';
   }
 });
