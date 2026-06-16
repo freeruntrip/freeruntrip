@@ -35,7 +35,8 @@ const detailNumericPace = document.getElementById('detailNumericPace');
 const detailPaceTitle = document.getElementById('detailPaceTitle');
 const detailPaceHint = document.getElementById('detailPaceHint');
 const detailMapElement = document.getElementById('detailMap');
-
+const paceMoodModal = document.getElementById('paceMoodModal');
+const saveRunWithMoodBtn = document.getElementById('saveRunWithMoodBtn');
 let detailMap = null;
 let detailRouteLine = null;
 
@@ -431,35 +432,45 @@ pauseBtn.addEventListener('click', function () {
 });
 stopBtn.addEventListener('click', function () {
   console.log('러닝 종료 버튼 클릭됨');
+
 clearInterval(timerInterval);
 navigator.geolocation.clearWatch(watchId);
 
 console.log('watchId 종료:', watchId);
 watchId = null;
-saveRunRecord();
-seconds = 0;
-timer.textContent = '00:00';
-totalDistance = 0;
-distanceDisplay.textContent = '0.00 km';
-paceDisplay.textContent = 'Pace: --\'--"';
-routeCoordinates = [];
-recentPositions = [];
-lastValidPosition = null;
-routeLines.forEach(function (line) {
-  map.removeLayer(line);
+
+paceMoodModal.classList.remove('hidden');
+
 });
+saveRunWithMoodBtn.addEventListener('click', function () {
+  saveRunRecord();
 
-routeLines = [];
-routeLine = null;
+  paceMoodModal.classList.add('hidden');
 
-if (currentMarker) {
-  map.removeLayer(currentMarker);
-  currentMarker = null;
-}
+  seconds = 0;
+  timer.textContent = '00:00';
+  totalDistance = 0;
+  distanceDisplay.textContent = '0.00 km';
+  paceDisplay.textContent = 'Pace: --\'--"';
+  routeCoordinates = [];
+  recentPositions = [];
+  lastValidPosition = null;
 
-isRunning = false;
-runStartTime = null;
-paused = false;
+  routeLines.forEach(function (line) {
+    map.removeLayer(line);
+  });
+
+  routeLines = [];
+  routeLine = null;
+
+  if (currentMarker) {
+    map.removeLayer(currentMarker);
+    currentMarker = null;
+  }
+
+  isRunning = false;
+  runStartTime = null;
+  paused = false;
 });
 detailNumericPace.addEventListener('click', function () {
   if (detailNumericPace.dataset.showing === 'number') {

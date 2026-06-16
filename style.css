@@ -391,3 +391,39 @@ height: 70vh;
   border: 1px solid #facc15;
   font-weight: 700;
 }
+.pace-mood-settings {
+  margin: 16px 0;
+  padding: 18px;
+}
+
+.pace-mood-settings h3 {
+  margin: 6px 0 8px;
+  font-size: 20px;
+}
+
+.pace-mood-guide {
+  margin: 0 0 14px;
+  color: #6b7280;
+  font-size: 14px;
+}
+
+#paceMoodOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pace-mood-option {
+  border: 1px solid #d1d5db;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: #ffffff;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.pace-mood-option.active {
+  background: #111827;
+  color: #ffffff;
+  border-color: #111827;
+}

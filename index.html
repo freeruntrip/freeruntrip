@@ -32,6 +32,25 @@
   <h2>저장된 러닝 기록</h2>
   <div id="recordsList"></div>
 </div>
+<div id="paceMoodModal" class="hidden">
+  <div class="pace-mood-modal-card">
+    <p class="card-label">TODAY'S PACE MOOD</p>
+    <h3>오늘 러닝의 Pace Mood를 선택해 주세요</h3>
+    <p class="pace-mood-guide">선택한 감성 문구가 이번 러닝 기록에 저장됩니다.</p>
+
+    <div id="paceMoodOptions">
+      <button class="pace-mood-option" data-mood="생각 정리 Pace">생각 정리</button>
+      <button class="pace-mood-option" data-mood="마음 환기 Pace">마음 환기</button>
+      <button class="pace-mood-option" data-mood="퇴근 후 회복 Pace">퇴근 후 회복</button>
+      <button class="pace-mood-option" data-mood="감정 정돈 Pace">감정 정돈</button>
+      <button class="pace-mood-option" data-mood="오늘도 잘 버틴 Pace">오늘도 잘 버틴</button>
+      <button class="pace-mood-option" data-mood="낭만 충전 Pace">낭만 충전</button>
+      <button class="pace-mood-option" data-mood="나를 돌보는 Pace">나를 돌보는</button>
+    </div>
+
+    <button id="saveRunWithMoodBtn">이 Mood로 저장하기</button>
+  </div>
+</div>
 <div id="recordDetail" class="hidden">
   <button id="backToRecordsBtn">← 기록 목록으로</button>
 
@@ -109,20 +128,7 @@
   </span>
 
 </div>
-<div class="feed-card pace-mood-settings">
-  <p class="card-label">Pace Mood Settings</p>
-  <h3>Choose your Pace Mood</h3>
 
-  <div id="paceMoodOptions">
-    <button class="pace-mood-option" data-mood="생각 정리 Pace">생각 정리</button>
-    <button class="pace-mood-option" data-mood="마음 환기 Pace">마음 환기</button>
-    <button class="pace-mood-option" data-mood="퇴근 후 회복 Pace">퇴근 후 회복</button>
-    <button class="pace-mood-option" data-mood="감정 정돈 Pace">감정 정돈</button>
-    <button class="pace-mood-option" data-mood="오늘도 잘 버틴 Pace">오늘도 잘 버틴</button>
-    <button class="pace-mood-option" data-mood="낭만 충전 Pace">낭만 충전</button>
-    <button class="pace-mood-option" data-mood="나를 돌보는 Pace">나를 돌보는</button>
-  </div>
-</div>
   <div class="feed-card featured-runtrip">
     <p class="card-label">Featured RunTrip</p>
     <h3>City Night RunTrip</h3>
