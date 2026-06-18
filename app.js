@@ -373,16 +373,26 @@ routeCoordinates.push([
 
 console.log(routeCoordinates);
 
-map.panTo(
-  [
-    smoothedPosition.latitude,
-    smoothedPosition.longitude
-  ],
-  {
-    animate: true,
-    duration: 0.8
-  }
-);
+if (!currentMarker) {
+  map.setView(
+    [
+      smoothedPosition.latitude,
+      smoothedPosition.longitude
+    ],
+    17
+  );
+} else {
+  map.panTo(
+    [
+      smoothedPosition.latitude,
+      smoothedPosition.longitude
+    ],
+    {
+      animate: true,
+      duration: 0.8
+    }
+  );
+}
   if (!currentMarker) {
   currentMarker = L.marker([
     smoothedPosition.latitude,
@@ -443,6 +453,17 @@ paceMoodModal.classList.remove('hidden');
 
 });
 saveRunWithMoodBtn.addEventListener('click', function () {
+  const activeMoodButton = document.querySelector('.pace-mood-option.active');
+
+  if (activeMoodButton) {
+    selectedPaceMood = activeMoodButton.dataset.mood;
+
+    localStorage.setItem(
+      'selectedPaceMood',
+      selectedPaceMood
+    );
+  }
+
   saveRunRecord();
 
   paceMoodModal.classList.add('hidden');

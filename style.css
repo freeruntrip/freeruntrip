@@ -427,3 +427,44 @@ height: 70vh;
   color: #ffffff;
   border-color: #111827;
 }
+#paceMoodModal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.35);
+
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+#paceMoodModal.hidden {
+  display: none;
+}
+
+.pace-mood-modal-card {
+  width: 100%;
+  max-width: 520px;
+  background: white;
+  padding: 24px 20px 28px;
+  border-radius: 24px 24px 0 0;
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.18);
+}
+
+#saveRunWithMoodBtn {
+  width: 100%;
+  margin-top: 16px;
+  padding: 14px;
+  border: none;
+  border-radius: 14px;
+  background: #111827;
+  color: white;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.pace-mood-option.active {
+  background: #111827;
+  color: white;
+  border-color: #111827;
+}
