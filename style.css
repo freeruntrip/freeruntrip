@@ -468,3 +468,36 @@ height: 70vh;
   color: white;
   border-color: #111827;
 }
+.run-marker {
+  border: none;
+  background: transparent;
+}
+
+.run-marker div {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: white;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+
+.start-marker div {
+  background: #16a34a;
+}
+
+.finish-marker div {
+  background: #dc2626;
+}
+
+.direction-arrow {
+  border: none;
+  background: transparent;
+}
+
+.direction-arrow div {
+  color: #facc15;
+  font-size: 20px;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}

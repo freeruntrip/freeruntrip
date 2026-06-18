@@ -39,7 +39,9 @@ const paceMoodModal = document.getElementById('paceMoodModal');
 const saveRunWithMoodBtn = document.getElementById('saveRunWithMoodBtn');
 let detailMap = null;
 let detailRouteLine = null;
-
+let detailStartMarker = null;
+let detailFinishMarker = null;
+let detailDirectionMarkers = [];
 const MAX_ACCURACY = 100; // meters
 const MIN_DISTANCE = 5; // meters
 let runRecords = JSON.parse(localStorage.getItem('runRecords')) || [];
@@ -96,7 +98,61 @@ function getSmoothedPosition(latitude, longitude) {
 function getEmotionalPaceLabel() {
   return selectedPaceMood;
 }
+function createRunMarkerIcon(label, className) {
+  return L.divIcon({
+    className: `run-marker ${className}`,
+    html: `<div>${label}</div>`,
+    iconSize: [64, 28],
+    iconAnchor: [32, 14]
+  });
+}
 
+function clearDetailRouteDecorations() {
+  if (detailStartMarker) {
+    detailMap.removeLayer(detailStartMarker);
+    detailStartMarker = null;
+  }
+
+  if (detailFinishMarker) {
+    detailMap.removeLayer(detailFinishMarker);
+    detailFinishMarker = null;
+  }
+
+  detailDirectionMarkers.forEach(function (marker) {
+    detailMap.removeLayer(marker);
+  });
+
+  detailDirectionMarkers = [];
+}
+
+function addDirectionArrowsToDetailMap(points) {
+  if (!points || points.length < 2) {
+    return;
+  }
+
+  const interval = Math.max(1, Math.floor(points.length / 6));
+
+  for (let i = interval; i < points.length - 1; i += interval) {
+    const prev = points[i - 1];
+    const next = points[i];
+
+    const angle =
+      Math.atan2(next[0] - prev[0], next[1] - prev[1]) * (180 / Math.PI);
+
+    const arrowIcon = L.divIcon({
+      className: 'direction-arrow',
+      html: `<div style="transform: rotate(${angle}deg)">➤</div>`,
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+
+    const marker = L.marker(next, {
+      icon: arrowIcon
+    }).addTo(detailMap);
+
+    detailDirectionMarkers.push(marker);
+  }
+}
 function saveRunRecord() {
   const runEndTime = new Date();
 
@@ -155,7 +211,7 @@ function showDetailMap(record) {
   if (detailRouteLine) {
     detailMap.removeLayer(detailRouteLine);
   }
-
+clearDetailRouteDecorations();
   detailRouteLine = L.polyline(record.routeCoordinates, {
     color: '#facc15',
     weight: 6,
@@ -163,7 +219,18 @@ function showDetailMap(record) {
     lineCap: 'round',
     lineJoin: 'round'
   }).addTo(detailMap);
+const startPoint = record.routeCoordinates[0];
+const finishPoint = record.routeCoordinates[record.routeCoordinates.length - 1];
 
+detailStartMarker = L.marker(startPoint, {
+  icon: createRunMarkerIcon('START', 'start-marker')
+}).addTo(detailMap);
+
+detailFinishMarker = L.marker(finishPoint, {
+  icon: createRunMarkerIcon('FINISH', 'finish-marker')
+}).addTo(detailMap);
+
+addDirectionArrowsToDetailMap(record.routeCoordinates);
   detailMap.fitBounds(detailRouteLine.getBounds(), {
     padding: [20, 20]
   });
