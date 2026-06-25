@@ -35,8 +35,19 @@ const detailNumericPace = document.getElementById('detailNumericPace');
 const detailPaceTitle = document.getElementById('detailPaceTitle');
 const detailPaceHint = document.getElementById('detailPaceHint');
 const detailMapElement = document.getElementById('detailMap');
+const detailMemory = document.getElementById('detailMemory');
+const detailRunPhoto = document.getElementById('detailRunPhoto');
+const detailRunMemoWrap = document.getElementById('detailRunMemoWrap');
+const detailRunMemo = document.getElementById('detailRunMemo');
 const paceMoodModal = document.getElementById('paceMoodModal');
 const saveRunWithMoodBtn = document.getElementById('saveRunWithMoodBtn');
+const runPhotoInput = document.getElementById('runPhotoInput');
+const runPhotoFileName = document.getElementById('runPhotoFileName');
+const runMemoInput = document.getElementById('runMemoInput');
+const runMemoCount = document.getElementById('runMemoCount');
+
+let pendingRunPhoto = '';
+let isPhotoProcessing = false;
 let detailMap = null;
 let detailRouteLine = null;
 let detailStartMarker = null;
@@ -51,6 +62,90 @@ let selectedPaceMood =
   '마음 환기 Pace';
 
 let runStartTime = null;
+function compressRunPhoto(file) {
+  return new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+
+    reader.onload = function (event) {
+      const image = new Image();
+
+      image.onload = function () {
+        const maxSize = 960;
+        let width = image.width;
+        let height = image.height;
+
+        if (width > maxSize || height > maxSize) {
+          if (width > height) {
+            height = Math.round(height * (maxSize / width));
+            width = maxSize;
+          } else {
+            width = Math.round(width * (maxSize / height));
+            height = maxSize;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const context = canvas.getContext('2d');
+        context.drawImage(image, 0, 0, width, height);
+
+        resolve(canvas.toDataURL('image/jpeg', 0.72));
+      };
+
+      image.onerror = function () {
+        reject(new Error('이미지를 불러오지 못했습니다.'));
+      };
+
+      image.src = event.target.result;
+    };
+
+    reader.onerror = function () {
+      reject(new Error('사진 파일을 읽지 못했습니다.'));
+    };
+
+    reader.readAsDataURL(file);
+  });
+}
+
+function resetRunMemoryInputs() {
+  pendingRunPhoto = '';
+  runPhotoInput.value = '';
+  runMemoInput.value = '';
+  runMemoCount.textContent = '0';
+  runPhotoFileName.textContent = '사진을 선택하면 기록에 함께 저장됩니다.';
+}
+
+runPhotoInput.addEventListener('change', async function () {
+  const file = runPhotoInput.files[0];
+
+  if (!file) {
+    pendingRunPhoto = '';
+    runPhotoFileName.textContent = '사진을 선택하면 기록에 함께 저장됩니다.';
+    return;
+  }
+
+  isPhotoProcessing = true;
+  saveRunWithMoodBtn.disabled = true;
+  runPhotoFileName.textContent = '사진을 기록용 크기로 준비하고 있습니다…';
+
+  try {
+    pendingRunPhoto = await compressRunPhoto(file);
+    runPhotoFileName.textContent = `${file.name} 선택 완료`;
+  } catch (error) {
+    pendingRunPhoto = '';
+    runPhotoInput.value = '';
+    runPhotoFileName.textContent = '사진을 준비하지 못했습니다. 다시 선택해 주세요.';
+  } finally {
+    isPhotoProcessing = false;
+    saveRunWithMoodBtn.disabled = false;
+  }
+});
+
+runMemoInput.addEventListener('input', function () {
+  runMemoCount.textContent = runMemoInput.value.length;
+});
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371000;
 
@@ -179,6 +274,10 @@ function saveRunRecord() {
 
     emotionalPace: getEmotionalPaceLabel(),
 
+    photo: pendingRunPhoto,
+
+    memo: runMemoInput.value.trim(),
+
     routeCoordinates: routeCoordinates.slice()
   };
 
@@ -190,9 +289,9 @@ function saveRunRecord() {
   );
 
   renderRunRecords();
-renderRecordProfileFeed();
+  renderRecordProfileFeed();
 
-console.log('저장된 러닝 기록:', record);
+  console.log('저장된 러닝 기록:', record);
 }
 function showDetailMap(record) {
   if (!record.routeCoordinates || record.routeCoordinates.length === 0) {
@@ -271,7 +370,32 @@ detailPaceHint.textContent = '터치하면 숫자 Pace로 바뀝니다';
 detailNumericPace.dataset.showing = 'emotional';
 detailNumericPace.dataset.numericPace = record.pace;
 detailNumericPace.dataset.emotionalPace = record.emotionalPace || '마음 환기 Pace';
+const hasPhoto = Boolean(record.photo);
+const hasMemo = Boolean(record.memo);
 
+if (hasPhoto || hasMemo) {
+  detailMemory.classList.remove('hidden');
+
+  if (hasPhoto) {
+    detailRunPhoto.src = record.photo;
+    detailRunPhoto.classList.remove('hidden');
+  } else {
+    detailRunPhoto.removeAttribute('src');
+    detailRunPhoto.classList.add('hidden');
+  }
+
+  if (hasMemo) {
+    detailRunMemo.textContent = record.memo;
+    detailRunMemoWrap.classList.remove('hidden');
+  } else {
+    detailRunMemo.textContent = '';
+    detailRunMemoWrap.classList.add('hidden');
+  }
+} else {
+  detailMemory.classList.add('hidden');
+  detailRunPhoto.removeAttribute('src');
+  detailRunMemo.textContent = '';
+}
   recordsSection.classList.add('hidden');
   recordDetail.classList.remove('hidden');
   showDetailMap(record);
@@ -341,17 +465,45 @@ function renderRecordProfileFeed() {
     return;
   }
 
-  profileRecentRuns.innerHTML = runRecords
-    .slice(0, 3)
-    .map(function (record) {
+profileRecentRuns.innerHTML = runRecords
+  .slice(0, 3)
+  .map(function (record) {
+    const mood = record.emotionalPace || '마음 환기 Pace';
+    const memo = record.memo || '';
+
+    if (record.photo) {
       return `
-        <div class="feed-card small-feed-card">
-          <strong>${record.distance}km</strong>
-          <span>${record.emotionalPace || '마음 환기 Pace'}</span>
+        <div class="feed-card recent-run-card">
+          <img
+            class="recent-run-photo"
+            src="${record.photo}"
+            alt="러닝 기록 사진"
+          />
+
+          <div class="recent-run-content">
+            <div class="recent-run-topline">
+              <strong class="recent-run-distance">${record.distance}km</strong>
+              <span class="recent-run-mood">${mood}</span>
+            </div>
+
+            ${memo ? `<p class="recent-run-memo">${memo}</p>` : ''}
+          </div>
         </div>
       `;
-    })
-    .join('');
+    }
+
+    return `
+      <div class="feed-card recent-run-card no-photo">
+        <div class="recent-run-topline">
+          <strong class="recent-run-distance">${record.distance}km</strong>
+          <span class="recent-run-mood">${mood}</span>
+        </div>
+
+        ${memo ? `<p class="recent-run-memo">${memo}</p>` : ''}
+      </div>
+    `;
+  })
+  .join('');
 }
 
 renderRunRecords();
@@ -531,9 +683,11 @@ saveRunWithMoodBtn.addEventListener('click', function () {
     );
   }
 
-  saveRunRecord();
+saveRunRecord();
 
-  paceMoodModal.classList.add('hidden');
+resetRunMemoryInputs();
+
+paceMoodModal.classList.add('hidden');
 
   seconds = 0;
   timer.textContent = '00:00';

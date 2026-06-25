@@ -501,3 +501,171 @@ height: 70vh;
   font-size: 20px;
   text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
 }
+/* 러닝 기록 사진 · 메모 입력 */
+.run-memory-inputs {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.run-photo-label,
+.run-memo-label {
+  display: block;
+  margin-bottom: 16px;
+}
+
+.run-photo-label > span,
+.run-memo-label > span {
+  display: block;
+  margin-bottom: 8px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.run-photo-label em,
+.run-memo-label em {
+  color: #94a3b8;
+  font-style: normal;
+  font-weight: 500;
+}
+
+#runPhotoInput {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 13px;
+}
+
+#runPhotoInput::file-selector-button {
+  margin-right: 10px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: #0f172a;
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#runPhotoFileName {
+  display: block;
+  margin-top: 7px;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+#runMemoInput {
+  width: 100%;
+  min-height: 76px;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 12px;
+  border: 1px solid #dbe2ea;
+  border-radius: 12px;
+  outline: none;
+  background: #f8fafc;
+  color: #0f172a;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+#runMemoInput:focus {
+  border-color: #facc15;
+  box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.2);
+}
+
+.run-memo-label small {
+  display: block;
+  margin-top: 6px;
+  text-align: right;
+  color: #94a3b8;
+  font-size: 12px;
+}
+/* 기록 상세 - 사진과 러닝 메모 */
+#detailMemory {
+  margin-top: 18px;
+  overflow: hidden;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+#detailRunPhoto {
+  display: block;
+  width: 100%;
+  max-height: 360px;
+  object-fit: cover;
+}
+
+#detailRunMemoWrap {
+  padding: 18px;
+}
+
+#detailRunMemoWrap .card-label {
+  margin-bottom: 8px;
+  color: #facc15;
+}
+
+#detailRunMemo {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 15px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+/* 프로필 피드 - 사진 중심 Recent Runs */
+.recent-run-card {
+  overflow: hidden;
+  padding: 0;
+}
+
+.recent-run-photo {
+  display: block;
+  width: 100%;
+  height: 190px;
+  object-fit: cover;
+}
+
+.recent-run-content {
+  padding: 16px 18px 18px;
+}
+
+.recent-run-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.recent-run-distance {
+  color: #111827;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.recent-run-mood {
+  color: #2f5d50;
+  font-size: 14px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.recent-run-memo {
+  margin: 10px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.recent-run-card.no-photo {
+  padding: 18px;
+}
