@@ -25,6 +25,7 @@ const distanceDisplay = document.getElementById('distance');
 const paceDisplay = document.getElementById('pace');
 const recordsList = document.getElementById('recordsList');
 const recordsSection = document.getElementById('records');
+const controlsSection = document.getElementById('controls');
 const recordDetail = document.getElementById('recordDetail');
 const backToRecordsBtn = document.getElementById('backToRecordsBtn');
 const detailDate = document.getElementById('detailDate');
@@ -36,6 +37,8 @@ const detailPaceTitle = document.getElementById('detailPaceTitle');
 const detailPaceHint = document.getElementById('detailPaceHint');
 const detailMapElement = document.getElementById('detailMap');
 const detailMemory = document.getElementById('detailMemory');
+const detailMapSection = document.getElementById('detailMapSection');
+const toggleDetailMapBtn = document.getElementById('toggleDetailMapBtn');
 const detailRunPhoto = document.getElementById('detailRunPhoto');
 const detailRunMemoWrap = document.getElementById('detailRunMemoWrap');
 const detailRunMemo = document.getElementById('detailRunMemo');
@@ -53,6 +56,7 @@ let detailRouteLine = null;
 let detailStartMarker = null;
 let detailFinishMarker = null;
 let detailDirectionMarkers = [];
+let selectedDetailRecord = null;
 const MAX_ACCURACY = 100; // meters
 const MIN_DISTANCE = 5; // meters
 let runRecords = JSON.parse(localStorage.getItem('runRecords')) || [];
@@ -396,9 +400,26 @@ if (hasPhoto || hasMemo) {
   detailRunPhoto.removeAttribute('src');
   detailRunMemo.textContent = '';
 }
-  recordsSection.classList.add('hidden');
-  recordDetail.classList.remove('hidden');
-  showDetailMap(record);
+selectedDetailRecord = record;
+
+detailMapSection.classList.add('hidden');
+toggleDetailMapBtn.textContent = '지도 보기';
+
+const hasRoute =
+  record.routeCoordinates &&
+  record.routeCoordinates.length > 0;
+
+toggleDetailMapBtn.disabled = !hasRoute;
+
+if (!hasRoute) {
+  toggleDetailMapBtn.textContent = '경로 데이터가 없습니다';
+}
+
+map.getContainer().style.display = 'none';
+controlsSection.style.display = 'none';
+
+recordsSection.classList.add('hidden');
+recordDetail.classList.remove('hidden');
 });
 const paceToggle = recordCard.querySelector('.pace-toggle');
 
@@ -727,14 +748,40 @@ detailNumericPace.addEventListener('click', function () {
     detailNumericPace.dataset.showing = 'number';
   }
 });
+toggleDetailMapBtn.addEventListener('click', function () {
+  if (!selectedDetailRecord) {
+    return;
+  }
+
+  const isHidden = detailMapSection.classList.contains('hidden');
+
+  if (isHidden) {
+    detailMapSection.classList.remove('hidden');
+    toggleDetailMapBtn.textContent = '지도 닫기';
+
+    showDetailMap(selectedDetailRecord);
+  } else {
+    detailMapSection.classList.add('hidden');
+    toggleDetailMapBtn.textContent = '지도 보기';
+  }
+});
 backToRecordsBtn.addEventListener('click', function () {
+  detailMapSection.classList.add('hidden');
+  toggleDetailMapBtn.textContent = '지도 보기';
+
   recordDetail.classList.add('hidden');
+
+  map.getContainer().style.display = 'block';
+  controlsSection.style.display = 'flex';
+
   recordsSection.classList.remove('hidden');
+
+  selectedDetailRecord = null;
 });
 const profileFeedBtn = document.getElementById('profileFeedBtn');
 const profileFeedScreen = document.getElementById('profileFeedScreen');
 const backFromProfileFeedBtn = document.getElementById('backFromProfileFeedBtn');
-const controlsSection = document.getElementById('controls');
+
 
 profileFeedBtn.addEventListener('click', function () {
   map.getContainer().style.display = 'none';

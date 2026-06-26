@@ -90,16 +90,22 @@
   <strong id="detailNumericPace">마음 환기 Pace</strong>
   <small id="detailPaceHint">터치하면 숫자 Pace로 바뀝니다</small>
 </div>
-
-  <div id="detailMap"></div>
   <div id="detailMemory" class="hidden">
-  <img id="detailRunPhoto" alt="러닝 기록 사진" />
+    <img id="detailRunPhoto" alt="러닝 기록 사진" />
 
-  <div id="detailRunMemoWrap">
-    <p class="card-label">RUN NOTE</p>
-    <p id="detailRunMemo"></p>
+    <div id="detailRunMemoWrap">
+      <p class="card-label">RUN NOTE</p>
+      <p id="detailRunMemo"></p>
+    </div>
   </div>
-</div>
+
+  <button id="toggleDetailMapBtn" class="detail-map-toggle" type="button">
+    지도 보기
+  </button>
+
+  <div id="detailMapSection" class="hidden">
+    <div id="detailMap"></div>
+  </div>
 </div>
 
 <section id="profileFeedScreen" class="screen hidden">
