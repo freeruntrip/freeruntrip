@@ -13,6 +13,8 @@ let timerInterval;
 let isRunning = false;
 let currentMarker;
 let routeCoordinates = [];
+let routeSegments = [];
+let activeRouteSegment = [];
 let routeLine;
 let routeLines = [];
 let paused = false;
@@ -42,6 +44,8 @@ const toggleDetailMapBtn = document.getElementById('toggleDetailMapBtn');
 const detailRunPhoto = document.getElementById('detailRunPhoto');
 const detailRunMemoWrap = document.getElementById('detailRunMemoWrap');
 const detailRunMemo = document.getElementById('detailRunMemo');
+const detailSplits = document.getElementById('detailSplits');
+const detailSplitsList = document.getElementById('detailSplitsList');
 const paceMoodModal = document.getElementById('paceMoodModal');
 const saveRunWithMoodBtn = document.getElementById('saveRunWithMoodBtn');
 const runPhotoInput = document.getElementById('runPhotoInput');
@@ -66,6 +70,10 @@ let selectedPaceMood =
   '마음 환기 Pace';
 
 let runStartTime = null;
+let splitRecords = [];
+let nextSplitDistanceMeters = 1000;
+let splitStartElapsedSeconds = 0;
+let lastGpsElapsedSeconds = 0;
 function compressRunPhoto(file) {
   return new Promise(function (resolve, reject) {
     const reader = new FileReader();
@@ -197,6 +205,118 @@ function getSmoothedPosition(latitude, longitude) {
 function getEmotionalPaceLabel() {
   return selectedPaceMood;
 }
+function formatDurationFromSeconds(totalSeconds) {
+  const safeSeconds = Math.max(0, Math.round(totalSeconds));
+  const minutes = String(Math.floor(safeSeconds / 60)).padStart(2, '0');
+  const secondsPart = String(safeSeconds % 60).padStart(2, '0');
+
+  return `${minutes}:${secondsPart}`;
+}
+
+function formatPaceFromSeconds(durationSeconds, distanceMeters) {
+  if (!distanceMeters || distanceMeters <= 0) {
+    return `--'--"`;
+  }
+
+  const paceSeconds = durationSeconds / (distanceMeters / 1000);
+  const paceMinutes = Math.floor(paceSeconds / 60);
+  const paceRemainingSeconds = Math.floor(paceSeconds % 60);
+
+  return `${paceMinutes}'${String(paceRemainingSeconds).padStart(2, '0')}"`;
+}
+
+function addCompletedSplits(
+  previousDistance,
+  segmentDistance,
+  previousElapsedSeconds,
+  currentElapsedSeconds
+) {
+  if (segmentDistance <= 0) {
+    return;
+  }
+
+  const currentDistance = previousDistance + segmentDistance;
+
+  while (currentDistance >= nextSplitDistanceMeters) {
+    const progressToSplit =
+      (nextSplitDistanceMeters - previousDistance) / segmentDistance;
+
+    const splitEndElapsedSeconds =
+      previousElapsedSeconds +
+      (currentElapsedSeconds - previousElapsedSeconds) * progressToSplit;
+
+    const splitDurationSeconds =
+      splitEndElapsedSeconds - splitStartElapsedSeconds;
+
+    splitRecords.push({
+      index: splitRecords.length + 1,
+      distanceMeters: 1000,
+      durationSeconds: Math.round(splitDurationSeconds),
+      duration: formatDurationFromSeconds(splitDurationSeconds),
+      pace: formatPaceFromSeconds(splitDurationSeconds, 1000)
+    });
+
+    splitStartElapsedSeconds = splitEndElapsedSeconds;
+    nextSplitDistanceMeters += 1000;
+  }
+}
+
+function getSplitsForSave() {
+  const savedSplits = splitRecords.map(function (split) {
+    return { ...split };
+  });
+
+  const completedDistanceMeters = nextSplitDistanceMeters - 1000;
+  const remainingDistanceMeters = totalDistance - completedDistanceMeters;
+
+  if (remainingDistanceMeters >= 10) {
+    const finalSplitDurationSeconds =
+      seconds - splitStartElapsedSeconds;
+
+    savedSplits.push({
+      index: savedSplits.length + 1,
+      distanceMeters: Math.round(remainingDistanceMeters),
+      durationSeconds: Math.round(finalSplitDurationSeconds),
+      duration: formatDurationFromSeconds(finalSplitDurationSeconds),
+      pace: formatPaceFromSeconds(
+        finalSplitDurationSeconds,
+        remainingDistanceMeters
+      )
+    });
+  }
+
+  return savedSplits;
+}
+
+function renderDetailSplits(record) {
+  const splits = Array.isArray(record.splits) ? record.splits : [];
+
+  if (splits.length === 0) {
+    detailSplits.classList.add('hidden');
+    detailSplitsList.innerHTML = '';
+    return;
+  }
+
+  detailSplits.classList.remove('hidden');
+
+  detailSplitsList.innerHTML = splits
+    .map(function (split) {
+      const isFullKilometer = split.distanceMeters >= 995;
+
+      const label = isFullKilometer
+        ? `${split.index}km`
+        : `마지막 ${(split.distanceMeters / 1000).toFixed(2)}km`;
+
+      return `
+        <div class="split-row">
+          <span class="split-label">${label}</span>
+          <span class="split-duration">${split.duration}</span>
+          <strong class="split-pace">${split.pace}</strong>
+        </div>
+      `;
+    })
+    .join('');
+}
 function createRunMarkerIcon(label, className) {
   return L.divIcon({
     className: `run-marker ${className}`,
@@ -280,9 +400,19 @@ function saveRunRecord() {
 
     photo: pendingRunPhoto,
 
-    memo: runMemoInput.value.trim(),
+  memo: runMemoInput.value.trim(),
 
-    routeCoordinates: routeCoordinates.slice()
+splits: getSplitsForSave(),
+
+routeCoordinates: routeCoordinates.slice(),
+
+routeSegments: routeSegments
+  .filter(function (segment) {
+    return segment.length > 0;
+  })
+  .map(function (segment) {
+    return segment.slice();
+  })
   };
 
   runRecords.unshift(record);
@@ -374,6 +504,7 @@ detailPaceHint.textContent = '터치하면 숫자 Pace로 바뀝니다';
 detailNumericPace.dataset.showing = 'emotional';
 detailNumericPace.dataset.numericPace = record.pace;
 detailNumericPace.dataset.emotionalPace = record.emotionalPace || '마음 환기 Pace';
+renderDetailSplits(record);
 const hasPhoto = Boolean(record.photo);
 const hasMemo = Boolean(record.memo);
 
@@ -533,16 +664,31 @@ renderRecordProfileFeed();
 startBtn.addEventListener('click', function () {
   console.log('러닝 시작 버튼 클릭됨');
 if (!isRunning) {
-    if (seconds === 0) {
+  if (seconds === 0) {
     runStartTime = new Date();
+
+    routeCoordinates = [];
+    routeSegments = [];
+    activeRouteSegment = [];
+    routeSegments.push(activeRouteSegment);
+
+    splitRecords = [];
+    nextSplitDistanceMeters = 1000;
+    splitStartElapsedSeconds = 0;
+    lastGpsElapsedSeconds = 0;
   }
-if (paused) {
-  routeCoordinates = [];
-  routeLine = null;
-  lastValidPosition = null;
-  recentPositions = [];
-  paused = false;
-}
+
+  if (paused) {
+    routeLine = null;
+    lastValidPosition = null;
+    recentPositions = [];
+
+    activeRouteSegment = [];
+    routeSegments.push(activeRouteSegment);
+
+    lastGpsElapsedSeconds = seconds;
+    paused = false;
+  }
   isRunning = true;
 
   timerInterval = setInterval(function () {
@@ -576,28 +722,34 @@ if (lastValidPosition) {
     lastValidPosition.latitude,
     lastValidPosition.longitude,
     smoothedPosition.latitude,
-smoothedPosition.longitude
+    smoothedPosition.longitude
   );
 
   if (distanceFromLast < MIN_DISTANCE) {
     console.log('이동 거리 너무 짧음, 좌표 무시:', distanceFromLast);
     return;
   }
-    totalDistance += distanceFromLast;
-  distanceDisplay.textContent = (totalDistance / 1000).toFixed(2) + ' km';
+
+  const previousDistance = totalDistance;
+  const previousElapsedSeconds = lastGpsElapsedSeconds;
+
+  totalDistance += distanceFromLast;
+
+  addCompletedSplits(
+    previousDistance,
+    distanceFromLast,
+    previousElapsedSeconds,
+    seconds
+  );
+
+  distanceDisplay.textContent =
+    (totalDistance / 1000).toFixed(2) + ' km';
+
   if (totalDistance > 0 && seconds > 0) {
-  const paceSeconds = seconds / (totalDistance / 1000);
+    paceDisplay.textContent =
+      'Pace: ' + formatPaceFromSeconds(seconds, totalDistance);
+  }
 
-  const paceMinutes = Math.floor(paceSeconds / 60);
-  const paceRemainingSeconds = Math.floor(paceSeconds % 60);
-
-  paceDisplay.textContent =
-    'Pace: ' +
-    paceMinutes +
-    "'" +
-    String(paceRemainingSeconds).padStart(2, '0') +
-    '"';
-}
   console.log('총 이동거리:', totalDistance);
 }
 
@@ -606,10 +758,20 @@ lastValidPosition = {
   longitude: smoothedPosition.longitude
 };
 
-routeCoordinates.push([
+lastGpsElapsedSeconds = seconds;
+
+const currentRoutePoint = [
   smoothedPosition.latitude,
   smoothedPosition.longitude
-]);
+];
+
+routeCoordinates.push(currentRoutePoint);
+
+if (activeRouteSegment.length === 0) {
+  routeSegments.push(activeRouteSegment);
+}
+
+activeRouteSegment.push(currentRoutePoint);
 
 console.log(routeCoordinates);
 
@@ -646,7 +808,7 @@ if (!currentMarker) {
 }
 
 if (!routeLine) {
-  routeLine = L.polyline(routeCoordinates, {
+  routeLine = L.polyline(activeRouteSegment, {
     color: '#1f6feb',
     weight: 6,
     opacity: 0.85,
@@ -656,7 +818,7 @@ if (!routeLine) {
 
   routeLines.push(routeLine);
 } else {
-  routeLine.setLatLngs(routeCoordinates);
+  routeLine.setLatLngs(activeRouteSegment);
 }
 },
 
@@ -715,9 +877,16 @@ paceMoodModal.classList.add('hidden');
   totalDistance = 0;
   distanceDisplay.textContent = '0.00 km';
   paceDisplay.textContent = 'Pace: --\'--"';
-  routeCoordinates = [];
-  recentPositions = [];
-  lastValidPosition = null;
+ routeCoordinates = [];
+routeSegments = [];
+activeRouteSegment = [];
+recentPositions = [];
+lastValidPosition = null;
+
+splitRecords = [];
+nextSplitDistanceMeters = 1000;
+splitStartElapsedSeconds = 0;
+lastGpsElapsedSeconds = 0;
 
   routeLines.forEach(function (line) {
     map.removeLayer(line);

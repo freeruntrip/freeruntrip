@@ -697,3 +697,67 @@ height: 70vh;
 .recent-run-card.no-photo {
   padding: 18px;
 }
+/* 기록 상세 - 1km 스플릿 */
+.detail-splits {
+  margin-top: 18px;
+  padding: 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.detail-splits-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.detail-splits-header .card-label {
+  margin-bottom: 5px;
+  color: #facc15;
+}
+
+.detail-splits-header h3 {
+  margin: 0;
+  color: #f8fafc;
+  font-size: 18px;
+}
+
+.detail-splits-header > span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+#detailSplitsList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.split-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 12px;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.split-label {
+  color: #f8fafc;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.split-duration {
+  color: #cbd5e1;
+  font-size: 14px;
+}
+
+.split-pace {
+  color: #facc15;
+  font-size: 15px;
+  font-weight: 800;
+}
