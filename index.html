@@ -23,6 +23,7 @@
     <button id="pauseBtn">일시정지</button>
     <button id="stopBtn">러닝 종료</button>
 <button id="profileFeedBtn">Record Profile Feed</button>
+<button id="monthlyReportBtn">월간 리포트</button>
     <div id="timer">00:00</div>
     <div id="distance">0.00 km</div>
     <div id="pace">Pace: --'--"</div>
@@ -181,7 +182,62 @@
   <div id="profileRecentRuns"></div>
 </div>
 </section>
+<section id="monthlyReportScreen" class="screen hidden">
+  <div class="monthly-report-header">
+    <button id="backFromMonthlyReportBtn">← Back</button>
 
+    <div>
+      <p class="card-label">RUNNING REPORT</p>
+      <h2 id="monthlyReportTitle">이번 달 러닝 리포트</h2>
+      <p id="monthlyReportSubtitle">나의 러닝 흐름을 확인해 보세요</p>
+    </div>
+  </div>
+
+  <div class="monthly-summary-grid">
+    <article class="monthly-summary-card featured">
+      <span>이번 달 거리</span>
+      <strong id="monthlyDistance">0.0km</strong>
+    </article>
+
+    <article class="monthly-summary-card">
+      <span>러닝 횟수</span>
+      <strong id="monthlyRunCount">0회</strong>
+    </article>
+
+    <article class="monthly-summary-card">
+      <span>총 러닝 시간</span>
+      <strong id="monthlyTotalDuration">0분</strong>
+    </article>
+
+    <article class="monthly-summary-card">
+      <span>평균 Pace</span>
+      <strong id="monthlyAveragePace">--'--"</strong>
+    </article>
+  </div>
+
+  <section class="monthly-chart-card">
+    <div class="monthly-section-heading">
+      <div>
+        <p class="card-label">DISTANCE FLOW</p>
+        <h3>날짜별 거리</h3>
+      </div>
+      <span>km</span>
+    </div>
+
+    <div id="monthlyDistanceChart" class="monthly-distance-chart"></div>
+  </section>
+
+  <section class="monthly-recent-section">
+    <div class="monthly-section-heading">
+      <div>
+        <p class="card-label">RECENT RUNS</p>
+        <h3>이번 달 최근 기록</h3>
+      </div>
+    </div>
+
+    <div id="monthlyReportRecentRuns"></div>
+  </section>
+</section>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="app.js"></script>
 

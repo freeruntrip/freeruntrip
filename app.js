@@ -56,7 +56,7 @@ const runMemoCount = document.getElementById('runMemoCount');
 let pendingRunPhoto = '';
 let isPhotoProcessing = false;
 let detailMap = null;
-let detailRouteLine = null;
+let detailRouteLines = [];
 let detailStartMarker = null;
 let detailFinishMarker = null;
 let detailDirectionMarkers = [];
@@ -422,13 +422,24 @@ routeSegments: routeSegments
     JSON.stringify(runRecords)
   );
 
-  renderRunRecords();
-  renderRecordProfileFeed();
+renderRunRecords();
+renderRecordProfileFeed();
+renderMonthlyReport();
 
   console.log('저장된 러닝 기록:', record);
 }
 function showDetailMap(record) {
-  if (!record.routeCoordinates || record.routeCoordinates.length === 0) {
+  const savedSegments =
+    Array.isArray(record.routeSegments) &&
+    record.routeSegments.length > 0
+      ? record.routeSegments
+      : [record.routeCoordinates || []];
+
+  const validSegments = savedSegments.filter(function (segment) {
+    return Array.isArray(segment) && segment.length > 0;
+  });
+
+  if (validSegments.length === 0) {
     detailMapElement.innerHTML = '';
     return;
   }
@@ -441,32 +452,55 @@ function showDetailMap(record) {
     }).addTo(detailMap);
   }
 
-  if (detailRouteLine) {
-    detailMap.removeLayer(detailRouteLine);
-  }
-clearDetailRouteDecorations();
-  detailRouteLine = L.polyline(record.routeCoordinates, {
-    color: '#facc15',
-    weight: 6,
-    opacity: 0.9,
-    lineCap: 'round',
-    lineJoin: 'round'
-  }).addTo(detailMap);
-const startPoint = record.routeCoordinates[0];
-const finishPoint = record.routeCoordinates[record.routeCoordinates.length - 1];
-
-detailStartMarker = L.marker(startPoint, {
-  icon: createRunMarkerIcon('START', 'start-marker')
-}).addTo(detailMap);
-
-detailFinishMarker = L.marker(finishPoint, {
-  icon: createRunMarkerIcon('FINISH', 'finish-marker')
-}).addTo(detailMap);
-
-addDirectionArrowsToDetailMap(record.routeCoordinates);
-  detailMap.fitBounds(detailRouteLine.getBounds(), {
-    padding: [20, 20]
+  detailRouteLines.forEach(function (line) {
+    detailMap.removeLayer(line);
   });
+
+  detailRouteLines = [];
+
+  clearDetailRouteDecorations();
+
+  const allPoints = [];
+
+  validSegments.forEach(function (segment) {
+    segment.forEach(function (point) {
+      allPoints.push(point);
+    });
+
+    if (segment.length >= 2) {
+      const routeLine = L.polyline(segment, {
+        color: '#facc15',
+        weight: 6,
+        opacity: 0.9,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(detailMap);
+
+      detailRouteLines.push(routeLine);
+    }
+
+    addDirectionArrowsToDetailMap(segment);
+  });
+
+  const startPoint = validSegments[0][0];
+  const lastSegment = validSegments[validSegments.length - 1];
+  const finishPoint = lastSegment[lastSegment.length - 1];
+
+  detailStartMarker = L.marker(startPoint, {
+    icon: createRunMarkerIcon('START', 'start-marker')
+  }).addTo(detailMap);
+
+  detailFinishMarker = L.marker(finishPoint, {
+    icon: createRunMarkerIcon('FINISH', 'finish-marker')
+  }).addTo(detailMap);
+
+  const bounds = L.latLngBounds(allPoints);
+
+  if (bounds.isValid()) {
+    detailMap.fitBounds(bounds, {
+      padding: [20, 20]
+    });
+  }
 
   setTimeout(function () {
     detailMap.invalidateSize();
@@ -767,10 +801,6 @@ const currentRoutePoint = [
 
 routeCoordinates.push(currentRoutePoint);
 
-if (activeRouteSegment.length === 0) {
-  routeSegments.push(activeRouteSegment);
-}
-
 activeRouteSegment.push(currentRoutePoint);
 
 console.log(routeCoordinates);
@@ -950,8 +980,201 @@ backToRecordsBtn.addEventListener('click', function () {
 const profileFeedBtn = document.getElementById('profileFeedBtn');
 const profileFeedScreen = document.getElementById('profileFeedScreen');
 const backFromProfileFeedBtn = document.getElementById('backFromProfileFeedBtn');
+const monthlyReportBtn = document.getElementById('monthlyReportBtn');
+const monthlyReportScreen = document.getElementById('monthlyReportScreen');
+const backFromMonthlyReportBtn = document.getElementById('backFromMonthlyReportBtn');
 
+const monthlyReportTitle = document.getElementById('monthlyReportTitle');
+const monthlyReportSubtitle = document.getElementById('monthlyReportSubtitle');
+const monthlyDistance = document.getElementById('monthlyDistance');
+const monthlyRunCount = document.getElementById('monthlyRunCount');
+const monthlyTotalDuration = document.getElementById('monthlyTotalDuration');
+const monthlyAveragePace = document.getElementById('monthlyAveragePace');
+const monthlyDistanceChart = document.getElementById('monthlyDistanceChart');
+const monthlyReportRecentRuns = document.getElementById('monthlyReportRecentRuns');
+function parseRecordDate(dateText) {
+  const match = String(dateText || '').match(
+    /(\d{4})\D+(\d{1,2})\D+(\d{1,2})/
+  );
 
+  if (!match) {
+    return null;
+  }
+
+  return new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3])
+  );
+}
+
+function durationToSeconds(durationText) {
+  const parts = String(durationText || '0:00')
+    .split(':')
+    .map(Number);
+
+  if (parts.length !== 2 || parts.some(isNaN)) {
+    return 0;
+  }
+
+  return parts[0] * 60 + parts[1];
+}
+
+function formatMonthlyDuration(totalSeconds) {
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours > 0) {
+    return `${hours}시간 ${minutes}분`;
+  }
+
+  return `${minutes}분`;
+}
+
+function formatAveragePace(totalSeconds, totalDistanceKm) {
+  if (!totalDistanceKm || totalDistanceKm <= 0) {
+    return `--'--"`;
+  }
+
+  const paceSeconds = totalSeconds / totalDistanceKm;
+  const minutes = Math.floor(paceSeconds / 60);
+  const seconds = Math.floor(paceSeconds % 60);
+
+  return `${minutes}'${String(seconds).padStart(2, '0')}"`;
+}
+
+function renderMonthlyReport() {
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+
+  const monthlyRecords = runRecords
+    .filter(function (record) {
+      const recordDate = parseRecordDate(record.date);
+
+      return (
+        recordDate &&
+        recordDate.getFullYear() === currentYear &&
+        recordDate.getMonth() === currentMonth
+      );
+    })
+    .sort(function (a, b) {
+      return (b.id || 0) - (a.id || 0);
+    });
+
+  const totalDistanceKm = monthlyRecords.reduce(function (sum, record) {
+    return sum + (Number(record.distance) || 0);
+  }, 0);
+
+  const totalDurationSeconds = monthlyRecords.reduce(function (sum, record) {
+    return sum + durationToSeconds(record.duration);
+  }, 0);
+
+  monthlyReportTitle.textContent =
+    `${currentYear}년 ${currentMonth + 1}월 러닝 리포트`;
+
+  monthlyReportSubtitle.textContent =
+    monthlyRecords.length > 0
+      ? `${monthlyRecords.length}번의 러닝이 이번 달을 채우고 있어요`
+      : '이번 달 첫 러닝을 기다리고 있어요';
+
+  monthlyDistance.textContent = `${totalDistanceKm.toFixed(1)}km`;
+  monthlyRunCount.textContent = `${monthlyRecords.length}회`;
+  monthlyTotalDuration.textContent =
+    formatMonthlyDuration(totalDurationSeconds);
+
+  monthlyAveragePace.textContent =
+    formatAveragePace(totalDurationSeconds, totalDistanceKm);
+
+  const dailyDistances = {};
+
+  monthlyRecords.forEach(function (record) {
+    const recordDate = parseRecordDate(record.date);
+
+    if (!recordDate) {
+      return;
+    }
+
+    const day = recordDate.getDate();
+
+    if (!dailyDistances[day]) {
+      dailyDistances[day] = 0;
+    }
+
+    dailyDistances[day] += Number(record.distance) || 0;
+  });
+
+  const chartDays = Object.keys(dailyDistances)
+    .map(Number)
+    .sort(function (a, b) {
+      return a - b;
+    });
+
+  if (chartDays.length === 0) {
+    monthlyDistanceChart.innerHTML = `
+      <p class="monthly-empty-message">
+        이번 달 러닝 기록이 아직 없습니다.
+      </p>
+    `;
+  } else {
+    const maxDistance = Math.max(
+      ...chartDays.map(function (day) {
+        return dailyDistances[day];
+      })
+    );
+
+    monthlyDistanceChart.innerHTML = chartDays
+      .map(function (day) {
+        const distance = dailyDistances[day];
+        const height = Math.max(
+          14,
+          Math.round((distance / maxDistance) * 125)
+        );
+
+        return `
+          <div class="monthly-bar-column">
+            <span class="monthly-bar-value">${distance.toFixed(1)}</span>
+            <div
+              class="monthly-bar"
+              style="height: ${height}px"
+            ></div>
+            <span class="monthly-bar-date">${day}일</span>
+          </div>
+        `;
+      })
+      .join('');
+  }
+
+  if (monthlyRecords.length === 0) {
+    monthlyReportRecentRuns.innerHTML = `
+      <p class="monthly-empty-message">
+        저장된 러닝 기록이 아직 없습니다.
+      </p>
+    `;
+    return;
+  }
+
+  monthlyReportRecentRuns.innerHTML = monthlyRecords
+    .slice(0, 3)
+    .map(function (record) {
+      return `
+        <div class="monthly-recent-run">
+          <div>
+            <span class="monthly-recent-run-date">${record.date}</span>
+            <strong class="monthly-recent-run-mood">
+              ${record.emotionalPace || '마음 환기 Pace'}
+            </strong>
+          </div>
+
+          <strong class="monthly-recent-run-distance">
+            ${record.distance}km
+          </strong>
+        </div>
+      `;
+    })
+    .join('');
+}
 profileFeedBtn.addEventListener('click', function () {
   map.getContainer().style.display = 'none';
   controlsSection.style.display = 'none';
@@ -968,7 +1191,25 @@ backFromProfileFeedBtn.addEventListener('click', function () {
   controlsSection.style.display = 'flex';
   recordsSection.classList.remove('hidden');
 });
+monthlyReportBtn.addEventListener('click', function () {
+  renderMonthlyReport();
 
+  map.getContainer().style.display = 'none';
+  controlsSection.style.display = 'none';
+  recordsSection.classList.add('hidden');
+  recordDetail.classList.add('hidden');
+  profileFeedScreen.classList.add('hidden');
+
+  monthlyReportScreen.classList.remove('hidden');
+});
+
+backFromMonthlyReportBtn.addEventListener('click', function () {
+  monthlyReportScreen.classList.add('hidden');
+
+  map.getContainer().style.display = 'block';
+  controlsSection.style.display = 'flex';
+  recordsSection.classList.remove('hidden');
+});
 const paceMoodOptions = document.querySelectorAll('.pace-mood-option');
 
 paceMoodOptions.forEach(function (button) {
