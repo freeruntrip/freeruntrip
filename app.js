@@ -740,9 +740,15 @@ if (!isRunning) {
     console.log('타이머 실행 중:', timer.textContent);
   }, 1000);
 watchId = navigator.geolocation.watchPosition(
-  function (position) {
-    console.log('GPS 성공');
-    console.log(position);
+function (position) {
+  // 일시정지 직후 늦게 도착한 위치값은 저장하지 않는다.
+  if (!isRunning || paused) {
+    console.log('일시정지 상태 GPS 무시');
+    return;
+  }
+
+  console.log('GPS 성공');
+  console.log(position);
 
    const latitude = position.coords.latitude;
 const longitude = position.coords.longitude;
@@ -869,24 +875,42 @@ function (error) {
 });
 pauseBtn.addEventListener('click', function () {
   console.log('일시정지 버튼 클릭됨');
-  clearInterval(timerInterval);
-  navigator.geolocation.clearWatch(watchId);
-  console.log('pause watchId 종료:', watchId);
-  watchId = null;
+
+  // 먼저 상태를 막아, 이미 대기 중인 GPS 콜백도 무시되게 한다.
   paused = true;
   isRunning = false;
+
+  clearInterval(timerInterval);
+
+  if (watchId !== null && watchId !== undefined) {
+    navigator.geolocation.clearWatch(watchId);
+    console.log('pause watchId 종료:', watchId);
+  }
+
+  watchId = null;
+
+  // 다음 재시작은 반드시 새 세그먼트로 시작한다.
+  routeLine = null;
+  lastValidPosition = null;
+  recentPositions = [];
 });
 stopBtn.addEventListener('click', function () {
   console.log('러닝 종료 버튼 클릭됨');
 
-clearInterval(timerInterval);
-navigator.geolocation.clearWatch(watchId);
+  // 종료를 누른 순간부터 늦게 도착하는 GPS 좌표를 무시한다.
+  isRunning = false;
+  paused = true;
 
-console.log('watchId 종료:', watchId);
-watchId = null;
+  clearInterval(timerInterval);
 
-paceMoodModal.classList.remove('hidden');
+  if (watchId !== null && watchId !== undefined) {
+    navigator.geolocation.clearWatch(watchId);
+    console.log('watchId 종료:', watchId);
+  }
 
+  watchId = null;
+
+  paceMoodModal.classList.remove('hidden');
 });
 saveRunWithMoodBtn.addEventListener('click', function () {
   const activeMoodButton = document.querySelector('.pace-mood-option.active');
