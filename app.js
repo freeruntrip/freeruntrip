@@ -571,8 +571,12 @@ detailMapSection.classList.add('hidden');
 toggleDetailMapBtn.textContent = '지도 보기';
 
 const hasRoute =
-  record.routeCoordinates &&
-  record.routeCoordinates.length > 0;
+  (Array.isArray(record.routeSegments) &&
+    record.routeSegments.some(function (segment) {
+      return Array.isArray(segment) && segment.length > 0;
+    })) ||
+  (Array.isArray(record.routeCoordinates) &&
+    record.routeCoordinates.length > 0);
 
 toggleDetailMapBtn.disabled = !hasRoute;
 
