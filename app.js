@@ -17,6 +17,34 @@ let routeSegments = [];
 let activeRouteSegment = [];
 let routeLine;
 let routeLines = [];
+function beginNewRouteSegment() {
+  activeRouteSegment = [];
+  routeSegments.push(activeRouteSegment);
+  routeLine = null;
+}
+
+function appendRoutePointToActiveSegment(point) {
+  if (!activeRouteSegment) {
+    beginNewRouteSegment();
+  }
+
+  routeCoordinates.push(point);
+  activeRouteSegment.push(point);
+
+  if (!routeLine) {
+    routeLine = L.polyline(activeRouteSegment, {
+      color: '#facc15',
+      weight: 6,
+      opacity: 0.9,
+      lineCap: 'round',
+      lineJoin: 'round'
+    }).addTo(map);
+
+    routeLines.push(routeLine);
+  } else {
+    routeLine.setLatLngs(activeRouteSegment);
+  }
+}
 let paused = false;
 let watchId;
 let lastValidPosition = null;
@@ -408,10 +436,12 @@ routeCoordinates: routeCoordinates.slice(),
 
 routeSegments: routeSegments
   .filter(function (segment) {
-    return segment.length > 0;
+    return Array.isArray(segment) && segment.length >= 2;
   })
   .map(function (segment) {
-    return segment.slice();
+    return segment.map(function (point) {
+      return [point[0], point[1]];
+    });
   })
   };
 
@@ -705,10 +735,10 @@ if (!isRunning) {
   if (seconds === 0) {
     runStartTime = new Date();
 
-    routeCoordinates = [];
-    routeSegments = [];
-    activeRouteSegment = [];
-    routeSegments.push(activeRouteSegment);
+  routeCoordinates = [];
+  routeSegments = [];
+  activeRouteSegment = [];
+  beginNewRouteSegment();
 
     splitRecords = [];
     nextSplitDistanceMeters = 1000;
@@ -721,13 +751,16 @@ if (!isRunning) {
     lastValidPosition = null;
     recentPositions = [];
 
-    activeRouteSegment = [];
-    routeSegments.push(activeRouteSegment);
+   beginNewRouteSegment();
 
     lastGpsElapsedSeconds = seconds;
     paused = false;
   }
   isRunning = true;
+
+  setTimeout(function () {
+  map.invalidateSize();
+}, 100);
 
   timerInterval = setInterval(function () {
     seconds++;
@@ -809,57 +842,22 @@ const currentRoutePoint = [
   smoothedPosition.longitude
 ];
 
-routeCoordinates.push(currentRoutePoint);
+appendRoutePointToActiveSegment(currentRoutePoint);
 
-activeRouteSegment.push(currentRoutePoint);
-
-console.log(routeCoordinates);
+const currentLatLng = [
+  smoothedPosition.latitude,
+  smoothedPosition.longitude
+];
 
 if (!currentMarker) {
-  map.setView(
-    [
-      smoothedPosition.latitude,
-      smoothedPosition.longitude
-    ],
-    17
-  );
+  currentMarker = L.marker(currentLatLng).addTo(map);
 } else {
-  map.panTo(
-    [
-      smoothedPosition.latitude,
-      smoothedPosition.longitude
-    ],
-    {
-      animate: true,
-      duration: 0.8
-    }
-  );
-}
-  if (!currentMarker) {
-  currentMarker = L.marker([
-    smoothedPosition.latitude,
-    smoothedPosition.longitude
-  ]).addTo(map);
-} else {
-  currentMarker.setLatLng([
-    smoothedPosition.latitude,
-    smoothedPosition.longitude
-  ]);
+  currentMarker.setLatLng(currentLatLng);
 }
 
-if (!routeLine) {
-  routeLine = L.polyline(activeRouteSegment, {
-    color: '#1f6feb',
-    weight: 6,
-    opacity: 0.85,
-    lineCap: 'round',
-    lineJoin: 'round'
-  }).addTo(map);
-
-  routeLines.push(routeLine);
-} else {
-  routeLine.setLatLngs(activeRouteSegment);
-}
+map.setView(currentLatLng, Math.max(map.getZoom(), 17), {
+  animate: false
+});
 },
 
 function (error) {
@@ -889,10 +887,12 @@ pauseBtn.addEventListener('click', function () {
 
   watchId = null;
 
-  // 다음 재시작은 반드시 새 세그먼트로 시작한다.
-  routeLine = null;
-  lastValidPosition = null;
-  recentPositions = [];
+// 현재 세그먼트를 닫고, 재시작 때 새 세그먼트를 만든다.
+routeLine = null;
+activeRouteSegment = null;
+
+lastValidPosition = null;
+recentPositions = [];
 });
 stopBtn.addEventListener('click', function () {
   console.log('러닝 종료 버튼 클릭됨');
