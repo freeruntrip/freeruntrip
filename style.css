@@ -959,3 +959,208 @@ height: 70vh;
   font-weight: 900;
   white-space: nowrap;
 }
+/* 활동 분석 V2 */
+.analysis-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.analysis-tab {
+  padding: 10px 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.analysis-tab.active {
+  background: #facc15;
+  color: #111827;
+}
+
+.analysis-period-row {
+  display: grid;
+  grid-template-columns: 42px 1fr 42px;
+  align-items: center;
+  gap: 12px;
+}
+
+.period-nav-btn {
+  width: 42px;
+  height: 42px;
+  border: none;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.11);
+  color: #f8fafc;
+  font-size: 20px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.period-nav-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.analysis-hero {
+  margin: 6px 0 2px;
+}
+
+.analysis-hero span {
+  display: block;
+  color: #f8fafc;
+  font-size: clamp(72px, 20vw, 112px);
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: -0.08em;
+}
+
+.analysis-hero small {
+  display: block;
+  margin-top: 20px;
+  color: #94a3b8;
+  font-size: 17px;
+}
+
+.analysis-main-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 26px 0 22px;
+}
+
+.analysis-main-stats div {
+  min-width: 0;
+}
+
+.analysis-main-stats strong {
+  display: block;
+  color: #f8fafc;
+  font-size: 22px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.analysis-main-stats span {
+  display: block;
+  margin-top: 6px;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.pace-mood-report-card {
+  margin-bottom: 22px;
+  padding: 20px;
+  border: 1px solid rgba(250, 204, 21, 0.24);
+  border-radius: 22px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(250, 204, 21, 0.16),
+      rgba(255, 255, 255, 0.07)
+    );
+}
+
+.pace-mood-report-card .card-label {
+  color: #facc15;
+}
+
+.pace-mood-report-card h3 {
+  margin: 0 0 8px;
+  color: #f8fafc;
+  font-size: 17px;
+}
+
+#analysisTopMood {
+  display: block;
+  color: #facc15;
+  font-size: 24px;
+  font-weight: 900;
+}
+
+#analysisMoodDescription {
+  margin: 8px 0 0;
+  color: #cbd5e1;
+  font-size: 14px;
+}
+
+.analysis-mood-ranking {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.mood-ranking-row {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.13);
+}
+
+.mood-ranking-row span {
+  color: #facc15;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.mood-ranking-row strong {
+  color: #f8fafc;
+  font-size: 14px;
+}
+
+.mood-ranking-row em {
+  color: #cbd5e1;
+  font-size: 13px;
+  font-style: normal;
+}
+
+.empty-bar {
+  opacity: 0.18;
+}
+
+.long-term-stats {
+  margin-bottom: 22px;
+  padding: 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.long-term-stat-card {
+  overflow: hidden;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.long-term-stat-card > div {
+  padding: 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.long-term-stat-card > div:last-child {
+  border-bottom: none;
+}
+
+.long-term-stat-card span {
+  display: block;
+  color: #94a3b8;
+  font-size: 14px;
+}
+
+.long-term-stat-card strong {
+  display: block;
+  margin-top: 8px;
+  color: #f8fafc;
+  font-size: 27px;
+  font-weight: 900;
+}

@@ -1014,12 +1014,36 @@ const backFromMonthlyReportBtn = document.getElementById('backFromMonthlyReportB
 
 const monthlyReportTitle = document.getElementById('monthlyReportTitle');
 const monthlyReportSubtitle = document.getElementById('monthlyReportSubtitle');
-const monthlyDistance = document.getElementById('monthlyDistance');
-const monthlyRunCount = document.getElementById('monthlyRunCount');
-const monthlyTotalDuration = document.getElementById('monthlyTotalDuration');
-const monthlyAveragePace = document.getElementById('monthlyAveragePace');
 const monthlyDistanceChart = document.getElementById('monthlyDistanceChart');
 const monthlyReportRecentRuns = document.getElementById('monthlyReportRecentRuns');
+
+const analysisDistance = document.getElementById('analysisDistance');
+const analysisRunCount = document.getElementById('analysisRunCount');
+const analysisAveragePace = document.getElementById('analysisAveragePace');
+const analysisTotalDuration = document.getElementById('analysisTotalDuration');
+
+const analysisMoodTitle = document.getElementById('analysisMoodTitle');
+const analysisTopMood = document.getElementById('analysisTopMood');
+const analysisMoodDescription = document.getElementById('analysisMoodDescription');
+const analysisMoodRanking = document.getElementById('analysisMoodRanking');
+
+const analysisChartTitle = document.getElementById('analysisChartTitle');
+const analysisRecentTitle = document.getElementById('analysisRecentTitle');
+
+const longTermStatsSection = document.getElementById('longTermStatsSection');
+const longTermStatsTitle = document.getElementById('longTermStatsTitle');
+const averageRunsPerWeek = document.getElementById('averageRunsPerWeek');
+const averageDistancePerRun = document.getElementById('averageDistancePerRun');
+const longTermAveragePace = document.getElementById('longTermAveragePace');
+const averageDurationPerRun = document.getElementById('averageDurationPerRun');
+
+const analysisTabs = document.querySelectorAll('.analysis-tab');
+const previousPeriodBtn = document.getElementById('previousPeriodBtn');
+const nextPeriodBtn = document.getElementById('nextPeriodBtn');
+
+let selectedAnalysisMode = 'week';
+let selectedAnalysisDate = new Date();
+
 function parseRecordDate(dateText) {
   const match = String(dateText || '').match(
     /(\d{4})\D+(\d{1,2})\D+(\d{1,2})/
@@ -1048,16 +1072,16 @@ function durationToSeconds(durationText) {
   return parts[0] * 60 + parts[1];
 }
 
-function formatMonthlyDuration(totalSeconds) {
-  const totalMinutes = Math.floor(totalSeconds / 60);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
+function formatAnalysisDuration(totalSeconds) {
+  const safeSeconds = Math.max(0, Math.round(totalSeconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
 
   if (hours > 0) {
-    return `${hours}시간 ${minutes}분`;
+    return `${hours}:${String(minutes).padStart(2, '0')}`;
   }
 
-  return `${minutes}분`;
+  return `${minutes}:00`;
 }
 
 function formatAveragePace(totalSeconds, totalDistanceKm) {
@@ -1072,118 +1096,380 @@ function formatAveragePace(totalSeconds, totalDistanceKm) {
   return `${minutes}'${String(seconds).padStart(2, '0')}"`;
 }
 
-function renderMonthlyReport() {
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth();
+function getStartOfWeek(date) {
+  const copiedDate = new Date(date);
+  const day = copiedDate.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
 
-  const monthlyRecords = runRecords
-    .filter(function (record) {
-      const recordDate = parseRecordDate(record.date);
+  copiedDate.setDate(copiedDate.getDate() + diff);
+  copiedDate.setHours(0, 0, 0, 0);
 
-      return (
-        recordDate &&
-        recordDate.getFullYear() === currentYear &&
-        recordDate.getMonth() === currentMonth
-      );
-    })
-    .sort(function (a, b) {
-      return (b.id || 0) - (a.id || 0);
-    });
+  return copiedDate;
+}
 
-  const totalDistanceKm = monthlyRecords.reduce(function (sum, record) {
-    return sum + (Number(record.distance) || 0);
-  }, 0);
+function getEndOfWeek(date) {
+  const start = getStartOfWeek(date);
+  const end = new Date(start);
 
-  const totalDurationSeconds = monthlyRecords.reduce(function (sum, record) {
-    return sum + durationToSeconds(record.duration);
-  }, 0);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
 
-  monthlyReportTitle.textContent =
-    `${currentYear}년 ${currentMonth + 1}월 러닝 리포트`;
+  return end;
+}
 
-  monthlyReportSubtitle.textContent =
-    monthlyRecords.length > 0
-      ? `${monthlyRecords.length}번의 러닝이 이번 달을 채우고 있어요`
-      : '이번 달 첫 러닝을 기다리고 있어요';
+function isSameDate(dateA, dateB) {
+  return (
+    dateA.getFullYear() === dateB.getFullYear() &&
+    dateA.getMonth() === dateB.getMonth() &&
+    dateA.getDate() === dateB.getDate()
+  );
+}
 
-  monthlyDistance.textContent = `${totalDistanceKm.toFixed(1)}km`;
-  monthlyRunCount.textContent = `${monthlyRecords.length}회`;
-  monthlyTotalDuration.textContent =
-    formatMonthlyDuration(totalDurationSeconds);
+function getAnalysisRecords() {
+  const validRecords = runRecords.filter(function (record) {
+    return Number(record.distance) > 0;
+  });
 
-  monthlyAveragePace.textContent =
-    formatAveragePace(totalDurationSeconds, totalDistanceKm);
+  if (selectedAnalysisMode === 'all') {
+    return validRecords;
+  }
 
-  const dailyDistances = {};
-
-  monthlyRecords.forEach(function (record) {
+  return validRecords.filter(function (record) {
     const recordDate = parseRecordDate(record.date);
 
     if (!recordDate) {
-      return;
+      return false;
     }
 
-    const day = recordDate.getDate();
+    if (selectedAnalysisMode === 'week') {
+      const startOfWeek = getStartOfWeek(selectedAnalysisDate);
+      const endOfWeek = getEndOfWeek(selectedAnalysisDate);
 
-    if (!dailyDistances[day]) {
-      dailyDistances[day] = 0;
+      return recordDate >= startOfWeek && recordDate <= endOfWeek;
     }
 
-    dailyDistances[day] += Number(record.distance) || 0;
+    if (selectedAnalysisMode === 'month') {
+      return (
+        recordDate.getFullYear() === selectedAnalysisDate.getFullYear() &&
+        recordDate.getMonth() === selectedAnalysisDate.getMonth()
+      );
+    }
+
+    if (selectedAnalysisMode === 'year') {
+      return recordDate.getFullYear() === selectedAnalysisDate.getFullYear();
+    }
+
+    return false;
+  });
+}
+
+function getMoodSummary(records) {
+  const moodCount = {};
+
+  records.forEach(function (record) {
+    const mood = record.emotionalPace || '마음 환기 Pace';
+
+    if (!moodCount[mood]) {
+      moodCount[mood] = 0;
+    }
+
+    moodCount[mood]++;
   });
 
-  const chartDays = Object.keys(dailyDistances)
-    .map(Number)
+  const ranking = Object.entries(moodCount)
+    .map(function ([mood, count]) {
+      return { mood, count };
+    })
+    .sort(function (a, b) {
+      return b.count - a.count;
+    });
+
+  return ranking;
+}
+
+function getPeriodTitle() {
+  const year = selectedAnalysisDate.getFullYear();
+  const month = selectedAnalysisDate.getMonth();
+
+  if (selectedAnalysisMode === 'week') {
+    const start = getStartOfWeek(selectedAnalysisDate);
+    const end = getEndOfWeek(selectedAnalysisDate);
+
+    return `${start.getMonth() + 1}월 ${start.getDate()}일 ~ ${end.getMonth() + 1}월 ${end.getDate()}일`;
+  }
+
+  if (selectedAnalysisMode === 'month') {
+    return `${year}년 ${month + 1}월`;
+  }
+
+  if (selectedAnalysisMode === 'year') {
+    return `${year}년`;
+  }
+
+  const datedRecords = runRecords
+    .map(function (record) {
+      return parseRecordDate(record.date);
+    })
+    .filter(Boolean)
     .sort(function (a, b) {
       return a - b;
     });
 
-  if (chartDays.length === 0) {
-    monthlyDistanceChart.innerHTML = `
-      <p class="monthly-empty-message">
-        이번 달 러닝 기록이 아직 없습니다.
-      </p>
-    `;
-  } else {
-    const maxDistance = Math.max(
-      ...chartDays.map(function (day) {
-        return dailyDistances[day];
-      })
-    );
-
-    monthlyDistanceChart.innerHTML = chartDays
-      .map(function (day) {
-        const distance = dailyDistances[day];
-        const height = Math.max(
-          14,
-          Math.round((distance / maxDistance) * 125)
-        );
-
-        return `
-          <div class="monthly-bar-column">
-            <span class="monthly-bar-value">${distance.toFixed(1)}</span>
-            <div
-              class="monthly-bar"
-              style="height: ${height}px"
-            ></div>
-            <span class="monthly-bar-date">${day}일</span>
-          </div>
-        `;
-      })
-      .join('');
+  if (datedRecords.length === 0) {
+    return '전체 기간';
   }
 
-  if (monthlyRecords.length === 0) {
+  const firstYear = datedRecords[0].getFullYear();
+  const lastYear = datedRecords[datedRecords.length - 1].getFullYear();
+
+  return firstYear === lastYear
+    ? `${firstYear}년 전체`
+    : `${firstYear}년 ~ ${lastYear}년`;
+}
+
+function renderMoodReport(records) {
+  const ranking = getMoodSummary(records);
+
+  if (ranking.length === 0) {
+    analysisTopMood.textContent = '아직 선택된 Pace Mood가 없습니다';
+    analysisMoodDescription.textContent =
+      '러닝을 저장하면 감성 Pace가 함께 쌓입니다.';
+    analysisMoodRanking.innerHTML = '';
+    return;
+  }
+
+  const topMood = ranking[0];
+  const percentage = Math.round((topMood.count / records.length) * 100);
+
+  analysisTopMood.textContent = topMood.mood;
+  analysisMoodDescription.textContent =
+    `${topMood.count}회 선택 · 전체 러닝의 ${percentage}%`;
+
+  analysisMoodRanking.innerHTML = ranking
+    .slice(0, 3)
+    .map(function (item, index) {
+      return `
+        <div class="mood-ranking-row">
+          <span>${index + 1}</span>
+          <strong>${item.mood}</strong>
+          <em>${item.count}회</em>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+function renderDistanceChart(records) {
+  let chartData = [];
+  let title = '';
+
+  if (selectedAnalysisMode === 'week') {
+    const start = getStartOfWeek(selectedAnalysisDate);
+    const dayLabels = ['월', '화', '수', '목', '금', '토', '일'];
+
+    chartData = dayLabels.map(function (label, index) {
+      const targetDate = new Date(start);
+      targetDate.setDate(start.getDate() + index);
+
+      const distance = records.reduce(function (sum, record) {
+        const recordDate = parseRecordDate(record.date);
+
+        if (recordDate && isSameDate(recordDate, targetDate)) {
+          return sum + Number(record.distance);
+        }
+
+        return sum;
+      }, 0);
+
+      return { label, distance };
+    });
+
+    title = '요일별 거리';
+  }
+
+  if (selectedAnalysisMode === 'month') {
+    const year = selectedAnalysisDate.getFullYear();
+    const month = selectedAnalysisDate.getMonth();
+    const lastDay = new Date(year, month + 1, 0).getDate();
+
+    chartData = Array.from({ length: lastDay }, function (_, index) {
+      const day = index + 1;
+
+      const distance = records.reduce(function (sum, record) {
+        const recordDate = parseRecordDate(record.date);
+
+        if (recordDate && recordDate.getDate() === day) {
+          return sum + Number(record.distance);
+        }
+
+        return sum;
+      }, 0);
+
+      return { label: `${day}일`, distance };
+    });
+
+    title = '날짜별 거리';
+  }
+
+  if (selectedAnalysisMode === 'year') {
+    chartData = Array.from({ length: 12 }, function (_, index) {
+      const distance = records.reduce(function (sum, record) {
+        const recordDate = parseRecordDate(record.date);
+
+        if (recordDate && recordDate.getMonth() === index) {
+          return sum + Number(record.distance);
+        }
+
+        return sum;
+      }, 0);
+
+      return { label: `${index + 1}월`, distance };
+    });
+
+    title = '월별 거리';
+  }
+
+  if (selectedAnalysisMode === 'all') {
+    const yearSet = new Set();
+
+    records.forEach(function (record) {
+      const recordDate = parseRecordDate(record.date);
+
+      if (recordDate) {
+        yearSet.add(recordDate.getFullYear());
+      }
+    });
+
+    chartData = Array.from(yearSet)
+      .sort(function (a, b) {
+        return a - b;
+      })
+      .map(function (year) {
+        const distance = records.reduce(function (sum, record) {
+          const recordDate = parseRecordDate(record.date);
+
+          if (recordDate && recordDate.getFullYear() === year) {
+            return sum + Number(record.distance);
+          }
+
+          return sum;
+        }, 0);
+
+        return { label: `${year}`, distance };
+      });
+
+    title = '연도별 거리';
+  }
+
+  analysisChartTitle.textContent = title;
+
+  const maxDistance = Math.max(
+    ...chartData.map(function (item) {
+      return item.distance;
+    }),
+    1
+  );
+
+  monthlyDistanceChart.innerHTML = chartData
+    .map(function (item) {
+      const height =
+        item.distance > 0
+          ? Math.max(12, Math.round((item.distance / maxDistance) * 125))
+          : 4;
+
+      return `
+        <div class="monthly-bar-column">
+          <span class="monthly-bar-value">
+            ${item.distance > 0 ? item.distance.toFixed(1) : ''}
+          </span>
+
+          <div
+            class="monthly-bar ${item.distance === 0 ? 'empty-bar' : ''}"
+            style="height: ${height}px"
+          ></div>
+
+          <span class="monthly-bar-date">${item.label}</span>
+        </div>
+      `;
+    })
+    .join('');
+}
+
+function renderLongTermStats(records, totalDistanceKm, totalDurationSeconds) {
+  const shouldShow =
+    selectedAnalysisMode === 'year' ||
+    selectedAnalysisMode === 'all';
+
+  if (!shouldShow) {
+    longTermStatsSection.classList.add('hidden');
+    return;
+  }
+
+  longTermStatsSection.classList.remove('hidden');
+
+  const runCount = records.length;
+  const averageDistance =
+    runCount > 0 ? totalDistanceKm / runCount : 0;
+
+  const averageDuration =
+    runCount > 0 ? totalDurationSeconds / runCount : 0;
+
+  let weeksInPeriod = 1;
+
+  if (records.length >= 2) {
+    const dates = records
+      .map(function (record) {
+        return parseRecordDate(record.date);
+      })
+      .filter(Boolean)
+      .sort(function (a, b) {
+        return a - b;
+      });
+
+    const firstDate = dates[0];
+    const lastDate = dates[dates.length - 1];
+
+    weeksInPeriod = Math.max(
+      1,
+      Math.ceil((lastDate - firstDate + 86400000) / 604800000)
+    );
+  }
+
+  const runsPerWeek = runCount / weeksInPeriod;
+
+  longTermStatsTitle.textContent =
+    selectedAnalysisMode === 'year'
+      ? `${selectedAnalysisDate.getFullYear()}년 통계`
+      : '전체 활동 통계';
+
+  averageRunsPerWeek.textContent =
+    `${runsPerWeek.toFixed(1)}러닝/주`;
+
+  averageDistancePerRun.textContent =
+    `${averageDistance.toFixed(1)}km/러닝`;
+
+  longTermAveragePace.textContent =
+    formatAveragePace(totalDurationSeconds, totalDistanceKm);
+
+  averageDurationPerRun.textContent =
+    `${formatAnalysisDuration(averageDuration)}/러닝`;
+}
+
+function renderRecentRuns(records) {
+  if (records.length === 0) {
     monthlyReportRecentRuns.innerHTML = `
       <p class="monthly-empty-message">
-        저장된 러닝 기록이 아직 없습니다.
+        이 기간에 저장된 러닝 기록이 없습니다.
       </p>
     `;
     return;
   }
 
-  monthlyReportRecentRuns.innerHTML = monthlyRecords
+  monthlyReportRecentRuns.innerHTML = records
+    .slice()
+    .sort(function (a, b) {
+      return (b.id || 0) - (a.id || 0);
+    })
     .slice(0, 3)
     .map(function (record) {
       return `
@@ -1203,6 +1489,126 @@ function renderMonthlyReport() {
     })
     .join('');
 }
+
+function renderMonthlyReport() {
+  const records = getAnalysisRecords();
+
+  const totalDistanceKm = records.reduce(function (sum, record) {
+    return sum + Number(record.distance);
+  }, 0);
+
+  const totalDurationSeconds = records.reduce(function (sum, record) {
+    return sum + durationToSeconds(record.duration);
+  }, 0);
+
+  const title = getPeriodTitle();
+
+  monthlyReportTitle.textContent = title;
+  monthlyReportSubtitle.textContent =
+    records.length > 0
+      ? `${records.length}번의 러닝이 이 기간을 채우고 있어요`
+      : '이 기간의 첫 러닝을 기다리고 있어요';
+
+  analysisDistance.textContent = totalDistanceKm.toFixed(1);
+  analysisRunCount.textContent = records.length;
+  analysisAveragePace.textContent =
+    formatAveragePace(totalDurationSeconds, totalDistanceKm);
+
+  analysisTotalDuration.textContent =
+    formatAnalysisDuration(totalDurationSeconds);
+
+  analysisMoodTitle.textContent =
+    selectedAnalysisMode === 'week'
+      ? '이번 주의 Pace Mood'
+      : selectedAnalysisMode === 'month'
+        ? '이번 달의 Pace Mood'
+        : selectedAnalysisMode === 'year'
+          ? '올해 가장 많이 달린 마음'
+          : '나를 가장 잘 설명하는 Pace Mood';
+
+  analysisRecentTitle.textContent =
+    selectedAnalysisMode === 'all'
+      ? '전체 최근 활동'
+      : `${title} 최근 활동`;
+
+  renderMoodReport(records);
+  renderDistanceChart(records);
+  renderLongTermStats(records, totalDistanceKm, totalDurationSeconds);
+  renderRecentRuns(records);
+
+  const today = new Date();
+
+  const isCurrentPeriod =
+    selectedAnalysisMode === 'all' ||
+    (
+      selectedAnalysisMode === 'week' &&
+      getStartOfWeek(selectedAnalysisDate).getTime() ===
+        getStartOfWeek(today).getTime()
+    ) ||
+    (
+      selectedAnalysisMode === 'month' &&
+      selectedAnalysisDate.getFullYear() === today.getFullYear() &&
+      selectedAnalysisDate.getMonth() === today.getMonth()
+    ) ||
+    (
+      selectedAnalysisMode === 'year' &&
+      selectedAnalysisDate.getFullYear() === today.getFullYear()
+    );
+
+  previousPeriodBtn.disabled = selectedAnalysisMode === 'all';
+  nextPeriodBtn.disabled = isCurrentPeriod;
+}
+
+function moveAnalysisPeriod(direction) {
+  if (selectedAnalysisMode === 'all') {
+    return;
+  }
+
+  const nextDate = new Date(selectedAnalysisDate);
+
+  if (selectedAnalysisMode === 'week') {
+    nextDate.setDate(nextDate.getDate() + direction * 7);
+  }
+
+  if (selectedAnalysisMode === 'month') {
+    nextDate.setMonth(nextDate.getMonth() + direction);
+  }
+
+  if (selectedAnalysisMode === 'year') {
+    nextDate.setFullYear(nextDate.getFullYear() + direction);
+  }
+
+  const today = new Date();
+
+  if (direction > 0 && nextDate > today) {
+    return;
+  }
+
+  selectedAnalysisDate = nextDate;
+  renderMonthlyReport();
+}
+
+analysisTabs.forEach(function (tab) {
+  tab.addEventListener('click', function () {
+    selectedAnalysisMode = tab.dataset.period;
+
+    analysisTabs.forEach(function (item) {
+      item.classList.remove('active');
+    });
+
+    tab.classList.add('active');
+    renderMonthlyReport();
+  });
+});
+
+previousPeriodBtn.addEventListener('click', function () {
+  moveAnalysisPeriod(-1);
+});
+
+nextPeriodBtn.addEventListener('click', function () {
+  moveAnalysisPeriod(1);
+});
+
 profileFeedBtn.addEventListener('click', function () {
   map.getContainer().style.display = 'none';
   controlsSection.style.display = 'none';
@@ -1219,7 +1625,15 @@ backFromProfileFeedBtn.addEventListener('click', function () {
   controlsSection.style.display = 'flex';
   recordsSection.classList.remove('hidden');
 });
+
 monthlyReportBtn.addEventListener('click', function () {
+  selectedAnalysisMode = 'week';
+  selectedAnalysisDate = new Date();
+
+  analysisTabs.forEach(function (tab) {
+    tab.classList.toggle('active', tab.dataset.period === 'week');
+  });
+
   renderMonthlyReport();
 
   map.getContainer().style.display = 'none';

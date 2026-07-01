@@ -186,40 +186,64 @@
   <div class="monthly-report-header">
     <button id="backFromMonthlyReportBtn">← Back</button>
 
-    <div>
-      <p class="card-label">RUNNING REPORT</p>
-      <h2 id="monthlyReportTitle">이번 달 러닝 리포트</h2>
-      <p id="monthlyReportSubtitle">나의 러닝 흐름을 확인해 보세요</p>
+    <div class="analysis-tabs" role="tablist">
+      <button class="analysis-tab active" data-period="week" type="button">주</button>
+      <button class="analysis-tab" data-period="month" type="button">월</button>
+      <button class="analysis-tab" data-period="year" type="button">년</button>
+      <button class="analysis-tab" data-period="all" type="button">전체</button>
+    </div>
+
+    <div class="analysis-period-row">
+      <button id="previousPeriodBtn" class="period-nav-btn" type="button">←</button>
+
+      <div>
+        <p class="card-label">RUNNING ANALYSIS</p>
+        <h2 id="monthlyReportTitle">이번 주 러닝 리포트</h2>
+        <p id="monthlyReportSubtitle">나의 러닝 흐름을 확인해 보세요</p>
+      </div>
+
+      <button id="nextPeriodBtn" class="period-nav-btn" type="button">→</button>
     </div>
   </div>
 
-  <div class="monthly-summary-grid">
-    <article class="monthly-summary-card featured">
-      <span>이번 달 거리</span>
-      <strong id="monthlyDistance">0.0km</strong>
-    </article>
+  <section class="analysis-hero">
+    <span id="analysisDistance">0.0</span>
+    <small>킬로미터</small>
+  </section>
 
-    <article class="monthly-summary-card">
-      <span>러닝 횟수</span>
-      <strong id="monthlyRunCount">0회</strong>
-    </article>
+  <div class="analysis-main-stats">
+    <div>
+      <strong id="analysisRunCount">0</strong>
+      <span>러닝</span>
+    </div>
 
-    <article class="monthly-summary-card">
-      <span>총 러닝 시간</span>
-      <strong id="monthlyTotalDuration">0분</strong>
-    </article>
-
-    <article class="monthly-summary-card">
+    <div>
+      <strong id="analysisAveragePace">--'--"</strong>
       <span>평균 Pace</span>
-      <strong id="monthlyAveragePace">--'--"</strong>
-    </article>
+    </div>
+
+    <div>
+      <strong id="analysisTotalDuration">0:00</strong>
+      <span>시간</span>
+    </div>
   </div>
+
+  <section class="pace-mood-report-card">
+    <p class="card-label">PACE MOOD</p>
+    <h3 id="analysisMoodTitle">이번 기간의 Pace Mood</h3>
+    <strong id="analysisTopMood">아직 선택된 Pace Mood가 없습니다</strong>
+    <p id="analysisMoodDescription">
+      러닝을 저장하면 감성 Pace가 함께 쌓입니다.
+    </p>
+
+    <div id="analysisMoodRanking" class="analysis-mood-ranking"></div>
+  </section>
 
   <section class="monthly-chart-card">
     <div class="monthly-section-heading">
       <div>
         <p class="card-label">DISTANCE FLOW</p>
-        <h3>날짜별 거리</h3>
+        <h3 id="analysisChartTitle">거리 흐름</h3>
       </div>
       <span>km</span>
     </div>
@@ -227,11 +251,42 @@
     <div id="monthlyDistanceChart" class="monthly-distance-chart"></div>
   </section>
 
+  <section id="longTermStatsSection" class="long-term-stats hidden">
+    <div class="monthly-section-heading">
+      <div>
+        <p class="card-label">RUNNER PROFILE</p>
+        <h3 id="longTermStatsTitle">평균 러닝 통계</h3>
+      </div>
+    </div>
+
+    <div class="long-term-stat-card">
+      <div>
+        <span>러닝</span>
+        <strong id="averageRunsPerWeek">0러닝/주</strong>
+      </div>
+
+      <div>
+        <span>거리</span>
+        <strong id="averageDistancePerRun">0.0km/러닝</strong>
+      </div>
+
+      <div>
+        <span>평균 Pace</span>
+        <strong id="longTermAveragePace">--'--"</strong>
+      </div>
+
+      <div>
+        <span>시간</span>
+        <strong id="averageDurationPerRun">0:00/러닝</strong>
+      </div>
+    </div>
+  </section>
+
   <section class="monthly-recent-section">
     <div class="monthly-section-heading">
       <div>
         <p class="card-label">RECENT RUNS</p>
-        <h3>이번 달 최근 기록</h3>
+        <h3 id="analysisRecentTitle">최근 활동</h3>
       </div>
     </div>
 
