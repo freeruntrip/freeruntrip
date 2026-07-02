@@ -1009,6 +1009,167 @@ const profileFeedBtn = document.getElementById('profileFeedBtn');
 const profileFeedScreen = document.getElementById('profileFeedScreen');
 const backFromProfileFeedBtn = document.getElementById('backFromProfileFeedBtn');
 const monthlyReportBtn = document.getElementById('monthlyReportBtn');
+const runTripBtn = document.getElementById('runTripBtn');
+const runTripPanel = document.getElementById('runTripPanel');
+const backFromRunTripBtn = document.getElementById('backFromRunTripBtn');
+
+const runTripWaypoints = document.getElementById('runTripWaypoints');
+const runTripDestinationInput = document.getElementById(
+  'runTripDestinationInput'
+);
+
+const addWaypointBtn = document.getElementById('addWaypointBtn');
+const runTripReturnToggle = document.getElementById(
+  'runTripReturnToggle'
+);
+
+const createRunTripBtn = document.getElementById('createRunTripBtn');
+const runTripStatus = document.getElementById('runTripStatus');
+
+const MAX_RUNTRIP_WAYPOINTS = 3;
+let runTripWaypointCount = 0;
+function updateRunTripCreateButton() {
+  const hasDestination =
+    runTripDestinationInput.value.trim().length > 0;
+
+  createRunTripBtn.disabled = !hasDestination;
+
+  if (!hasDestination) {
+    runTripStatus.textContent = '먼저 도착지를 입력해 주세요.';
+  }
+}
+
+function updateRunTripWaypointControls() {
+  addWaypointBtn.disabled =
+    runTripWaypointCount >= MAX_RUNTRIP_WAYPOINTS;
+}
+
+function refreshRunTripWaypointLabels() {
+  const rows = runTripWaypoints.querySelectorAll(
+    '.runtrip-waypoint-row'
+  );
+
+  rows.forEach(function (row, index) {
+    const number = index + 1;
+
+    const point = row.querySelector('.waypoint-point');
+    const label = row.querySelector('.waypoint-label');
+
+    if (point) {
+      point.textContent = number;
+    }
+
+    if (label) {
+      label.textContent = `경유지 ${number}`;
+    }
+  });
+
+  runTripWaypointCount = rows.length;
+  updateRunTripWaypointControls();
+}
+
+function addRunTripWaypoint() {
+  if (runTripWaypointCount >= MAX_RUNTRIP_WAYPOINTS) {
+    return;
+  }
+
+  const waypointRow = document.createElement('div');
+
+  waypointRow.className =
+    'runtrip-route-row runtrip-waypoint-row';
+
+  waypointRow.innerHTML = `
+    <div class="runtrip-point waypoint-point">
+      ${runTripWaypointCount + 1}
+    </div>
+
+    <div class="runtrip-input-wrap">
+      <label class="waypoint-label">
+        경유지 ${runTripWaypointCount + 1}
+      </label>
+
+      <input
+        class="runtrip-waypoint-input"
+        type="text"
+        autocomplete="off"
+        placeholder="들르고 싶은 장소를 입력하세요"
+      />
+    </div>
+
+    <button
+      class="runtrip-remove-waypoint-btn"
+      type="button"
+      aria-label="경유지 삭제"
+    >
+      −
+    </button>
+  `;
+
+  const removeBtn = waypointRow.querySelector(
+    '.runtrip-remove-waypoint-btn'
+  );
+
+  removeBtn.addEventListener('click', function () {
+    waypointRow.remove();
+    refreshRunTripWaypointLabels();
+  });
+
+  runTripWaypoints.appendChild(waypointRow);
+
+  refreshRunTripWaypointLabels();
+
+  const waypointInput = waypointRow.querySelector(
+    '.runtrip-waypoint-input'
+  );
+
+  waypointInput.focus();
+}
+
+function getRunTripDraft() {
+  const waypointInputs = runTripWaypoints.querySelectorAll(
+    '.runtrip-waypoint-input'
+  );
+
+  const waypoints = Array.from(waypointInputs)
+    .map(function (input) {
+      return input.value.trim();
+    })
+    .filter(Boolean);
+
+  return {
+    origin: '현재 위치',
+    destination: runTripDestinationInput.value.trim(),
+    waypoints: waypoints,
+    returnToStart: runTripReturnToggle.checked
+  };
+}
+
+function openRunTripPanel() {
+  map.getContainer().style.display = 'block';
+
+  controlsSection.style.display = 'none';
+  recordsSection.classList.add('hidden');
+  recordDetail.classList.add('hidden');
+  profileFeedScreen.classList.add('hidden');
+  monthlyReportScreen.classList.add('hidden');
+
+  runTripPanel.classList.remove('hidden');
+
+  setTimeout(function () {
+    map.invalidateSize();
+  }, 100);
+}
+
+function closeRunTripPanel() {
+  runTripPanel.classList.add('hidden');
+
+  controlsSection.style.display = 'flex';
+  recordsSection.classList.remove('hidden');
+
+  setTimeout(function () {
+    map.invalidateSize();
+  }, 100);
+}
 const monthlyReportScreen = document.getElementById('monthlyReportScreen');
 const backFromMonthlyReportBtn = document.getElementById('backFromMonthlyReportBtn');
 
@@ -1673,3 +1834,44 @@ button.classList.add('active');
     console.log('선택된 Pace Mood:', selectedPaceMood);
   });
 });
+runTripBtn.addEventListener('click', function () {
+  openRunTripPanel();
+});
+
+backFromRunTripBtn.addEventListener('click', function () {
+  closeRunTripPanel();
+});
+
+addWaypointBtn.addEventListener('click', function () {
+  addRunTripWaypoint();
+});
+
+runTripDestinationInput.addEventListener('input', function () {
+  updateRunTripCreateButton();
+});
+
+createRunTripBtn.addEventListener('click', function () {
+  const draft = getRunTripDraft();
+
+  if (!draft.destination) {
+    updateRunTripCreateButton();
+    return;
+  }
+
+  const waypointText =
+    draft.waypoints.length > 0
+      ? `경유지 ${draft.waypoints.length}개`
+      : '경유지 없음';
+
+  const returnText = draft.returnToStart
+    ? '출발지 복귀 포함'
+    : '편도 경로';
+
+  runTripStatus.textContent =
+    `${waypointText} · ${returnText}으로 RunTrip 초안을 준비했어요.`;
+
+  console.log('RunTrip 초안:', draft);
+});
+
+updateRunTripCreateButton();
+updateRunTripWaypointControls();

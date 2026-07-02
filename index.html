@@ -24,6 +24,7 @@
     <button id="stopBtn">러닝 종료</button>
 <button id="profileFeedBtn">Record Profile Feed</button>
 <button id="monthlyReportBtn">월간 리포트</button>
+<button id="runTripBtn">RunTrip</button>
     <div id="timer">00:00</div>
     <div id="distance">0.00 km</div>
     <div id="pace">Pace: --'--"</div>
@@ -292,6 +293,79 @@
 
     <div id="monthlyReportRecentRuns"></div>
   </section>
+</section>
+<section id="runTripPanel" class="runtrip-panel hidden">
+  <div class="runtrip-panel-header">
+    <button id="backFromRunTripBtn" type="button">← Back</button>
+
+    <div>
+      <p class="card-label">FREERUNTRIP</p>
+      <h2>나만의 RunTrip 만들기</h2>
+    </div>
+  </div>
+
+  <p class="runtrip-intro">
+    오늘 달리고 싶은 곳을 정하고, 들르고 싶은 장소를 추가해 보세요.
+  </p>
+
+  <div class="runtrip-route-builder">
+    <div class="runtrip-route-row origin-row">
+      <div class="runtrip-point origin-point">S</div>
+
+      <div class="runtrip-route-copy">
+        <span>출발지</span>
+        <strong>현재 위치에서 출발</strong>
+      </div>
+    </div>
+
+    <div id="runTripWaypoints"></div>
+
+    <div class="runtrip-route-row destination-row">
+      <div class="runtrip-point destination-point">D</div>
+
+      <div class="runtrip-input-wrap">
+        <label for="runTripDestinationInput">도착지</label>
+
+        <input
+          id="runTripDestinationInput"
+          type="text"
+          autocomplete="off"
+          placeholder="가고 싶은 장소를 입력하세요"
+        />
+      </div>
+
+      <button
+        id="addWaypointBtn"
+        class="runtrip-add-waypoint-btn"
+        type="button"
+        aria-label="경유지 추가"
+      >
+        +
+      </button>
+    </div>
+  </div>
+
+  <label class="runtrip-return-option">
+    <input id="runTripReturnToggle" type="checkbox" />
+    <span class="runtrip-return-check"></span>
+    <span>
+      <strong>출발지로 돌아오기</strong>
+      <small>마지막 목적지를 출발지로 자동 연결합니다.</small>
+    </span>
+  </label>
+
+  <button
+    id="createRunTripBtn"
+    class="create-runtrip-btn"
+    type="button"
+    disabled
+  >
+    RunTrip 경로 만들기
+  </button>
+
+  <p id="runTripStatus" class="runtrip-status">
+    먼저 도착지를 입력해 주세요.
+  </p>
 </section>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="app.js"></script>
