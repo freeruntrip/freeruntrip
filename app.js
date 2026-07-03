@@ -1017,7 +1017,13 @@ const runTripWaypoints = document.getElementById('runTripWaypoints');
 const runTripDestinationInput = document.getElementById(
   'runTripDestinationInput'
 );
+const runTripOriginInput = document.getElementById(
+  'runTripOriginInput'
+);
 
+const useCurrentLocationBtn = document.getElementById(
+  'useCurrentLocationBtn'
+);
 const addWaypointBtn = document.getElementById('addWaypointBtn');
 const runTripReturnToggle = document.getElementById(
   'runTripReturnToggle'
@@ -1029,13 +1035,23 @@ const runTripStatus = document.getElementById('runTripStatus');
 const MAX_RUNTRIP_WAYPOINTS = 3;
 let runTripWaypointCount = 0;
 function updateRunTripCreateButton() {
+  const hasOrigin =
+    runTripOriginInput.value.trim().length > 0;
+
   const hasDestination =
     runTripDestinationInput.value.trim().length > 0;
 
-  createRunTripBtn.disabled = !hasDestination;
+  createRunTripBtn.disabled = !hasOrigin || !hasDestination;
+
+  if (!hasOrigin) {
+    runTripStatus.textContent =
+      '출발지를 입력하거나 현재 위치를 선택해 주세요.';
+    return;
+  }
 
   if (!hasDestination) {
-    runTripStatus.textContent = '먼저 도착지를 입력해 주세요.';
+    runTripStatus.textContent =
+      '도착지를 입력해 주세요.';
   }
 }
 
@@ -1137,7 +1153,7 @@ function getRunTripDraft() {
     .filter(Boolean);
 
   return {
-    origin: '현재 위치',
+    origin: runTripOriginInput.value.trim(),
     destination: runTripDestinationInput.value.trim(),
     waypoints: waypoints,
     returnToStart: runTripReturnToggle.checked
@@ -1850,6 +1866,18 @@ runTripDestinationInput.addEventListener('input', function () {
   updateRunTripCreateButton();
 });
 
+runTripOriginInput.addEventListener('input', function () {
+  updateRunTripCreateButton();
+});
+
+useCurrentLocationBtn.addEventListener('click', function () {
+  runTripOriginInput.value = '현재 위치';
+
+  updateRunTripCreateButton();
+
+  runTripStatus.textContent =
+    '현재 위치를 출발지로 설정했어요.';
+});
 createRunTripBtn.addEventListener('click', function () {
   const draft = getRunTripDraft();
 
@@ -1868,8 +1896,7 @@ createRunTripBtn.addEventListener('click', function () {
     : '편도 경로';
 
   runTripStatus.textContent =
-    `${waypointText} · ${returnText}으로 RunTrip 초안을 준비했어요.`;
-
+  `${draft.origin} → ${draft.destination} · ${waypointText} · ${returnText}으로 RunTrip 초안을 준비했어요.`;
   console.log('RunTrip 초안:', draft);
 });
 

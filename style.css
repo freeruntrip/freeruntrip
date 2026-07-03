@@ -1320,31 +1320,44 @@ height: 70vh;
 }
 
 .runtrip-add-waypoint-btn,
-.runtrip-remove-waypoint-btn {
-  flex-shrink: 0;
-  width: 38px;
-  height: 38px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+.runtrip-remove-waypoint-btn,
+.runtrip-current-location-btn {
+  flex: 0 0 42px;
+  width: 42px;
+  height: 42px;
+  min-width: 42px;
+  min-height: 42px;
+  padding: 0;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 50%;
+  appearance: none;
+  -webkit-appearance: none;
   background: rgba(255, 255, 255, 0.08);
   color: #f8fafc;
-  font-size: 26px;
+  display: grid;
+  place-items: center;
+  font-family: inherit;
+  font-size: 25px;
+  font-weight: 700;
   line-height: 1;
   cursor: pointer;
 }
+.runtrip-current-location-btn {
+  color: #86efac;
+  border-color: rgba(134, 239, 172, 0.5);
+  font-size: 23px;
+}
 
-.runtrip-add-waypoint-btn {
-  color: #facc15;
-  border-color: rgba(250, 204, 21, 0.5);
+.runtrip-add-waypoint-btn:active,
+.runtrip-remove-waypoint-btn:active,
+.runtrip-current-location-btn:active {
+  transform: scale(0.94);
 }
 
 .runtrip-add-waypoint-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
-}
-
-.runtrip-remove-waypoint-btn {
-  color: #fda4af;
 }
 
 .runtrip-return-option {

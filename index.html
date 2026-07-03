@@ -308,15 +308,31 @@
     오늘 달리고 싶은 곳을 정하고, 들르고 싶은 장소를 추가해 보세요.
   </p>
 
-  <div class="runtrip-route-builder">
-    <div class="runtrip-route-row origin-row">
-      <div class="runtrip-point origin-point">S</div>
+  <div class="runtrip-route-row origin-row">
+  <div class="runtrip-point origin-point">S</div>
 
-      <div class="runtrip-route-copy">
-        <span>출발지</span>
-        <strong>현재 위치에서 출발</strong>
-      </div>
-    </div>
+  <div class="runtrip-input-wrap">
+    <label for="runTripOriginInput">출발지</label>
+
+    <input
+      id="runTripOriginInput"
+      type="text"
+      autocomplete="off"
+      value="현재 위치"
+      placeholder="출발할 장소를 입력하세요"
+    />
+  </div>
+
+  <button
+    id="useCurrentLocationBtn"
+    class="runtrip-current-location-btn"
+    type="button"
+    aria-label="현재 위치 사용"
+    title="현재 위치 사용"
+  >
+    ⌖
+  </button>
+</div>
 
     <div id="runTripWaypoints"></div>
 
