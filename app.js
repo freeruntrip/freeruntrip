@@ -1031,27 +1031,219 @@ const runTripReturnToggle = document.getElementById(
 
 const createRunTripBtn = document.getElementById('createRunTripBtn');
 const runTripStatus = document.getElementById('runTripStatus');
+const runTripOriginSearchResults = document.getElementById(
+  'runTripOriginSearchResults'
+);
 
+const runTripDestinationSearchResults = document.getElementById(
+  'runTripDestinationSearchResults'
+);
+
+let selectedRunTripOrigin = {
+  type: 'current-location',
+  name: '현재 위치',
+};
+
+let selectedRunTripDestination = null;
+
+function getPlaceSearchUrl(query) {
+  const baseUrl =
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1'
+      ? 'https://freeruntrip.vercel.app/api/place-search'
+      : '/api/place-search';
+
+  return `${baseUrl}?q=${encodeURIComponent(query)}`;
+}
+
+function escapePlaceSearchText(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function hidePlaceSearchResults(resultsElement) {
+  resultsElement.innerHTML = '';
+  resultsElement.classList.add('hidden');
+}
+function showPlaceSearchMessage(resultsElement, message) {
+  resultsElement.innerHTML = `
+    <div class="runtrip-place-search-message">
+      ${escapePlaceSearchText(message)}
+    </div>
+  `;
+
+  resultsElement.classList.remove('hidden');
+}
+
+function renderPlaceSearchResults(
+  resultsElement,
+  places,
+  onPlaceSelect
+) {
+  if (!places || places.length === 0) {
+    showPlaceSearchMessage(
+      resultsElement,
+      '검색 결과가 없어요. 다른 장소명이나 주소를 입력해 주세요.'
+    );
+    return;
+  }
+
+  resultsElement.innerHTML = places
+    .map(function (place, index) {
+      return `
+        <button
+          class="runtrip-place-search-item"
+          type="button"
+          data-place-index="${index}"
+        >
+          <span class="runtrip-place-search-name">
+            ${escapePlaceSearchText(place.name)}
+          </span>
+
+          <span class="runtrip-place-search-address">
+            ${escapePlaceSearchText(place.address)}
+          </span>
+        </button>
+      `;
+    })
+    .join('');
+
+  resultsElement.classList.remove('hidden');
+
+  const placeButtons = resultsElement.querySelectorAll(
+    '.runtrip-place-search-item'
+  );
+
+  placeButtons.forEach(function (button) {
+    button.addEventListener('click', function () {
+      const placeIndex = Number(button.dataset.placeIndex);
+      const selectedPlace = places[placeIndex];
+
+      if (selectedPlace) {
+        onPlaceSelect(selectedPlace);
+      }
+    });
+  });
+}
+
+async function searchRunTripPlaces(
+  query,
+  resultsElement,
+  onPlaceSelect
+) {
+  const trimmedQuery = query.trim();
+
+  if (trimmedQuery.length < 2) {
+    hidePlaceSearchResults(resultsElement);
+    return;
+  }
+
+  showPlaceSearchMessage(resultsElement, '장소를 찾고 있어요…');
+
+  try {
+    const response = await fetch(getPlaceSearchUrl(trimmedQuery));
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || '장소 검색에 실패했어요.'
+      );
+    }
+
+    renderPlaceSearchResults(
+      resultsElement,
+      data.places || [],
+      onPlaceSelect
+    );
+  } catch (error) {
+    showPlaceSearchMessage(
+      resultsElement,
+      error.message || '장소 검색 중 문제가 발생했어요.'
+    );
+  }
+}
+
+function connectRunTripPlaceSearch(
+  inputElement,
+  resultsElement,
+  onTyping,
+  onPlaceSelect
+) {
+  let searchTimer = null;
+
+  inputElement.addEventListener('input', function () {
+    onTyping();
+
+    clearTimeout(searchTimer);
+
+    searchTimer = setTimeout(function () {
+      searchRunTripPlaces(
+        inputElement.value,
+        resultsElement,
+        onPlaceSelect
+      );
+    }, 350);
+  });
+}
+
+connectRunTripPlaceSearch(
+  runTripOriginInput,
+  runTripOriginSearchResults,
+  function () {
+    selectedRunTripOrigin = null;
+    updateRunTripCreateButton();
+  },
+  function (place) {
+    selectedRunTripOrigin = place;
+    runTripOriginInput.value = place.name;
+
+    hidePlaceSearchResults(runTripOriginSearchResults);
+    updateRunTripCreateButton();
+
+    runTripStatus.textContent =
+      `${place.name}을(를) 출발지로 선택했어요.`;
+  }
+);
+
+connectRunTripPlaceSearch(
+  runTripDestinationInput,
+  runTripDestinationSearchResults,
+  function () {
+    selectedRunTripDestination = null;
+    updateRunTripCreateButton();
+  },
+  function (place) {
+    selectedRunTripDestination = place;
+    runTripDestinationInput.value = place.name;
+
+    hidePlaceSearchResults(runTripDestinationSearchResults);
+    updateRunTripCreateButton();
+
+    runTripStatus.textContent =
+      `${place.name}을(를) 도착지로 선택했어요.`;
+  }
+);
 const MAX_RUNTRIP_WAYPOINTS = 3;
 let runTripWaypointCount = 0;
 function updateRunTripCreateButton() {
-  const hasOrigin =
-    runTripOriginInput.value.trim().length > 0;
-
-  const hasDestination =
-    runTripDestinationInput.value.trim().length > 0;
+  const hasOrigin = Boolean(selectedRunTripOrigin);
+  const hasDestination = Boolean(selectedRunTripDestination);
 
   createRunTripBtn.disabled = !hasOrigin || !hasDestination;
 
   if (!hasOrigin) {
     runTripStatus.textContent =
-      '출발지를 입력하거나 현재 위치를 선택해 주세요.';
+      '출발지 검색 결과를 선택하거나 현재 위치를 사용해 주세요.';
     return;
   }
 
   if (!hasDestination) {
     runTripStatus.textContent =
-      '도착지를 입력해 주세요.';
+      '도착지를 검색한 뒤 목록에서 선택해 주세요.';
   }
 }
 
@@ -1153,8 +1345,8 @@ function getRunTripDraft() {
     .filter(Boolean);
 
   return {
-    origin: runTripOriginInput.value.trim(),
-    destination: runTripDestinationInput.value.trim(),
+    origin: selectedRunTripOrigin,
+    destination: selectedRunTripDestination,
     waypoints: waypoints,
     returnToStart: runTripReturnToggle.checked
   };
@@ -1862,26 +2054,25 @@ addWaypointBtn.addEventListener('click', function () {
   addRunTripWaypoint();
 });
 
-runTripDestinationInput.addEventListener('input', function () {
-  updateRunTripCreateButton();
-});
-
-runTripOriginInput.addEventListener('input', function () {
-  updateRunTripCreateButton();
-});
-
 useCurrentLocationBtn.addEventListener('click', function () {
+  selectedRunTripOrigin = {
+    type: 'current-location',
+    name: '현재 위치',
+  };
+
   runTripOriginInput.value = '현재 위치';
 
+  hidePlaceSearchResults(runTripOriginSearchResults);
   updateRunTripCreateButton();
 
   runTripStatus.textContent =
     '현재 위치를 출발지로 설정했어요.';
 });
+
 createRunTripBtn.addEventListener('click', function () {
   const draft = getRunTripDraft();
 
-  if (!draft.destination) {
+  if (!draft.origin || !draft.destination) {
     updateRunTripCreateButton();
     return;
   }
@@ -1896,7 +2087,9 @@ createRunTripBtn.addEventListener('click', function () {
     : '편도 경로';
 
   runTripStatus.textContent =
-  `${draft.origin} → ${draft.destination} · ${waypointText} · ${returnText}으로 RunTrip 초안을 준비했어요.`;
+    `${draft.origin.name} → ${draft.destination.name} · ` +
+    `${waypointText} · ${returnText}으로 RunTrip 초안을 준비했어요.`;
+
   console.log('RunTrip 초안:', draft);
 });
 

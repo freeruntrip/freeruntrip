@@ -1443,3 +1443,66 @@ height: 70vh;
   font-size: 13px;
   line-height: 1.5;
 }
+/* RunTrip 장소 검색 결과 */
+.runtrip-input-wrap {
+  position: relative;
+}
+
+.runtrip-place-search-results {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: -14px;
+  right: -14px;
+  z-index: 20;
+  overflow: hidden;
+  border: 1px solid rgba(250, 204, 21, 0.35);
+  border-radius: 16px;
+  background: #172033;
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.32);
+}
+
+.runtrip-place-search-results.hidden {
+  display: none;
+}
+
+.runtrip-place-search-message {
+  padding: 14px 16px;
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.runtrip-place-search-item {
+  width: 100%;
+  padding: 14px 16px;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+  background: transparent;
+  color: #f8fafc;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.runtrip-place-search-item:last-child {
+  border-bottom: none;
+}
+
+.runtrip-place-search-item:active {
+  background: rgba(250, 204, 21, 0.12);
+}
+
+.runtrip-place-search-name {
+  display: block;
+  margin-bottom: 5px;
+  color: #f8fafc;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.runtrip-place-search-address {
+  display: block;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1.4;
+}
