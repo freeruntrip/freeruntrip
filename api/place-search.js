@@ -51,15 +51,20 @@ export default {
 
       const kakaoData = await kakaoResponse.json();
 
-      if (!kakaoResponse.ok) {
-        return Response.json(
-          {
-            error: "카카오 장소 검색에 실패했어요.",
-            places: [],
-          },
-          { status: kakaoResponse.status }
-        );
-      }
+    if (!kakaoResponse.ok) {
+  return Response.json(
+    {
+      error: "카카오 장소 검색에 실패했어요.",
+      kakaoStatus: kakaoResponse.status,
+      kakaoMessage:
+        kakaoData.msg ||
+        kakaoData.message ||
+        "카카오에서 자세한 오류 메시지를 보내지 않았어요.",
+      places: [],
+    },
+    { status: kakaoResponse.status }
+  );
+}
 
       const places = (kakaoData.documents || []).map((place) => ({
         id: place.id,
