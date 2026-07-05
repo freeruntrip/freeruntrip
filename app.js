@@ -1233,7 +1233,18 @@ function updateRunTripCreateButton() {
   const hasOrigin = Boolean(selectedRunTripOrigin);
   const hasDestination = Boolean(selectedRunTripDestination);
 
-  createRunTripBtn.disabled = !hasOrigin || !hasDestination;
+  const waypointInputs = runTripWaypoints.querySelectorAll(
+    '.runtrip-waypoint-input'
+  );
+
+  const hasInvalidWaypoint = Array.from(waypointInputs).some(
+    function (input) {
+      return input.value.trim().length > 0 && !input.runTripPlace;
+    }
+  );
+
+  createRunTripBtn.disabled =
+    !hasOrigin || !hasDestination || hasInvalidWaypoint;
 
   if (!hasOrigin) {
     runTripStatus.textContent =
@@ -1244,6 +1255,12 @@ function updateRunTripCreateButton() {
   if (!hasDestination) {
     runTripStatus.textContent =
       '도착지를 검색한 뒤 목록에서 선택해 주세요.';
+    return;
+  }
+
+  if (hasInvalidWaypoint) {
+    runTripStatus.textContent =
+      '경유지를 검색한 뒤 목록에서 선택해 주세요.';
   }
 }
 
@@ -1302,6 +1319,8 @@ function addRunTripWaypoint() {
         autocomplete="off"
         placeholder="들르고 싶은 장소를 입력하세요"
       />
+
+      <div class="runtrip-place-search-results hidden"></div>
     </div>
 
     <button
@@ -1313,6 +1332,35 @@ function addRunTripWaypoint() {
     </button>
   `;
 
+  const waypointInput = waypointRow.querySelector(
+    '.runtrip-waypoint-input'
+  );
+
+  const waypointSearchResults = waypointRow.querySelector(
+    '.runtrip-place-search-results'
+  );
+
+  waypointInput.runTripPlace = null;
+
+  connectRunTripPlaceSearch(
+    waypointInput,
+    waypointSearchResults,
+    function () {
+      waypointInput.runTripPlace = null;
+      updateRunTripCreateButton();
+    },
+    function (place) {
+      waypointInput.runTripPlace = place;
+      waypointInput.value = place.name;
+
+      hidePlaceSearchResults(waypointSearchResults);
+      updateRunTripCreateButton();
+
+      runTripStatus.textContent =
+        `${place.name}을(를) 경유지로 선택했어요.`;
+    }
+  );
+
   const removeBtn = waypointRow.querySelector(
     '.runtrip-remove-waypoint-btn'
   );
@@ -1320,16 +1368,12 @@ function addRunTripWaypoint() {
   removeBtn.addEventListener('click', function () {
     waypointRow.remove();
     refreshRunTripWaypointLabels();
+    updateRunTripCreateButton();
   });
 
   runTripWaypoints.appendChild(waypointRow);
 
   refreshRunTripWaypointLabels();
-
-  const waypointInput = waypointRow.querySelector(
-    '.runtrip-waypoint-input'
-  );
-
   waypointInput.focus();
 }
 
@@ -1340,7 +1384,7 @@ function getRunTripDraft() {
 
   const waypoints = Array.from(waypointInputs)
     .map(function (input) {
-      return input.value.trim();
+      return input.runTripPlace;
     })
     .filter(Boolean);
 
