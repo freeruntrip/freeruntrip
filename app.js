@@ -1038,7 +1038,37 @@ const runTripOriginSearchResults = document.getElementById(
 const runTripDestinationSearchResults = document.getElementById(
   'runTripDestinationSearchResults'
 );
+const runTripSearchScreen = document.getElementById(
+  'runTripSearchScreen'
+);
 
+const closeRunTripSearchBtn = document.getElementById(
+  'closeRunTripSearchBtn'
+);
+
+const runTripSearchTitle = document.getElementById(
+  'runTripSearchTitle'
+);
+
+const runTripSearchInput = document.getElementById(
+  'runTripSearchInput'
+);
+
+const clearRunTripSearchBtn = document.getElementById(
+  'clearRunTripSearchBtn'
+);
+
+const runTripSearchGuide = document.getElementById(
+  'runTripSearchGuide'
+);
+
+const runTripSearchResults = document.getElementById(
+  'runTripSearchResults'
+);
+
+let activeRunTripSearchTarget = null;
+let runTripSearchTimer = null;
+let runTripSearchRequestId = 0;
 let selectedRunTripOrigin = null;
 let selectedRunTripDestination = null;
 
@@ -1166,28 +1196,175 @@ async function searchRunTripPlaces(
     );
   }
 }
+function closeRunTripSearchScreen() {
+  runTripSearchRequestId++;
 
+  clearTimeout(runTripSearchTimer);
+
+  runTripSearchScreen.classList.add('hidden');
+  runTripSearchResults.innerHTML = '';
+  runTripSearchInput.value = '';
+  activeRunTripSearchTarget = null;
+
+  map.getContainer().style.display = 'block';
+
+  setTimeout(function () {
+    map.invalidateSize();
+  }, 100);
+}
+
+function openRunTripSearchScreen(searchTarget) {
+  activeRunTripSearchTarget = searchTarget;
+
+  runTripSearchTitle.textContent = searchTarget.title;
+
+const isDefaultCurrentLocation =
+  searchTarget.inputElement === runTripOriginInput &&
+  !selectedRunTripOrigin &&
+  searchTarget.inputElement.value === '현재 위치';
+
+runTripSearchInput.value = isDefaultCurrentLocation
+  ? ''
+  : searchTarget.inputElement.value || '';
+
+  runTripSearchGuide.textContent =
+    '장소명 또는 주소를 입력해 검색해 보세요.';
+
+  runTripSearchResults.innerHTML = '';
+
+  map.getContainer().style.display = 'none';
+  runTripSearchScreen.classList.remove('hidden');
+
+  setTimeout(function () {
+    runTripSearchInput.focus();
+  }, 100);
+}
+
+async function searchPlacesOnRunTripSearchScreen() {
+  const query = runTripSearchInput.value.trim();
+  const requestId = ++runTripSearchRequestId;
+
+  if (query.length < 2) {
+    runTripSearchResults.innerHTML = '';
+
+    runTripSearchGuide.textContent =
+      '두 글자 이상 입력하면 장소를 검색할 수 있어요.';
+
+    return;
+  }
+
+  runTripSearchGuide.textContent =
+    '장소를 찾고 있어요…';
+
+  runTripSearchResults.innerHTML = '';
+
+  try {
+    const response = await fetch(getPlaceSearchUrl(query));
+    const data = await response.json();
+
+    if (
+      requestId !== runTripSearchRequestId ||
+      runTripSearchScreen.classList.contains('hidden')
+    ) {
+      return;
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || '장소 검색에 실패했어요.'
+      );
+    }
+
+    const places = data.places || [];
+
+    if (places.length === 0) {
+      runTripSearchGuide.textContent =
+        '검색 결과가 없어요. 다른 장소명이나 주소를 입력해 주세요.';
+
+      return;
+    }
+
+    runTripSearchGuide.textContent =
+      `${places.length}개의 장소를 찾았어요.`;
+
+    renderPlaceSearchResults(
+      runTripSearchResults,
+      places,
+      function (place) {
+        if (!activeRunTripSearchTarget) {
+          return;
+        }
+
+        activeRunTripSearchTarget.onPlaceSelect(place);
+
+        runTripSearchInput.blur();
+        closeRunTripSearchScreen();
+      }
+    );
+  } catch (error) {
+    if (requestId !== runTripSearchRequestId) {
+      return;
+    }
+
+    runTripSearchGuide.textContent =
+      error.message || '장소 검색 중 문제가 발생했어요.';
+  }
+}
+
+runTripSearchInput.addEventListener('input', function () {
+  clearTimeout(runTripSearchTimer);
+
+  runTripSearchTimer = setTimeout(function () {
+    searchPlacesOnRunTripSearchScreen();
+  }, 350);
+});
+
+clearRunTripSearchBtn.addEventListener('click', function () {
+  runTripSearchInput.value = '';
+  runTripSearchResults.innerHTML = '';
+
+  runTripSearchGuide.textContent =
+    '장소명 또는 주소를 입력해 검색해 보세요.';
+
+  runTripSearchInput.focus();
+});
+
+closeRunTripSearchBtn.addEventListener('click', function () {
+  runTripSearchInput.blur();
+  closeRunTripSearchScreen();
+});
 function connectRunTripPlaceSearch(
   inputElement,
   resultsElement,
   onTyping,
   onPlaceSelect
 ) {
-  let searchTimer = null;
+  inputElement.readOnly = true;
 
-  inputElement.addEventListener('input', function () {
-    onTyping();
+  inputElement.addEventListener('click', function () {
+    const inputWrap = inputElement.closest('.runtrip-input-wrap');
+    const labelElement = inputWrap
+      ? inputWrap.querySelector('label')
+      : null;
 
-    clearTimeout(searchTimer);
+    const labelText = labelElement
+      ? labelElement.textContent.trim()
+      : '장소';
 
-    searchTimer = setTimeout(function () {
-      searchRunTripPlaces(
-        inputElement.value,
-        resultsElement,
-        onPlaceSelect
-      );
-    }, 350);
+    inputElement.blur();
+
+    openRunTripSearchScreen({
+      title: `${labelText} 검색`,
+      inputElement: inputElement,
+      onPlaceSelect: onPlaceSelect
+    });
   });
+
+  inputElement.addEventListener('focus', function () {
+    inputElement.blur();
+  });
+
+  hidePlaceSearchResults(resultsElement);
 }
 
 connectRunTripPlaceSearch(
@@ -1395,7 +1572,7 @@ function addRunTripWaypoint() {
   runTripWaypoints.appendChild(waypointRow);
 
   refreshRunTripWaypointLabels();
-  waypointInput.focus();
+  waypointInput.click();
 }
 function getRunTripDraft() {
   const waypointInputs = runTripWaypoints.querySelectorAll(

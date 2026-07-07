@@ -394,6 +394,58 @@
     먼저 도착지를 입력해 주세요.
   </p>
 </section>
+<section
+  id="runTripSearchScreen"
+  class="runtrip-search-screen hidden"
+  aria-label="RunTrip 장소 검색"
+>
+  <header class="runtrip-search-header">
+    <button
+      id="closeRunTripSearchBtn"
+      class="runtrip-search-back-btn"
+      type="button"
+      aria-label="검색 취소"
+    >
+      ←
+    </button>
+
+    <div>
+      <p id="runTripSearchEyebrow" class="card-label">
+        RUNTRIP PLACE SEARCH
+      </p>
+
+      <h2 id="runTripSearchTitle">장소 검색</h2>
+    </div>
+  </header>
+
+  <div class="runtrip-search-input-wrap">
+    <input
+      id="runTripSearchInput"
+      type="search"
+      autocomplete="off"
+      enterkeyhint="search"
+      placeholder="장소명이나 주소를 입력하세요"
+    />
+
+    <button
+      id="clearRunTripSearchBtn"
+      class="runtrip-search-clear-btn"
+      type="button"
+      aria-label="검색어 지우기"
+    >
+      ×
+    </button>
+  </div>
+
+  <p id="runTripSearchGuide" class="runtrip-search-guide">
+    장소명 또는 주소를 입력해 검색해 보세요.
+  </p>
+
+  <div
+    id="runTripSearchResults"
+    class="runtrip-search-results"
+  ></div>
+</section>
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script src="app.js"></script>
 
