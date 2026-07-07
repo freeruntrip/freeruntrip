@@ -1039,12 +1039,12 @@ const runTripDestinationSearchResults = document.getElementById(
   'runTripDestinationSearchResults'
 );
 
-let selectedRunTripOrigin = {
-  type: 'current-location',
-  name: '현재 위치',
-};
-
+let selectedRunTripOrigin = null;
 let selectedRunTripDestination = null;
+
+let isGettingRunTripCurrentLocation = false;
+
+const runTripPreviewLayer = L.layerGroup().addTo(map);
 
 function getPlaceSearchUrl(query) {
   const baseUrl =
@@ -1196,6 +1196,7 @@ connectRunTripPlaceSearch(
   function () {
     selectedRunTripOrigin = null;
     updateRunTripCreateButton();
+    renderRunTripMapPreview();
   },
   function (place) {
     selectedRunTripOrigin = place;
@@ -1203,6 +1204,7 @@ connectRunTripPlaceSearch(
 
     hidePlaceSearchResults(runTripOriginSearchResults);
     updateRunTripCreateButton();
+    renderRunTripMapPreview();
 
     runTripStatus.textContent =
       `${place.name}을(를) 출발지로 선택했어요.`;
@@ -1215,6 +1217,7 @@ connectRunTripPlaceSearch(
   function () {
     selectedRunTripDestination = null;
     updateRunTripCreateButton();
+    renderRunTripMapPreview();
   },
   function (place) {
     selectedRunTripDestination = place;
@@ -1222,6 +1225,7 @@ connectRunTripPlaceSearch(
 
     hidePlaceSearchResults(runTripDestinationSearchResults);
     updateRunTripCreateButton();
+    renderRunTripMapPreview();
 
     runTripStatus.textContent =
       `${place.name}을(를) 도착지로 선택했어요.`;
@@ -1230,8 +1234,13 @@ connectRunTripPlaceSearch(
 const MAX_RUNTRIP_WAYPOINTS = 3;
 let runTripWaypointCount = 0;
 function updateRunTripCreateButton() {
-  const hasOrigin = Boolean(selectedRunTripOrigin);
-  const hasDestination = Boolean(selectedRunTripDestination);
+  const hasOrigin = Boolean(
+    getRunTripPlaceLatLng(selectedRunTripOrigin)
+  );
+
+  const hasDestination = Boolean(
+    getRunTripPlaceLatLng(selectedRunTripDestination)
+  );
 
   const waypointInputs = runTripWaypoints.querySelectorAll(
     '.runtrip-waypoint-input'
@@ -1244,7 +1253,16 @@ function updateRunTripCreateButton() {
   );
 
   createRunTripBtn.disabled =
-    !hasOrigin || !hasDestination || hasInvalidWaypoint;
+    isGettingRunTripCurrentLocation ||
+    !hasOrigin ||
+    !hasDestination ||
+    hasInvalidWaypoint;
+
+  if (isGettingRunTripCurrentLocation) {
+    runTripStatus.textContent =
+      '현재 위치를 확인하고 있어요…';
+    return;
+  }
 
   if (!hasOrigin) {
     runTripStatus.textContent =
@@ -1345,38 +1363,40 @@ function addRunTripWaypoint() {
   connectRunTripPlaceSearch(
     waypointInput,
     waypointSearchResults,
-    function () {
-      waypointInput.runTripPlace = null;
-      updateRunTripCreateButton();
-    },
+   function () {
+  waypointInput.runTripPlace = null;
+  updateRunTripCreateButton();
+  renderRunTripMapPreview();
+},
     function (place) {
-      waypointInput.runTripPlace = place;
-      waypointInput.value = place.name;
+  waypointInput.runTripPlace = place;
+  waypointInput.value = place.name;
 
-      hidePlaceSearchResults(waypointSearchResults);
-      updateRunTripCreateButton();
+  hidePlaceSearchResults(waypointSearchResults);
+  updateRunTripCreateButton();
+  renderRunTripMapPreview();
 
-      runTripStatus.textContent =
-        `${place.name}을(를) 경유지로 선택했어요.`;
-    }
+  runTripStatus.textContent =
+    `${place.name}을(를) 경유지로 선택했어요.`;
+}
   );
 
   const removeBtn = waypointRow.querySelector(
     '.runtrip-remove-waypoint-btn'
   );
 
-  removeBtn.addEventListener('click', function () {
-    waypointRow.remove();
-    refreshRunTripWaypointLabels();
-    updateRunTripCreateButton();
-  });
+ removeBtn.addEventListener('click', function () {
+  waypointRow.remove();
+  refreshRunTripWaypointLabels();
+  updateRunTripCreateButton();
+  renderRunTripMapPreview();
+});
 
   runTripWaypoints.appendChild(waypointRow);
 
   refreshRunTripWaypointLabels();
   waypointInput.focus();
 }
-
 function getRunTripDraft() {
   const waypointInputs = runTripWaypoints.querySelectorAll(
     '.runtrip-waypoint-input'
@@ -1395,6 +1415,133 @@ function getRunTripDraft() {
     returnToStart: runTripReturnToggle.checked
   };
 }
+function getRunTripPlaceLatLng(place) {
+  if (!place) {
+    return null;
+  }
+
+  const latitude = Number(
+    place.latitude ?? place.lat ?? place.y
+  );
+
+  const longitude = Number(
+    place.longitude ?? place.lng ?? place.x
+  );
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  return [latitude, longitude];
+}
+
+function createRunTripPreviewMarkerIcon(label, type) {
+  return L.divIcon({
+    className: `runtrip-preview-marker ${type}`,
+    html: `<span>${escapePlaceSearchText(label)}</span>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
+  });
+}
+
+function clearRunTripMapPreview() {
+  runTripPreviewLayer.clearLayers();
+}
+
+function renderRunTripMapPreview() {
+  clearRunTripMapPreview();
+
+  const draft = getRunTripDraft();
+
+  const previewMarkers = [];
+
+  const originLatLng = getRunTripPlaceLatLng(draft.origin);
+
+  if (originLatLng) {
+    previewMarkers.push({
+      label: 'S',
+      type: 'start',
+      latLng: originLatLng
+    });
+  }
+
+  draft.waypoints.forEach(function (waypoint, index) {
+    const waypointLatLng = getRunTripPlaceLatLng(waypoint);
+
+    if (!waypointLatLng) {
+      return;
+    }
+
+    previewMarkers.push({
+      label: String(index + 1),
+      type: 'waypoint',
+      latLng: waypointLatLng
+    });
+  });
+
+  const destinationLatLng = getRunTripPlaceLatLng(
+    draft.destination
+  );
+
+  if (destinationLatLng) {
+    previewMarkers.push({
+      label: 'D',
+      type: 'destination',
+      latLng: destinationLatLng
+    });
+  }
+
+  if (previewMarkers.length === 0) {
+    return;
+  }
+
+  const previewPath = previewMarkers.map(function (marker) {
+    return marker.latLng;
+  });
+
+  if (draft.returnToStart && previewPath.length >= 2) {
+    previewPath.push(previewPath[0]);
+  }
+
+  if (previewPath.length >= 2) {
+    L.polyline(previewPath, {
+      color: '#facc15',
+      weight: 5,
+      opacity: 0.95,
+      dashArray: '10 8',
+      lineCap: 'round',
+      lineJoin: 'round'
+    }).addTo(runTripPreviewLayer);
+  }
+
+  previewMarkers.forEach(function (marker) {
+    L.marker(marker.latLng, {
+      icon: createRunTripPreviewMarkerIcon(
+        marker.label,
+        marker.type
+      ),
+      interactive: false
+    }).addTo(runTripPreviewLayer);
+  });
+
+  if (previewPath.length === 1) {
+    map.setView(previewPath[0], 16, {
+      animate: true
+    });
+
+    return;
+  }
+
+  const bounds = L.latLngBounds(previewPath);
+
+  if (bounds.isValid()) {
+    map.fitBounds(bounds, {
+      padding: [52, 52],
+      maxZoom: 16,
+      animate: true
+    });
+  }
+}
 
 function openRunTripPanel() {
   map.getContainer().style.display = 'block';
@@ -1409,12 +1556,13 @@ function openRunTripPanel() {
 
   setTimeout(function () {
     map.invalidateSize();
+    renderRunTripMapPreview();
   }, 100);
 }
 
 function closeRunTripPanel() {
   runTripPanel.classList.add('hidden');
-
+  clearRunTripMapPreview();
   controlsSection.style.display = 'flex';
   recordsSection.classList.remove('hidden');
 
@@ -2098,19 +2246,66 @@ addWaypointBtn.addEventListener('click', function () {
   addRunTripWaypoint();
 });
 
-useCurrentLocationBtn.addEventListener('click', function () {
-  selectedRunTripOrigin = {
-    type: 'current-location',
-    name: '현재 위치',
-  };
+runTripReturnToggle.addEventListener('change', function () {
+  renderRunTripMapPreview();
+});
 
-  runTripOriginInput.value = '현재 위치';
+useCurrentLocationBtn.addEventListener('click', function () {
+  if (!navigator.geolocation) {
+    runTripStatus.textContent =
+      '이 기기에서는 현재 위치 기능을 사용할 수 없어요.';
+    return;
+  }
+
+  const previousOrigin = selectedRunTripOrigin;
+  const previousInputValue = runTripOriginInput.value;
+
+  isGettingRunTripCurrentLocation = true;
+
+  runTripOriginInput.value = '현재 위치를 확인하고 있어요…';
 
   hidePlaceSearchResults(runTripOriginSearchResults);
   updateRunTripCreateButton();
 
-  runTripStatus.textContent =
-    '현재 위치를 출발지로 설정했어요.';
+  navigator.geolocation.getCurrentPosition(
+    function (position) {
+      selectedRunTripOrigin = {
+        type: 'current-location',
+        name: '현재 위치',
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude
+      };
+
+      runTripOriginInput.value = '현재 위치';
+
+      isGettingRunTripCurrentLocation = false;
+
+      updateRunTripCreateButton();
+      renderRunTripMapPreview();
+
+      runTripStatus.textContent =
+        '현재 위치를 출발지로 설정했어요.';
+    },
+
+    function () {
+      selectedRunTripOrigin = previousOrigin;
+      runTripOriginInput.value = previousInputValue;
+
+      isGettingRunTripCurrentLocation = false;
+
+      updateRunTripCreateButton();
+      renderRunTripMapPreview();
+
+      runTripStatus.textContent =
+        '현재 위치를 가져오지 못했어요. 위치 권한을 확인해 주세요.';
+    },
+
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    }
+  );
 });
 
 createRunTripBtn.addEventListener('click', function () {
@@ -2120,6 +2315,8 @@ createRunTripBtn.addEventListener('click', function () {
     updateRunTripCreateButton();
     return;
   }
+
+  renderRunTripMapPreview();
 
   const waypointText =
     draft.waypoints.length > 0

@@ -1175,11 +1175,15 @@ height: 70vh;
 
 .runtrip-panel {
   position: fixed;
-  inset: 0;
+  top: 42vh;
+  right: 0;
+  bottom: 0;
+  left: 0;
   z-index: 1200;
   overflow-y: auto;
   box-sizing: border-box;
   padding: 24px 20px 40px;
+  border-radius: 28px 28px 0 0;
   background:
     radial-gradient(
       circle at top right,
@@ -1188,10 +1192,11 @@ height: 70vh;
     ),
     linear-gradient(
       180deg,
-      rgba(15, 23, 42, 0.96),
-      rgba(15, 23, 42, 0.9)
+      rgba(15, 23, 42, 0.98),
+      rgba(15, 23, 42, 0.94)
     );
   color: #f8fafc;
+  box-shadow: 0 -12px 30px rgba(0, 0, 0, 0.28);
 }
 
 .runtrip-panel.hidden {
@@ -1505,4 +1510,38 @@ height: 70vh;
   color: #94a3b8;
   font-size: 12px;
   line-height: 1.4;
+}
+.runtrip-preview-marker {
+  background: transparent;
+  border: 0;
+}
+
+.runtrip-preview-marker span {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 3px solid #0f172a;
+  border-radius: 50%;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 5px 14px rgba(15, 23, 42, 0.28);
+}
+
+.runtrip-preview-marker.start span {
+  background: #22c55e;
+  color: #ffffff;
+}
+
+.runtrip-preview-marker.waypoint span {
+  background: #facc15;
+  color: #172033;
+}
+
+.runtrip-preview-marker.destination span {
+  background: #172033;
+  color: #ffffff;
 }
