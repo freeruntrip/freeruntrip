@@ -1499,6 +1499,8 @@ function addRunTripWaypoint() {
     'runtrip-route-row runtrip-waypoint-row';
 
   waypointRow.innerHTML = `
+    <div class="runtrip-route-handle">↕</div>
+
     <div class="runtrip-point waypoint-point">
       ${runTripWaypointCount + 1}
     </div>

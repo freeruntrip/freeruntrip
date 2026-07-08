@@ -295,104 +295,110 @@
   </section>
 </section>
 <section id="runTripPanel" class="runtrip-panel hidden">
-  <div class="runtrip-panel-header">
-    <button id="backFromRunTripBtn" type="button">← Back</button>
+  <div class="runtrip-editor-card">
+    <div class="runtrip-editor-header">
+      <button id="backFromRunTripBtn" type="button">
+        취소
+      </button>
 
-    <div>
-      <p class="card-label">FREERUNTRIP</p>
-      <h2>나만의 RunTrip 만들기</h2>
-    </div>
-  </div>
+      <div>
+        <p class="card-label">FREERUNTRIP</p>
+        <h2>RunTrip 경로 설정</h2>
+      </div>
 
-  <p class="runtrip-intro">
-    오늘 달리고 싶은 곳을 정하고, 들르고 싶은 장소를 추가해 보세요.
-  </p>
-
-<div class="runtrip-route-builder">
-  <div class="runtrip-route-row origin-row">
-    <div class="runtrip-point origin-point">S</div>
-
-    <div class="runtrip-input-wrap">
-      <label for="runTripOriginInput">출발지</label>
-
-      <input
-        id="runTripOriginInput"
-        type="text"
-        autocomplete="off"
-        value="현재 위치"
-        placeholder="출발할 장소를 입력하세요"
-      />
-
-      <div
-        id="runTripOriginSearchResults"
-        class="runtrip-place-search-results hidden"
-      ></div>
+      <button
+        id="createRunTripBtn"
+        class="create-runtrip-btn"
+        type="button"
+        disabled
+      >
+        확인
+      </button>
     </div>
 
-    <button
-      id="useCurrentLocationBtn"
-      class="runtrip-current-location-btn"
-      type="button"
-      aria-label="현재 위치 사용"
-      title="현재 위치 사용"
-    >
-      ⌖
-    </button>
-  </div>
+    <div class="runtrip-route-builder">
+      <div class="runtrip-route-row origin-row">
+        <div class="runtrip-route-handle">↕</div>
 
-  <div id="runTripWaypoints"></div>
+        <div class="runtrip-point origin-point">S</div>
 
-  <div class="runtrip-route-row destination-row">
-    <div class="runtrip-point destination-point">D</div>
+        <div class="runtrip-input-wrap">
+          <label for="runTripOriginInput">출발지</label>
 
-    <div class="runtrip-input-wrap">
-      <label for="runTripDestinationInput">도착지</label>
+          <input
+            id="runTripOriginInput"
+            type="text"
+            autocomplete="off"
+            value="현재 위치"
+            placeholder="출발할 장소를 입력하세요"
+          />
 
-      <input
-        id="runTripDestinationInput"
-        type="text"
-        autocomplete="off"
-        placeholder="가고 싶은 장소를 입력하세요"
-      />
+          <div
+            id="runTripOriginSearchResults"
+            class="runtrip-place-search-results hidden"
+          ></div>
+        </div>
 
-      <div
-        id="runTripDestinationSearchResults"
-        class="runtrip-place-search-results hidden"
-      ></div>
+        <button
+          id="useCurrentLocationBtn"
+          class="runtrip-current-location-btn"
+          type="button"
+          aria-label="현재 위치 사용"
+          title="현재 위치 사용"
+        >
+          ⌖
+        </button>
+      </div>
+
+      <div id="runTripWaypoints"></div>
+
+      <div class="runtrip-route-row destination-row">
+        <div class="runtrip-route-handle">↕</div>
+
+        <div class="runtrip-point destination-point">D</div>
+
+        <div class="runtrip-input-wrap">
+          <label for="runTripDestinationInput">도착지</label>
+
+          <input
+            id="runTripDestinationInput"
+            type="text"
+            autocomplete="off"
+            placeholder="가고 싶은 장소를 입력하세요"
+          />
+
+          <div
+            id="runTripDestinationSearchResults"
+            class="runtrip-place-search-results hidden"
+          ></div>
+        </div>
+
+        <button
+          id="addWaypointBtn"
+          class="runtrip-add-waypoint-btn"
+          type="button"
+          aria-label="경유지 추가"
+        >
+          +
+        </button>
+      </div>
     </div>
 
-    <button
-      id="addWaypointBtn"
-      class="runtrip-add-waypoint-btn"
-      type="button"
-      aria-label="경유지 추가"
-    >
-      +
-    </button>
+    <div class="runtrip-editor-footer">
+      <label class="runtrip-return-option">
+        <input id="runTripReturnToggle" type="checkbox" />
+        <span class="runtrip-return-check"></span>
+        <span>
+          <strong>출발지로 돌아오기</strong>
+          <small>마지막 목적지를 출발지로 연결합니다.</small>
+        </span>
+      </label>
+
+      <p id="runTripStatus" class="runtrip-status">
+        먼저 도착지를 입력해 주세요.
+      </p>
+    </div>
   </div>
-</div>
-
-  <label class="runtrip-return-option">
-    <input id="runTripReturnToggle" type="checkbox" />
-    <span class="runtrip-return-check"></span>
-    <span>
-      <strong>출발지로 돌아오기</strong>
-      <small>마지막 목적지를 출발지로 자동 연결합니다.</small>
-    </span>
-  </label>
-
-  <button
-    id="createRunTripBtn"
-    class="create-runtrip-btn"
-    type="button"
-    disabled
-  >
-    RunTrip 경로 만들기
-  </button>
-
-  <p id="runTripStatus" class="runtrip-status">
-    먼저 도착지를 입력해 주세요.
-  </p>
 </section>
 <section
   id="runTripSearchScreen"
