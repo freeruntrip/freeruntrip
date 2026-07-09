@@ -526,11 +526,11 @@ function showDetailMap(record) {
 
   const bounds = L.latLngBounds(allPoints);
 
-  if (bounds.isValid()) {
-    detailMap.fitBounds(bounds, {
-      padding: [20, 20]
-    });
-  }
+if (bounds.isValid()) {
+  detailMap.fitBounds(bounds, {
+    padding: [20, 20]
+  });
+}
 
   setTimeout(function () {
     detailMap.invalidateSize();
@@ -1713,13 +1713,14 @@ function renderRunTripMapPreview() {
 
   const bounds = L.latLngBounds(previewPath);
 
-  if (bounds.isValid()) {
-    map.fitBounds(bounds, {
-      padding: [52, 52],
-      maxZoom: 16,
-      animate: true
-    });
-  }
+if (bounds.isValid()) {
+  map.fitBounds(bounds, {
+    paddingTopLeft: [24, 180],
+    paddingBottomRight: [24, 140],
+    maxZoom: 16,
+    animate: true
+  });
+}
 }
 
 function openRunTripPanel() {
