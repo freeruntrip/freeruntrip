@@ -1684,13 +1684,13 @@ function renderRunTripMapPreview() {
 
   if (previewPath.length >= 2) {
     L.polyline(previewPath, {
-      color: '#facc15',
-      weight: 5,
-      opacity: 0.95,
-      dashArray: '10 8',
-      lineCap: 'round',
-      lineJoin: 'round'
-    }).addTo(runTripPreviewLayer);
+  color: '#facc15',
+  weight: 6,
+  opacity: 0.95,
+  dashArray: '8 10',
+  lineCap: 'round',
+  lineJoin: 'round'
+   }).addTo(runTripPreviewLayer);
   }
 
   previewMarkers.forEach(function (marker) {

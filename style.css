@@ -1540,37 +1540,54 @@ height: 70vh;
   line-height: 1.4;
 }
 .runtrip-preview-marker {
-  background: transparent;
-  border: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(255, 255, 255, 0.78);
+  box-shadow:
+    0 8px 20px rgba(15, 23, 42, 0.35),
+    0 0 0 4px rgba(15, 23, 42, 0.16);
 }
 
 .runtrip-preview-marker span {
-  width: 36px;
-  height: 36px;
-  display: grid;
-  place-items: center;
-  border: 3px solid #0f172a;
-  border-radius: 50%;
-  background: #f8fafc;
-  color: #0f172a;
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 13px;
   font-weight: 900;
   line-height: 1;
-  box-shadow: 0 5px 14px rgba(15, 23, 42, 0.28);
+  letter-spacing: -0.02em;
+}
+
+.runtrip-preview-marker.start {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  border-color: rgba(187, 247, 208, 0.95);
 }
 
 .runtrip-preview-marker.start span {
-  background: #22c55e;
   color: #ffffff;
 }
 
+.runtrip-preview-marker.waypoint {
+  background: linear-gradient(135deg, #facc15, #eab308);
+  border-color: rgba(15, 23, 42, 0.9);
+}
+
 .runtrip-preview-marker.waypoint span {
-  background: #facc15;
-  color: #172033;
+  color: #111827;
+}
+
+.runtrip-preview-marker.destination {
+  background: linear-gradient(135deg, #172033, #0f172a);
+  border-color: rgba(255, 255, 255, 0.72);
 }
 
 .runtrip-preview-marker.destination span {
-  background: #172033;
   color: #ffffff;
 }
 /* RunTrip 검색 전용 화면 */
