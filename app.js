@@ -1075,7 +1075,7 @@ let selectedRunTripDestination = null;
 let isGettingRunTripCurrentLocation = false;
 
 const runTripPreviewLayer = L.layerGroup().addTo(map);
-
+let runTripRouteRequestId = 0;
 function getPlaceSearchUrl(query) {
   const baseUrl =
     window.location.hostname === 'localhost' ||
@@ -1626,12 +1626,67 @@ function createRunTripPreviewMarkerIcon(label, type) {
 function clearRunTripMapPreview() {
   runTripPreviewLayer.clearLayers();
 }
+function getRunTripRouteUrl() {
+  if (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1'
+  ) {
+    return 'https://freeruntrip.vercel.app/api/runtrip-route';
+  }
 
-function renderRunTripMapPreview() {
+  return '/api/runtrip-route';
+}
+
+function convertRunTripPlaceToRoutePoint(place) {
+  const latLng = getRunTripPlaceLatLng(place);
+
+  if (!latLng) {
+    return null;
+  }
+
+  return {
+    lat: latLng[0],
+    lng: latLng[1]
+  };
+}
+
+async function requestRunTripRoute(
+  origin,
+  destination,
+  waypoints,
+  originName,
+  destinationName
+) {
+  const response = await fetch(getRunTripRouteUrl(), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      origin: origin,
+      destination: destination,
+      waypoints: waypoints,
+      originName: originName,
+      destinationName: destinationName
+    })
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.error || '실제 보행 경로를 불러오지 못했어요.'
+    );
+  }
+
+  return data;
+}
+async function renderRunTripMapPreview() {
+  const requestId = ++runTripRouteRequestId;
+
   clearRunTripMapPreview();
 
   const draft = getRunTripDraft();
-
   const previewMarkers = [];
 
   const originLatLng = getRunTripPlaceLatLng(draft.origin);
@@ -1674,25 +1729,6 @@ function renderRunTripMapPreview() {
     return;
   }
 
-  const previewPath = previewMarkers.map(function (marker) {
-    return marker.latLng;
-  });
-
-  if (draft.returnToStart && previewPath.length >= 2) {
-    previewPath.push(previewPath[0]);
-  }
-
-  if (previewPath.length >= 2) {
-    L.polyline(previewPath, {
-  color: '#facc15',
-  weight: 6,
-  opacity: 0.95,
-  dashArray: '8 10',
-  lineCap: 'round',
-  lineJoin: 'round'
-   }).addTo(runTripPreviewLayer);
-  }
-
   previewMarkers.forEach(function (marker) {
     L.marker(marker.latLng, {
       icon: createRunTripPreviewMarkerIcon(
@@ -1703,24 +1739,177 @@ function renderRunTripMapPreview() {
     }).addTo(runTripPreviewLayer);
   });
 
-  if (previewPath.length === 1) {
-    map.setView(previewPath[0], 16, {
-      animate: true
-    });
+  if (!originLatLng || !destinationLatLng) {
+    const markerBounds = L.latLngBounds(
+      previewMarkers.map(function (marker) {
+        return marker.latLng;
+      })
+    );
+
+    if (markerBounds.isValid()) {
+      map.fitBounds(markerBounds, {
+        paddingTopLeft: [24, 180],
+        paddingBottomRight: [24, 140],
+        maxZoom: 16,
+        animate: true
+      });
+    }
 
     return;
   }
 
-  const bounds = L.latLngBounds(previewPath);
+  const originPoint = convertRunTripPlaceToRoutePoint(
+    draft.origin
+  );
 
-if (bounds.isValid()) {
-  map.fitBounds(bounds, {
-    paddingTopLeft: [24, 180],
-    paddingBottomRight: [24, 140],
-    maxZoom: 16,
-    animate: true
-  });
-}
+  const destinationPoint = convertRunTripPlaceToRoutePoint(
+    draft.destination
+  );
+
+  const waypointPoints = draft.waypoints
+    .map(convertRunTripPlaceToRoutePoint)
+    .filter(Boolean);
+
+  runTripStatus.textContent =
+    '실제 보행 경로를 찾고 있어요…';
+
+  try {
+    const outwardRoute = await requestRunTripRoute(
+      originPoint,
+      destinationPoint,
+      waypointPoints,
+      draft.origin.name || '출발지',
+      draft.destination.name || '도착지'
+    );
+
+    if (requestId !== runTripRouteRequestId) {
+      return;
+    }
+
+    let routeCoordinates = outwardRoute.coordinates || [];
+    let totalDistanceMeters =
+      Number(outwardRoute.distanceMeters) || 0;
+
+    let totalDurationSeconds =
+      Number(outwardRoute.durationSeconds) || 0;
+
+    if (draft.returnToStart) {
+      const returnRoute = await requestRunTripRoute(
+        destinationPoint,
+        originPoint,
+        [],
+        draft.destination.name || '도착지',
+        draft.origin.name || '출발지'
+      );
+
+      if (requestId !== runTripRouteRequestId) {
+        return;
+      }
+
+      const returnCoordinates =
+        Array.isArray(returnRoute.coordinates)
+          ? returnRoute.coordinates
+          : [];
+
+      if (returnCoordinates.length > 0) {
+        routeCoordinates = routeCoordinates.concat(
+          returnCoordinates.slice(1)
+        );
+      }
+
+      totalDistanceMeters +=
+        Number(returnRoute.distanceMeters) || 0;
+
+      totalDurationSeconds +=
+        Number(returnRoute.durationSeconds) || 0;
+    }
+
+    if (routeCoordinates.length < 2) {
+      throw new Error(
+        '실제 보행 경로 좌표를 찾지 못했어요.'
+      );
+    }
+
+    clearRunTripMapPreview();
+
+    L.polyline(routeCoordinates, {
+      color: '#facc15',
+      weight: 6,
+      opacity: 0.95,
+      lineCap: 'round',
+      lineJoin: 'round'
+    }).addTo(runTripPreviewLayer);
+
+    previewMarkers.forEach(function (marker) {
+      L.marker(marker.latLng, {
+        icon: createRunTripPreviewMarkerIcon(
+          marker.label,
+          marker.type
+        ),
+        interactive: false
+      }).addTo(runTripPreviewLayer);
+    });
+
+    const routeBounds = L.latLngBounds(routeCoordinates);
+
+    if (routeBounds.isValid()) {
+      map.fitBounds(routeBounds, {
+        paddingTopLeft: [24, 180],
+        paddingBottomRight: [24, 140],
+        maxZoom: 16,
+        animate: true
+      });
+    }
+
+    const distanceKm = totalDistanceMeters / 1000;
+    const durationMinutes = Math.max(
+      1,
+      Math.round(totalDurationSeconds / 60)
+    );
+
+    runTripStatus.textContent =
+      `실제 보행 경로 ${distanceKm.toFixed(1)}km · ` +
+      `예상 ${durationMinutes}분`;
+  } catch (error) {
+    if (requestId !== runTripRouteRequestId) {
+      return;
+    }
+
+    runTripStatus.textContent =
+      error.message || '실제 보행 경로를 불러오지 못했어요.';
+
+    const fallbackPath = previewMarkers.map(function (marker) {
+      return marker.latLng;
+    });
+
+    if (draft.returnToStart && fallbackPath.length >= 2) {
+      fallbackPath.push(fallbackPath[0]);
+    }
+
+    if (fallbackPath.length >= 2) {
+      L.polyline(fallbackPath, {
+        color: '#facc15',
+        weight: 6,
+        opacity: 0.65,
+        dashArray: '8 10',
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).addTo(runTripPreviewLayer);
+    }
+
+    const fallbackBounds = L.latLngBounds(fallbackPath);
+
+    if (fallbackBounds.isValid()) {
+      map.fitBounds(fallbackBounds, {
+        paddingTopLeft: [24, 180],
+        paddingBottomRight: [24, 140],
+        maxZoom: 16,
+        animate: true
+      });
+    }
+
+    console.error('RunTrip route preview error:', error);
+  }
 }
 
 function openRunTripPanel() {
@@ -1741,6 +1930,8 @@ function openRunTripPanel() {
 }
 
 function closeRunTripPanel() {
+  runTripRouteRequestId++;
+
   runTripPanel.classList.add('hidden');
   clearRunTripMapPreview();
   controlsSection.style.display = 'flex';
