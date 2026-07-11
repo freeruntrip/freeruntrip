@@ -7,7 +7,7 @@ height: 100%;
 
 #map {
 width: 100%;
-height: 70vh;
+height: 100dvh;
 }
 #controls {
   position: absolute;
@@ -1186,26 +1186,39 @@ height: 70vh;
 
 .runtrip-editor-card {
   position: absolute;
-  top: 14px;
-  left: 12px;
-  right: 12px;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 2;
+
   box-sizing: border-box;
-  max-height: calc(100vh - 28px);
+  max-height: 42dvh;
   overflow-y: auto;
-  padding: 13px;
-  border: 1px solid rgba(250, 204, 21, 0.18);
-  border-radius: 22px;
+
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 10px)
+    12px
+    10px;
+
+  border: none;
+  border-bottom: 1px solid rgba(250, 204, 21, 0.18);
+  border-radius: 0 0 22px 22px;
+
   background:
     radial-gradient(
       circle at top right,
       rgba(250, 204, 21, 0.16),
       transparent 34%
     ),
-    rgba(15, 23, 42, 0.94);
+    rgba(15, 23, 42, 0.96);
+
   color: #f8fafc;
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
+
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
+
   backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+
   pointer-events: auto;
 }
 
@@ -1214,11 +1227,11 @@ height: 70vh;
   grid-template-columns: 52px 1fr 58px;
   align-items: center;
   gap: 10px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 #backFromRunTripBtn {
-  height: 38px;
+  height: 34px;
   padding: 0;
   border: none;
   border-radius: 13px;
@@ -1237,20 +1250,20 @@ height: 70vh;
 .runtrip-editor-header h2 {
   margin: 0;
   color: #f8fafc;
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1.15;
 }
 
 .runtrip-editor-header .create-runtrip-btn {
   width: 58px;
-  height: 38px;
+  height: 34px;
   margin: 0;
   padding: 0;
   border: none;
   border-radius: 13px;
   background: #facc15;
   color: #111827;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 900;
 }
 
@@ -1275,11 +1288,11 @@ height: 70vh;
 
 .runtrip-route-row {
   display: grid;
-  grid-template-columns: 22px 30px 1fr 38px;
+  grid-template-columns: 20px 28px 1fr 32px;
   align-items: center;
-  gap: 8px;
-  min-height: 54px;
-  padding: 8px 10px;
+  gap: 6px;
+  min-height: 38px;
+  padding: 4px 8px;
   box-sizing: border-box;
   border: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.09);
@@ -1332,22 +1345,22 @@ height: 70vh;
 
 .runtrip-input-wrap label {
   display: block;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
   color: #94a3b8;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
   line-height: 1;
 }
 
 .runtrip-input-wrap input {
   width: 100%;
-  padding: 0;
+  padding: 4px 0;
   border: none;
   outline: none;
   background: transparent;
   color: #f8fafc;
   font-family: inherit;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 900;
   text-overflow: ellipsis;
 }
@@ -1360,10 +1373,10 @@ height: 70vh;
 .runtrip-add-waypoint-btn,
 .runtrip-remove-waypoint-btn,
 .runtrip-current-location-btn {
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  min-height: 34px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
   padding: 0;
   box-sizing: border-box;
   border: 1px solid rgba(255, 255, 255, 0.22);
@@ -1375,7 +1388,7 @@ height: 70vh;
   display: grid;
   place-items: center;
   font-family: inherit;
-  font-size: 21px;
+  font-size: 18px;
   font-weight: 800;
   line-height: 1;
 }
@@ -1408,9 +1421,9 @@ height: 70vh;
   display: flex;
   align-items: center;
   gap: 9px;
-  min-height: 44px;
+  min-height: 34px;
   margin: 0;
-  padding: 9px 10px;
+  padding: 6px 10px;
   border-radius: 15px;
   background: rgba(255, 255, 255, 0.07);
 }
@@ -1462,18 +1475,18 @@ height: 70vh;
 }
 
 .runtrip-status {
-  min-height: 18px;
+  min-height: 14px;
   margin: 0 2px;
   color: #94a3b8;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.4;
 }
 
 @media (min-width: 720px) {
   .runtrip-editor-card {
-    left: 20px;
-    right: auto;
-    width: 430px;
+    left: 0;
+    right: 0;
+    width: 100%;
   }
 }
 /* RunTrip 장소 검색 결과 */
