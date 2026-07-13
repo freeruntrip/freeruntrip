@@ -1626,6 +1626,65 @@ function createRunTripPreviewMarkerIcon(label, type) {
 function clearRunTripMapPreview() {
   runTripPreviewLayer.clearLayers();
 }
+function getRunTripMapFitOptions() {
+  const mapContainer = map.getContainer();
+
+  const routeEditor =
+    runTripPanel.querySelector('.runtrip-route-editor') ||
+    runTripPanel.querySelector('.runtrip-route-card') ||
+    runTripPanel.firstElementChild;
+
+  const mapRect = mapContainer.getBoundingClientRect();
+
+  let coveredTopHeight = 0;
+
+  if (routeEditor) {
+    const editorRect = routeEditor.getBoundingClientRect();
+
+    coveredTopHeight = Math.max(
+      0,
+      Math.min(editorRect.bottom, mapRect.bottom) -
+        Math.max(editorRect.top, mapRect.top)
+    );
+  }
+
+  const horizontalPadding = 36;
+  const markerPadding = 48;
+  const topPadding = Math.max(
+    120,
+    Math.round(coveredTopHeight + markerPadding)
+  );
+
+  return {
+    paddingTopLeft: [
+      horizontalPadding,
+      topPadding
+    ],
+
+    paddingBottomRight: [
+      horizontalPadding,
+      110
+    ],
+
+    maxZoom: 16,
+    animate: true
+  };
+}
+
+function fitRunTripMapBounds(bounds) {
+  if (!bounds || !bounds.isValid()) {
+    return;
+  }
+
+  map.invalidateSize({
+    pan: false
+  });
+
+  map.fitBounds(
+    bounds,
+    getRunTripMapFitOptions()
+  );
+}
 function getRunTripRouteUrl() {
   if (
     window.location.hostname === 'localhost' ||
@@ -1746,14 +1805,7 @@ async function renderRunTripMapPreview() {
       })
     );
 
-    if (markerBounds.isValid()) {
-      map.fitBounds(markerBounds, {
-        paddingTopLeft: [24, 180],
-        paddingBottomRight: [24, 140],
-        maxZoom: 16,
-        animate: true
-      });
-    }
+   fitRunTripMapBounds(markerBounds);
 
     return;
   }
@@ -1852,14 +1904,7 @@ async function renderRunTripMapPreview() {
 
     const routeBounds = L.latLngBounds(routeCoordinates);
 
-    if (routeBounds.isValid()) {
-      map.fitBounds(routeBounds, {
-        paddingTopLeft: [24, 180],
-        paddingBottomRight: [24, 140],
-        maxZoom: 16,
-        animate: true
-      });
-    }
+    fitRunTripMapBounds(routeBounds);
 
     const distanceKm = totalDistanceMeters / 1000;
     const durationMinutes = Math.max(
@@ -1899,14 +1944,7 @@ async function renderRunTripMapPreview() {
 
     const fallbackBounds = L.latLngBounds(fallbackPath);
 
-    if (fallbackBounds.isValid()) {
-      map.fitBounds(fallbackBounds, {
-        paddingTopLeft: [24, 180],
-        paddingBottomRight: [24, 140],
-        maxZoom: 16,
-        animate: true
-      });
-    }
+    fitRunTripMapBounds(fallbackBounds);
 
     console.error('RunTrip route preview error:', error);
   }
@@ -1923,10 +1961,15 @@ function openRunTripPanel() {
 
   runTripPanel.classList.remove('hidden');
 
-  setTimeout(function () {
-    map.invalidateSize();
+  requestAnimationFrame(function () {
+   requestAnimationFrame(function () {
+    map.invalidateSize({
+      pan: false
+    });
+
     renderRunTripMapPreview();
-  }, 100);
+  });
+});
 }
 
 function closeRunTripPanel() {
