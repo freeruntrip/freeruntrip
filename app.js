@@ -1487,7 +1487,178 @@ function refreshRunTripWaypointLabels() {
   runTripWaypointCount = rows.length;
   updateRunTripWaypointControls();
 }
+function getRunTripOrderedPlaceSlots() {
+  const waypointInputs = Array.from(
+    runTripWaypoints.querySelectorAll(
+      '.runtrip-waypoint-input'
+    )
+  );
 
+  const slots = [
+    {
+      inputElement: runTripOriginInput,
+
+      getPlace: function () {
+        return selectedRunTripOrigin;
+      },
+
+      setPlace: function (place) {
+        selectedRunTripOrigin = place;
+        runTripOriginInput.value = place
+          ? place.name
+          : '';
+      }
+    }
+  ];
+
+  waypointInputs.forEach(function (input) {
+    slots.push({
+      inputElement: input,
+
+      getPlace: function () {
+        return input.runTripPlace;
+      },
+
+      setPlace: function (place) {
+        input.runTripPlace = place;
+        input.value = place
+          ? place.name
+          : '';
+      }
+    });
+  });
+
+  slots.push({
+    inputElement: runTripDestinationInput,
+
+    getPlace: function () {
+      return selectedRunTripDestination;
+    },
+
+    setPlace: function (place) {
+      selectedRunTripDestination = place;
+      runTripDestinationInput.value = place
+        ? place.name
+        : '';
+    }
+  });
+
+  return slots;
+}
+
+function swapRunTripPlaceSlots(firstIndex, secondIndex) {
+  const slots = getRunTripOrderedPlaceSlots();
+
+  const firstSlot = slots[firstIndex];
+  const secondSlot = slots[secondIndex];
+
+  if (!firstSlot || !secondSlot) {
+    return;
+  }
+
+  const firstPlace = firstSlot.getPlace();
+  const secondPlace = secondSlot.getPlace();
+
+  firstSlot.setPlace(secondPlace);
+  secondSlot.setPlace(firstPlace);
+
+  refreshRunTripWaypointLabels();
+  updateRunTripCreateButton();
+  renderRunTripMapPreview();
+
+  runTripStatus.textContent =
+    '장소 순서를 변경하고 실제 보행 경로를 다시 계산했어요.';
+}
+
+function handleRunTripRouteOrderChange(inputElement) {
+  const slots = getRunTripOrderedPlaceSlots();
+
+  const currentIndex = slots.findIndex(function (slot) {
+    return slot.inputElement === inputElement;
+  });
+
+  if (currentIndex === -1 || slots.length < 2) {
+    return;
+  }
+
+  const targetIndex =
+    currentIndex === slots.length - 1
+      ? currentIndex - 1
+      : currentIndex + 1;
+
+  swapRunTripPlaceSlots(
+    currentIndex,
+    targetIndex
+  );
+}
+
+function connectRunTripRouteOrderButton(
+  rowElement,
+  inputElement
+) {
+  if (!rowElement || !inputElement) {
+    return;
+  }
+
+  const handle = rowElement.querySelector(
+    '.runtrip-route-handle'
+  );
+
+  if (!handle || handle.dataset.orderConnected === 'true') {
+    return;
+  }
+
+  handle.dataset.orderConnected = 'true';
+  handle.setAttribute('role', 'button');
+  handle.setAttribute('tabindex', '0');
+  handle.setAttribute(
+    'aria-label',
+    '다음 장소와 순서 바꾸기'
+  );
+
+  handle.addEventListener('click', function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    handleRunTripRouteOrderChange(inputElement);
+  });
+
+  handle.addEventListener('keydown', function (event) {
+    if (
+      event.key !== 'Enter' &&
+      event.key !== ' '
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+
+    handleRunTripRouteOrderChange(inputElement);
+  });
+}
+
+function connectExistingRunTripRouteOrderButtons() {
+  connectRunTripRouteOrderButton(
+    runTripOriginInput.closest('.runtrip-route-row'),
+    runTripOriginInput
+  );
+
+  const waypointInputs = runTripWaypoints.querySelectorAll(
+    '.runtrip-waypoint-input'
+  );
+
+  waypointInputs.forEach(function (input) {
+    connectRunTripRouteOrderButton(
+      input.closest('.runtrip-route-row'),
+      input
+    );
+  });
+
+  connectRunTripRouteOrderButton(
+    runTripDestinationInput.closest('.runtrip-route-row'),
+    runTripDestinationInput
+  );
+}
 function addRunTripWaypoint() {
   if (runTripWaypointCount >= MAX_RUNTRIP_WAYPOINTS) {
     return;
@@ -1573,8 +1744,13 @@ function addRunTripWaypoint() {
 
   runTripWaypoints.appendChild(waypointRow);
 
-  refreshRunTripWaypointLabels();
-  waypointInput.click();
+  connectRunTripRouteOrderButton(
+  waypointRow,
+  waypointInput
+);
+
+refreshRunTripWaypointLabels();
+waypointInput.click();
 }
 function getRunTripDraft() {
   const waypointInputs = runTripWaypoints.querySelectorAll(
@@ -2750,3 +2926,4 @@ createRunTripBtn.addEventListener('click', function () {
 
 updateRunTripCreateButton();
 updateRunTripWaypointControls();
+connectExistingRunTripRouteOrderButtons();

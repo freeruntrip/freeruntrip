@@ -1716,3 +1716,30 @@ height: 100dvh;
   border-radius: 20px;
   background: rgba(255, 255, 255, 0.08);
 }
+/* RunTrip 경로 편집 패널: 경유지 3개까지 내부 스크롤 없이 전체 표시 */
+/* RunTrip 경로 편집 패널: 경유지 3개까지 내부 스크롤 없이 전체 표시 */
+.runtrip-editor-card {
+  max-height: none !important;
+  overflow: visible !important;
+  overflow-y: visible !important;
+}
+
+#runTripWaypoints {
+  max-height: none !important;
+  overflow: visible !important;
+  overflow-y: visible !important;
+}
+
+/* 위아래 순서 변경 아이콘을 실제 터치 버튼처럼 사용 */
+.runtrip-route-handle {
+  cursor: pointer;
+  pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.runtrip-route-handle:active {
+  transform: scale(0.88);
+  opacity: 0.7;
+}
