@@ -1743,3 +1743,295 @@ height: 100dvh;
   transform: scale(0.88);
   opacity: 0.7;
 }
+/* RunTrip 경로 설정 → 확인 결과 2단계 UI */
+
+/* 확인 결과 화면 기본 숨김 */
+.runtrip-confirmed-summary.hidden {
+  display: none;
+}
+
+/* 편집 패널 내부 스크롤 제거 */
+.runtrip-editor-card {
+  max-height: none !important;
+  overflow: visible !important;
+  overflow-y: visible !important;
+}
+
+/* 확인 후에는 검색 행과 복귀 설정을 숨긴다 */
+.runtrip-confirmed .runtrip-route-builder,
+.runtrip-confirmed .runtrip-editor-footer {
+  display: none;
+}
+
+/* 모바일 RunTrip 편집 화면 */
+@media (max-width: 719px) {
+  .runtrip-editor-card {
+    padding:
+      calc(env(safe-area-inset-top, 0px) + 7px)
+      10px
+      7px;
+
+    border-radius: 0 0 18px 18px;
+  }
+
+  /* FREERUNTRIP / RunTrip 경로 설정 제목 숨김 */
+  .runtrip-editor-header .card-label,
+  .runtrip-editor-header h2 {
+    display: none;
+  }
+
+  /* 취소 / 확인 버튼만 한 줄에 배치 */
+  .runtrip-editor-header {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  #backFromRunTripBtn,
+  .runtrip-editor-header .create-runtrip-btn {
+    width: 100%;
+    height: 32px;
+    margin: 0;
+    padding: 0;
+    border-radius: 11px;
+    font-size: 12px;
+  }
+
+  /* 출발지 / 경유지 / 도착지 글자 숨김 */
+  .runtrip-input-wrap label {
+    display: none;
+  }
+
+  .runtrip-route-builder {
+    border-radius: 15px;
+  }
+
+  .runtrip-route-row {
+    grid-template-columns: 18px 26px 1fr 28px;
+    gap: 5px;
+    min-height: 38px;
+    padding: 3px 7px;
+  }
+
+  .runtrip-route-handle {
+    font-size: 14px;
+  }
+
+  .runtrip-point {
+    width: 26px;
+    height: 26px;
+    font-size: 11px;
+  }
+
+  .runtrip-input-wrap input {
+    padding: 3px 0;
+    font-size: 13px;
+    line-height: 1.15;
+  }
+
+  .runtrip-add-waypoint-btn,
+  .runtrip-remove-waypoint-btn,
+  .runtrip-current-location-btn {
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    min-height: 26px;
+    font-size: 16px;
+  }
+
+  .runtrip-current-location-btn {
+    font-size: 18px;
+  }
+
+  .runtrip-editor-footer {
+    gap: 0;
+    margin-top: 6px;
+  }
+
+  /* 출발지 복귀 설정만 간단히 유지 */
+  .runtrip-return-option {
+    min-height: 31px;
+    gap: 7px;
+    padding: 4px 8px;
+    border-radius: 12px;
+  }
+
+  .runtrip-return-check {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+  }
+
+  .runtrip-return-option strong {
+    font-size: 12px;
+  }
+
+  /* 불필요한 설명과 편집 중 거리 문구 숨김 */
+  .runtrip-return-option small,
+  .runtrip-status {
+    display: none;
+  }
+
+  /* 확인 후 요약 카드 */
+  .runtrip-confirmed-summary {
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 15px;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .runtrip-confirmed-route {
+    display: flex;
+    flex-direction: column;
+    padding: 7px 10px;
+  }
+
+  .runtrip-confirmed-place {
+    display: grid;
+    grid-template-columns: 27px 1fr;
+    align-items: center;
+    gap: 8px;
+    min-height: 33px;
+  }
+
+  .runtrip-confirmed-dot {
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .start-dot {
+    background: #16a34a;
+    color: #ffffff;
+  }
+
+  .waypoint-dot {
+    background: #facc15;
+    color: #111827;
+  }
+
+  .destination-dot {
+    background: #ef4444;
+    color: #ffffff;
+  }
+
+  .runtrip-confirmed-place strong {
+    overflow: hidden;
+    color: #f8fafc;
+    font-size: 13px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .runtrip-confirmed-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .runtrip-confirmed-metrics > div {
+    padding: 9px 12px;
+  }
+
+  .runtrip-confirmed-metrics > div + div {
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .runtrip-confirmed-metrics span {
+    display: block;
+    margin-bottom: 3px;
+    color: #94a3b8;
+    font-size: 9px;
+  }
+
+  .runtrip-confirmed-metrics strong {
+    color: #facc15;
+    font-size: 17px;
+    font-weight: 900;
+  }
+}
+
+/* PC Live Server에서도 같은 구조로 확인 */
+@media (min-width: 720px) {
+  .runtrip-editor-header .card-label,
+  .runtrip-editor-header h2,
+  .runtrip-input-wrap label,
+  .runtrip-return-option small,
+  .runtrip-status {
+    display: none;
+  }
+
+  .runtrip-editor-header {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  #backFromRunTripBtn,
+  .runtrip-editor-header .create-runtrip-btn {
+    width: 100%;
+  }
+
+  .runtrip-route-row {
+    min-height: 38px;
+  }
+
+  .runtrip-confirmed-summary {
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 15px;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .runtrip-confirmed-route {
+    display: flex;
+    gap: 18px;
+    padding: 10px 12px;
+  }
+
+  .runtrip-confirmed-place {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .runtrip-confirmed-dot {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    font-size: 11px;
+    font-weight: 900;
+  }
+
+  .runtrip-confirmed-place strong {
+    color: #f8fafc;
+    font-size: 13px;
+  }
+
+  .runtrip-confirmed-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .runtrip-confirmed-metrics > div {
+    padding: 9px 12px;
+  }
+
+  .runtrip-confirmed-metrics span {
+    display: block;
+    color: #94a3b8;
+    font-size: 10px;
+  }
+
+  .runtrip-confirmed-metrics strong {
+    color: #facc15;
+    font-size: 16px;
+    font-weight: 900;
+  }
+}

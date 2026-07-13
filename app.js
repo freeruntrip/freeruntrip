@@ -1076,6 +1076,166 @@ let isGettingRunTripCurrentLocation = false;
 
 const runTripPreviewLayer = L.layerGroup().addTo(map);
 let runTripRouteRequestId = 0;
+let latestRunTripRouteSummary = null;
+let isRunTripConfirmed = false;
+const runTripEditorCard = runTripPanel.querySelector(
+  '.runtrip-editor-card'
+);
+
+const runTripEditorHeader = runTripPanel.querySelector(
+  '.runtrip-editor-header'
+);
+
+const runTripConfirmedSummary = document.createElement('section');
+
+runTripConfirmedSummary.id = 'runTripConfirmedSummary';
+runTripConfirmedSummary.className =
+  'runtrip-confirmed-summary hidden';
+
+runTripConfirmedSummary.innerHTML = `
+  <div class="runtrip-confirmed-route">
+    <div class="runtrip-confirmed-place">
+      <span class="runtrip-confirmed-dot start-dot">S</span>
+
+      <strong id="confirmedRunTripOrigin">
+        출발지
+      </strong>
+    </div>
+
+    <div
+      id="confirmedRunTripWaypointRow"
+      class="runtrip-confirmed-place"
+    >
+      <span class="runtrip-confirmed-dot waypoint-dot">↕</span>
+
+      <strong id="confirmedRunTripWaypoints">
+        경유지 없음
+      </strong>
+    </div>
+
+    <div class="runtrip-confirmed-place">
+      <span class="runtrip-confirmed-dot destination-dot">D</span>
+
+      <strong id="confirmedRunTripDestination">
+        도착지
+      </strong>
+    </div>
+  </div>
+
+  <div class="runtrip-confirmed-metrics">
+    <div>
+      <span>실제 보행 경로</span>
+      <strong id="confirmedRunTripDistance">0.0km</strong>
+    </div>
+
+    <div>
+      <span>예상 시간</span>
+      <strong id="confirmedRunTripDuration">0분</strong>
+    </div>
+  </div>
+`;
+
+runTripEditorHeader.insertAdjacentElement(
+  'afterend',
+  runTripConfirmedSummary
+);
+
+const confirmedRunTripOrigin = document.getElementById(
+  'confirmedRunTripOrigin'
+);
+
+const confirmedRunTripWaypointRow = document.getElementById(
+  'confirmedRunTripWaypointRow'
+);
+
+const confirmedRunTripWaypoints = document.getElementById(
+  'confirmedRunTripWaypoints'
+);
+
+const confirmedRunTripDestination = document.getElementById(
+  'confirmedRunTripDestination'
+);
+
+const confirmedRunTripDistance = document.getElementById(
+  'confirmedRunTripDistance'
+);
+
+const confirmedRunTripDuration = document.getElementById(
+  'confirmedRunTripDuration'
+);
+function showRunTripEditMode() {
+  isRunTripConfirmed = false;
+
+  runTripPanel.classList.remove('runtrip-confirmed');
+
+  runTripConfirmedSummary.classList.add('hidden');
+
+  createRunTripBtn.textContent = '확인';
+
+  updateRunTripCreateButton();
+
+  requestAnimationFrame(function () {
+  requestAnimationFrame(function () {
+    map.invalidateSize({
+      pan: false
+    });
+
+    renderRunTripMapPreview();
+  });
+});
+}
+
+function showRunTripConfirmedMode() {
+  if (!latestRunTripRouteSummary) {
+    return;
+  }
+
+  const draft = getRunTripDraft();
+
+  confirmedRunTripOrigin.textContent =
+    draft.origin?.name || '출발지';
+
+  confirmedRunTripDestination.textContent =
+    draft.destination?.name || '도착지';
+
+  if (draft.waypoints.length > 0) {
+    confirmedRunTripWaypointRow.classList.remove('hidden');
+
+    confirmedRunTripWaypoints.textContent =
+      `경유지 ${draft.waypoints.length}개`;
+  } else {
+    confirmedRunTripWaypointRow.classList.add('hidden');
+  }
+
+  confirmedRunTripDistance.textContent =
+    `${latestRunTripRouteSummary.distanceKm.toFixed(1)}km`;
+
+  confirmedRunTripDuration.textContent =
+    `약 ${latestRunTripRouteSummary.durationMinutes}분`;
+
+  isRunTripConfirmed = true;
+
+  runTripPanel.classList.add('runtrip-confirmed');
+
+  runTripConfirmedSummary.classList.remove('hidden');
+
+  createRunTripBtn.disabled = false;
+  createRunTripBtn.textContent = '수정';
+
+  requestAnimationFrame(function () {
+  requestAnimationFrame(function () {
+    map.invalidateSize({
+      pan: false
+    });
+
+    if (latestRunTripRouteSummary.bounds) {
+      fitRunTripMapBounds(
+        latestRunTripRouteSummary.bounds
+      );
+    }
+  });
+});
+}
 function getPlaceSearchUrl(query) {
   const baseUrl =
     window.location.hostname === 'localhost' ||
@@ -1805,10 +1965,7 @@ function clearRunTripMapPreview() {
 function getRunTripMapFitOptions() {
   const mapContainer = map.getContainer();
 
-  const routeEditor =
-    runTripPanel.querySelector('.runtrip-route-editor') ||
-    runTripPanel.querySelector('.runtrip-route-card') ||
-    runTripPanel.firstElementChild;
+  const routeEditor = runTripEditorCard;
 
   const mapRect = mapContainer.getBoundingClientRect();
 
@@ -1918,6 +2075,8 @@ async function requestRunTripRoute(
 }
 async function renderRunTripMapPreview() {
   const requestId = ++runTripRouteRequestId;
+
+  latestRunTripRouteSummary = null;
 
   clearRunTripMapPreview();
 
@@ -2083,19 +2242,22 @@ async function renderRunTripMapPreview() {
     fitRunTripMapBounds(routeBounds);
 
     const distanceKm = totalDistanceMeters / 1000;
-    const durationMinutes = Math.max(
-      1,
-      Math.round(totalDurationSeconds / 60)
-    );
 
-    runTripStatus.textContent =
-      `실제 보행 경로 ${distanceKm.toFixed(1)}km · ` +
-      `예상 ${durationMinutes}분`;
+const durationMinutes = Math.max(
+  1,
+  Math.round(totalDurationSeconds / 60)
+);
+
+latestRunTripRouteSummary = {
+  distanceKm: distanceKm,
+  durationMinutes: durationMinutes,
+  bounds: routeBounds
+};
   } catch (error) {
     if (requestId !== runTripRouteRequestId) {
       return;
     }
-
+latestRunTripRouteSummary = null;
     runTripStatus.textContent =
       error.message || '실제 보행 경로를 불러오지 못했어요.';
 
@@ -2150,6 +2312,14 @@ function openRunTripPanel() {
 
 function closeRunTripPanel() {
   runTripRouteRequestId++;
+
+  isRunTripConfirmed = false;
+  latestRunTripRouteSummary = null;
+
+  runTripPanel.classList.remove('runtrip-confirmed');
+  runTripConfirmedSummary.classList.add('hidden');
+
+  createRunTripBtn.textContent = '확인';
 
   runTripPanel.classList.add('hidden');
   clearRunTripMapPreview();
@@ -2898,31 +3068,42 @@ useCurrentLocationBtn.addEventListener('click', function () {
   );
 });
 
-createRunTripBtn.addEventListener('click', function () {
-  const draft = getRunTripDraft();
+createRunTripBtn.addEventListener(
+  'click',
+  async function () {
+    if (isRunTripConfirmed) {
+      showRunTripEditMode();
+      return;
+    }
 
-  if (!draft.origin || !draft.destination) {
-    updateRunTripCreateButton();
-    return;
+    const draft = getRunTripDraft();
+
+    if (!draft.origin || !draft.destination) {
+      updateRunTripCreateButton();
+      return;
+    }
+
+    createRunTripBtn.disabled = true;
+    createRunTripBtn.textContent = '계산 중';
+
+    if (!latestRunTripRouteSummary) {
+      await renderRunTripMapPreview();
+    }
+
+    if (!latestRunTripRouteSummary) {
+      createRunTripBtn.disabled = false;
+      createRunTripBtn.textContent = '확인';
+
+      alert(
+        '실제 보행 경로를 계산하지 못했어요. 장소를 확인한 뒤 다시 시도해 주세요.'
+      );
+
+      return;
+    }
+
+    showRunTripConfirmedMode();
   }
-
-  renderRunTripMapPreview();
-
-  const waypointText =
-    draft.waypoints.length > 0
-      ? `경유지 ${draft.waypoints.length}개`
-      : '경유지 없음';
-
-  const returnText = draft.returnToStart
-    ? '출발지 복귀 포함'
-    : '편도 경로';
-
-  runTripStatus.textContent =
-    `${draft.origin.name} → ${draft.destination.name} · ` +
-    `${waypointText} · ${returnText}으로 RunTrip 초안을 준비했어요.`;
-
-  console.log('RunTrip 초안:', draft);
-});
+);
 
 updateRunTripCreateButton();
 updateRunTripWaypointControls();
