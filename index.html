@@ -297,24 +297,11 @@
 <section id="runTripPanel" class="runtrip-panel hidden">
   <div class="runtrip-editor-card">
     <div class="runtrip-editor-header">
-      <button id="backFromRunTripBtn" type="button">
-        취소
-      </button>
-
-      <div>
-        <p class="card-label">FREERUNTRIP</p>
-        <h2>RunTrip 경로 설정</h2>
-      </div>
-
-      <button
-        id="createRunTripBtn"
-        class="create-runtrip-btn"
-        type="button"
-        disabled
-      >
-        확인
-      </button>
-    </div>
+  <div>
+    <p class="card-label">FREERUNTRIP</p>
+    <h2>RunTrip 경로 설정</h2>
+  </div>
+</div>
 
     <div class="runtrip-route-builder">
       <div class="runtrip-route-row origin-row">
@@ -383,7 +370,24 @@
         </button>
       </div>
     </div>
+<div class="runtrip-editor-actions">
+  <button
+    id="backFromRunTripBtn"
+    class="runtrip-editor-action-btn runtrip-cancel-btn"
+    type="button"
+  >
+    취소
+  </button>
 
+  <button
+    id="createRunTripBtn"
+    class="runtrip-editor-action-btn create-runtrip-btn"
+    type="button"
+    disabled
+  >
+    확인
+  </button>
+</div>
     <div class="runtrip-editor-footer">
       <label class="runtrip-return-option">
         <input id="runTripReturnToggle" type="checkbox" />

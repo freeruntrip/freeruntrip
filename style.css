@@ -2110,3 +2110,96 @@ height: 100dvh;
     font-size: 13px;
   }
 }
+/* RunTrip 취소 · 확인 버튼 위치 및 크기 */
+.runtrip-editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+
+  padding: 10px 14px 12px;
+  margin: 0;
+
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.runtrip-editor-actions .runtrip-editor-action-btn {
+  flex: 0 1 132px;
+  width: 132px;
+  min-width: 0;
+  height: 44px;
+
+  margin: 0;
+  padding: 0 18px;
+
+  border: none;
+  border-radius: 12px;
+
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  box-sizing: border-box;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.runtrip-editor-actions .runtrip-cancel-btn {
+  background: rgba(71, 85, 105, 0.78);
+  color: #ffffff;
+}
+
+.runtrip-editor-actions .create-runtrip-btn {
+  background: #ffc800;
+  color: #111827;
+}
+
+.runtrip-editor-actions .create-runtrip-btn:disabled {
+  background: rgba(255, 200, 0, 0.3);
+  color: rgba(17, 24, 39, 0.55);
+  opacity: 1;
+  cursor: default;
+}
+
+.runtrip-editor-actions .runtrip-editor-action-btn:active {
+  transform: scale(0.97);
+}
+
+/* 작은 아이폰 화면 대응 */
+@media (max-width: 390px) {
+  .runtrip-editor-actions {
+    gap: 10px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .runtrip-editor-actions .runtrip-editor-action-btn {
+    flex-basis: 120px;
+    width: 120px;
+    height: 42px;
+    font-size: 14px;
+    border-radius: 11px;
+  }
+}
+/* RunTrip 패널 최종 표시 순서 */
+.runtrip-editor-header {
+  display: none;
+  order: 0;
+}
+
+.runtrip-route-builder,
+.runtrip-confirmed-summary {
+  order: 1;
+}
+
+.runtrip-editor-actions {
+  order: 2;
+}
+
+.runtrip-editor-footer {
+  order: 3;
+}
