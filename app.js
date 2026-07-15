@@ -1122,7 +1122,7 @@ runTripConfirmedSummary.innerHTML = `
     </div>
   </div>
 
-  <div class="runtrip-confirmed-metrics">
+    <div class="runtrip-confirmed-metrics">
     <div>
       <span>실제 보행 경로</span>
       <strong id="confirmedRunTripDistance">0.0km</strong>
@@ -1132,6 +1132,16 @@ runTripConfirmedSummary.innerHTML = `
       <span>예상 시간</span>
       <strong id="confirmedRunTripDuration">0분</strong>
     </div>
+  </div>
+
+  <div class="runtrip-follow-actions">
+    <button
+      id="startRunTripFollowBtn"
+      class="runtrip-follow-btn"
+      type="button"
+    >
+      RUNTRIP 시작
+    </button>
   </div>
 `;
 
@@ -1163,7 +1173,19 @@ const confirmedRunTripDistance = document.getElementById(
 const confirmedRunTripDuration = document.getElementById(
   'confirmedRunTripDuration'
 );
+
+const startRunTripFollowBtn = document.getElementById(
+  'startRunTripFollowBtn'
+);
+
+let isRunTripFollowing = false;
+let runTripFollowWatchId = null;
+let runTripFollowMarker = null;
 function showRunTripEditMode() {
+  stopRunTripFollowing({
+    restoreRoute: false
+  });
+
   isRunTripConfirmed = false;
 
   runTripPanel.classList.remove('runtrip-confirmed');
@@ -1235,6 +1257,146 @@ function showRunTripConfirmedMode() {
     }
   });
 });
+}
+function updateRunTripFollowButton() {
+  if (!startRunTripFollowBtn) {
+    return;
+  }
+
+  startRunTripFollowBtn.textContent =
+    isRunTripFollowing
+      ? 'RUNTRIP 종료'
+      : 'RUNTRIP 시작';
+
+  startRunTripFollowBtn.classList.toggle(
+    'is-following',
+    isRunTripFollowing
+  );
+}
+
+function stopRunTripFollowing(options = {}) {
+  const shouldRestoreRoute =
+    options.restoreRoute !== false;
+
+  if (
+    runTripFollowWatchId !== null &&
+    runTripFollowWatchId !== undefined
+  ) {
+    navigator.geolocation.clearWatch(
+      runTripFollowWatchId
+    );
+  }
+
+  runTripFollowWatchId = null;
+  isRunTripFollowing = false;
+
+  runTripPanel.classList.remove(
+    'runtrip-following'
+  );
+
+  if (runTripFollowMarker) {
+    map.removeLayer(runTripFollowMarker);
+    runTripFollowMarker = null;
+  }
+
+  updateRunTripFollowButton();
+
+  if (
+    shouldRestoreRoute &&
+    latestRunTripRouteSummary?.bounds
+  ) {
+    requestAnimationFrame(function () {
+      fitRunTripMapBounds(
+        latestRunTripRouteSummary.bounds
+      );
+    });
+  }
+}
+
+function startRunTripFollowing() {
+  if (!latestRunTripRouteSummary) {
+    alert(
+      '먼저 실제 보행 경로를 확인해 주세요.'
+    );
+    return;
+  }
+
+  if (!navigator.geolocation) {
+    alert(
+      '이 기기에서는 현재 위치 기능을 사용할 수 없어요.'
+    );
+    return;
+  }
+
+  isRunTripFollowing = true;
+
+  runTripPanel.classList.add(
+    'runtrip-following'
+  );
+
+  updateRunTripFollowButton();
+
+  runTripFollowWatchId =
+    navigator.geolocation.watchPosition(
+      function (position) {
+        if (!isRunTripFollowing) {
+          return;
+        }
+
+        const latitude =
+          position.coords.latitude;
+
+        const longitude =
+          position.coords.longitude;
+
+        const currentLatLng = [
+          latitude,
+          longitude
+        ];
+
+        if (!runTripFollowMarker) {
+          runTripFollowMarker = L.marker(
+            currentLatLng,
+            {
+              icon:
+                createRunTripFollowMarkerIcon(),
+              zIndexOffset: 1000
+            }
+          ).addTo(map);
+        } else {
+          runTripFollowMarker.setLatLng(
+            currentLatLng
+          );
+        }
+
+        map.setView(
+          currentLatLng,
+          Math.max(map.getZoom(), 17),
+          {
+            animate: false
+          }
+        );
+      },
+
+      function (error) {
+        console.error(
+          'RunTrip 위치 추적 오류:',
+          error
+        );
+
+        stopRunTripFollowing();
+
+        alert(
+          '현재 위치를 추적하지 못했어요. Safari의 위치 권한을 확인해 주세요.'
+        );
+      },
+
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 1000
+      }
+    );
 }
 function getPlaceSearchUrl(query) {
   const baseUrl =
@@ -1958,7 +2120,18 @@ function createRunTripPreviewMarkerIcon(label, type) {
     iconAnchor: [18, 18]
   });
 }
-
+function createRunTripFollowMarkerIcon() {
+  return L.divIcon({
+    className: 'runtrip-follow-marker',
+    html: `
+      <div class="runtrip-follow-marker-pulse">
+        <span></span>
+      </div>
+    `,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17]
+  });
+}
 function clearRunTripMapPreview() {
   runTripPreviewLayer.clearLayers();
 }
@@ -2251,7 +2424,10 @@ const durationMinutes = Math.max(
 latestRunTripRouteSummary = {
   distanceKm: distanceKm,
   durationMinutes: durationMinutes,
-  bounds: routeBounds
+  bounds: routeBounds,
+  coordinates: routeCoordinates.map(function (point) {
+    return [point[0], point[1]];
+  })
 };
   } catch (error) {
     if (requestId !== runTripRouteRequestId) {
@@ -2311,6 +2487,10 @@ function openRunTripPanel() {
 }
 
 function closeRunTripPanel() {
+  stopRunTripFollowing({
+    restoreRoute: false
+  });
+
   runTripRouteRequestId++;
 
   isRunTripConfirmed = false;
@@ -3104,7 +3284,17 @@ createRunTripBtn.addEventListener(
     showRunTripConfirmedMode();
   }
 );
+startRunTripFollowBtn.addEventListener(
+  'click',
+  function () {
+    if (isRunTripFollowing) {
+      stopRunTripFollowing();
+      return;
+    }
 
+    startRunTripFollowing();
+  }
+);
 updateRunTripCreateButton();
 updateRunTripWaypointControls();
 connectExistingRunTripRouteOrderButtons();
