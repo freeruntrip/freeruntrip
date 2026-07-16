@@ -1124,7 +1124,7 @@ runTripConfirmedSummary.innerHTML = `
 
     <div class="runtrip-confirmed-metrics">
     <div>
-      <span>실제 보행 경로</span>
+      <span>예상 거리</span>
       <strong id="confirmedRunTripDistance">0.0km</strong>
     </div>
 

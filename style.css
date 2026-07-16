@@ -2684,3 +2684,36 @@ height: 100dvh;
     font-size: 12px;
   }
 }
+/* RunTrip 확인 화면 예상 거리 · 예상 시간 축소 */
+.runtrip-confirmed-metrics > div {
+  min-height: 36px;
+  padding: 5px 10px;
+}
+
+.runtrip-confirmed-metrics span {
+  margin-bottom: 2px;
+  font-size: 9px;
+  line-height: 1.1;
+}
+
+.runtrip-confirmed-metrics strong {
+  font-size: 15px;
+  line-height: 1.1;
+}
+
+/* 모바일에서는 기존 높이의 약 절반으로 축소 */
+@media (max-width: 719px) {
+  .runtrip-confirmed-metrics > div {
+    min-height: 36px;
+    padding: 5px 8px;
+  }
+
+  .runtrip-confirmed-metrics span {
+    margin-bottom: 2px;
+    font-size: 9px;
+  }
+
+  .runtrip-confirmed-metrics strong {
+    font-size: 15px;
+  }
+}
