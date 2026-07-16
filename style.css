@@ -1,3 +1,4 @@
+@import url("https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/galmuri.css");
 html,
 body {
 margin: 0;
@@ -2836,4 +2837,17 @@ height: 100dvh;
 
 .runtrip-dashboard-actions {
   padding-top: 10px;
+}
+/* ========================================
+   FreeRunTrip 전체 픽셀 폰트 적용
+======================================== */
+
+html,
+body,
+button,
+input,
+textarea,
+select,
+option {
+  font-family: "Galmuri11", sans-serif !important;
 }
