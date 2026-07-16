@@ -1149,7 +1149,152 @@ runTripEditorHeader.insertAdjacentElement(
   'afterend',
   runTripConfirmedSummary
 );
+const runTripDashboard = document.createElement('section');
 
+runTripDashboard.id = 'runTripDashboard';
+runTripDashboard.className = 'runtrip-dashboard hidden';
+
+runTripDashboard.innerHTML = `
+  <div class="runtrip-dashboard-top">
+    <div>
+      <span class="runtrip-dashboard-badge">
+        RUNTRIP ACTIVE
+      </span>
+
+      <strong id="runTripDashboardGps">
+        GPS 연결 준비
+      </strong>
+    </div>
+
+    <span
+      id="runTripDashboardFollowState"
+      class="runtrip-dashboard-follow-state"
+    >
+      따라가기 ON
+    </span>
+  </div>
+
+  <div class="runtrip-dashboard-timer-card">
+    <span>경과 시간</span>
+
+    <strong id="runTripDashboardTimer">
+      00:00
+    </strong>
+  </div>
+
+  <div class="runtrip-dashboard-distance-card">
+    <span>실제 이동 거리</span>
+
+    <strong id="runTripDashboardDistance">
+      0.00 km
+    </strong>
+  </div>
+
+  <div class="runtrip-dashboard-stats">
+    <div>
+      <span>현재 Pace</span>
+      <strong id="runTripDashboardCurrentPace">
+        --'--"
+      </strong>
+    </div>
+
+    <div>
+      <span>평균 Pace</span>
+      <strong id="runTripDashboardAveragePace">
+        --'--"
+      </strong>
+    </div>
+
+    <div>
+      <span>전체 거리</span>
+      <strong id="runTripDashboardPlannedDistance">
+        0.0 km
+      </strong>
+    </div>
+
+    <div>
+      <span>남은 거리</span>
+      <strong id="runTripDashboardRemainingDistance">
+        0.0 km
+      </strong>
+    </div>
+  </div>
+
+  <div class="runtrip-dashboard-remaining-time">
+    <span>예상 남은 시간</span>
+
+    <strong id="runTripDashboardRemainingTime">
+      약 0분
+    </strong>
+  </div>
+
+  <div class="runtrip-dashboard-actions">
+    <button
+      id="pauseRunTripBtn"
+      class="runtrip-dashboard-pause-btn"
+      type="button"
+    >
+      일시정지
+    </button>
+
+    <button
+      id="endRunTripBtn"
+      class="runtrip-dashboard-end-btn"
+      type="button"
+    >
+      RUNTRIP 종료
+    </button>
+  </div>
+`;
+
+runTripEditorHeader.insertAdjacentElement(
+  'afterend',
+  runTripDashboard
+);
+
+const runTripDashboardTimer = document.getElementById(
+  'runTripDashboardTimer'
+);
+
+const runTripDashboardDistance = document.getElementById(
+  'runTripDashboardDistance'
+);
+
+const runTripDashboardCurrentPace = document.getElementById(
+  'runTripDashboardCurrentPace'
+);
+
+const runTripDashboardAveragePace = document.getElementById(
+  'runTripDashboardAveragePace'
+);
+
+const runTripDashboardPlannedDistance = document.getElementById(
+  'runTripDashboardPlannedDistance'
+);
+
+const runTripDashboardRemainingDistance = document.getElementById(
+  'runTripDashboardRemainingDistance'
+);
+
+const runTripDashboardRemainingTime = document.getElementById(
+  'runTripDashboardRemainingTime'
+);
+
+const runTripDashboardGps = document.getElementById(
+  'runTripDashboardGps'
+);
+
+const runTripDashboardFollowState = document.getElementById(
+  'runTripDashboardFollowState'
+);
+
+const pauseRunTripBtn = document.getElementById(
+  'pauseRunTripBtn'
+);
+
+const endRunTripBtn = document.getElementById(
+  'endRunTripBtn'
+);
 const confirmedRunTripOrigin = document.getElementById(
   'confirmedRunTripOrigin'
 );
@@ -1181,6 +1326,242 @@ const startRunTripFollowBtn = document.getElementById(
 let isRunTripFollowing = false;
 let runTripFollowWatchId = null;
 let runTripFollowMarker = null;
+let isRunTripPaused = false;
+
+let runTripElapsedSeconds = 0;
+let runTripTimerInterval = null;
+
+let runTripActualDistanceMeters = 0;
+let runTripLastValidPosition = null;
+let runTripLastAcceptedTime = null;
+
+let runTripCurrentPaceText = `--'--"`;
+function formatRunTripTimer(totalSeconds) {
+  const safeSeconds = Math.max(
+    0,
+    Math.floor(totalSeconds)
+  );
+
+  const hours = Math.floor(
+    safeSeconds / 3600
+  );
+
+  const minutes = Math.floor(
+    (safeSeconds % 3600) / 60
+  );
+
+  const secondsPart =
+    safeSeconds % 60;
+
+  if (hours > 0) {
+    return [
+      String(hours).padStart(2, '0'),
+      String(minutes).padStart(2, '0'),
+      String(secondsPart).padStart(2, '0')
+    ].join(':');
+  }
+
+  return [
+    String(minutes).padStart(2, '0'),
+    String(secondsPart).padStart(2, '0')
+  ].join(':');
+}
+
+function getRunTripPlannedDistanceMeters() {
+  if (!latestRunTripRouteSummary) {
+    return 0;
+  }
+
+  return (
+    Number(
+      latestRunTripRouteSummary.distanceKm
+    ) || 0
+  ) * 1000;
+}
+
+function getRunTripRemainingDistanceMeters() {
+  return Math.max(
+    0,
+    getRunTripPlannedDistanceMeters() -
+      runTripActualDistanceMeters
+  );
+}
+
+function getRunTripEstimatedRemainingSeconds() {
+  const plannedDistanceMeters =
+    getRunTripPlannedDistanceMeters();
+
+  const remainingDistanceMeters =
+    getRunTripRemainingDistanceMeters();
+
+  if (
+    plannedDistanceMeters <= 0 ||
+    remainingDistanceMeters <= 0
+  ) {
+    return 0;
+  }
+
+  if (
+    runTripActualDistanceMeters >= 50 &&
+    runTripElapsedSeconds > 0
+  ) {
+    const averageSecondsPerMeter =
+      runTripElapsedSeconds /
+      runTripActualDistanceMeters;
+
+    return (
+      remainingDistanceMeters *
+      averageSecondsPerMeter
+    );
+  }
+
+  const plannedDurationSeconds =
+    (
+      Number(
+        latestRunTripRouteSummary
+          ?.durationMinutes
+      ) || 0
+    ) * 60;
+
+  return (
+    plannedDurationSeconds *
+    (
+      remainingDistanceMeters /
+      plannedDistanceMeters
+    )
+  );
+}
+
+function formatRunTripRemainingTime(secondsValue) {
+  const totalMinutes = Math.max(
+    0,
+    Math.ceil(secondsValue / 60)
+  );
+
+  if (totalMinutes < 60) {
+    return `약 ${totalMinutes}분`;
+  }
+
+  const hours = Math.floor(
+    totalMinutes / 60
+  );
+
+  const minutes =
+    totalMinutes % 60;
+
+  if (minutes === 0) {
+    return `약 ${hours}시간`;
+  }
+
+  return `약 ${hours}시간 ${minutes}분`;
+}
+
+function updateRunTripDashboard() {
+  const plannedDistanceMeters =
+    getRunTripPlannedDistanceMeters();
+
+  const remainingDistanceMeters =
+    getRunTripRemainingDistanceMeters();
+
+  runTripDashboardTimer.textContent =
+    formatRunTripTimer(
+      runTripElapsedSeconds
+    );
+
+  runTripDashboardDistance.textContent =
+    `${(
+      runTripActualDistanceMeters / 1000
+    ).toFixed(2)} km`;
+
+  runTripDashboardPlannedDistance.textContent =
+    `${(
+      plannedDistanceMeters / 1000
+    ).toFixed(1)} km`;
+
+  runTripDashboardRemainingDistance.textContent =
+    `${(
+      remainingDistanceMeters / 1000
+    ).toFixed(2)} km`;
+
+  runTripDashboardCurrentPace.textContent =
+    runTripCurrentPaceText;
+
+  runTripDashboardAveragePace.textContent =
+    formatPaceFromSeconds(
+      runTripElapsedSeconds,
+      runTripActualDistanceMeters
+    );
+
+  runTripDashboardRemainingTime.textContent =
+    formatRunTripRemainingTime(
+      getRunTripEstimatedRemainingSeconds()
+    );
+
+  runTripDashboardGps.textContent =
+    isRunTripPaused
+      ? 'GPS 일시정지'
+      : runTripLastValidPosition
+        ? 'GPS 연결됨'
+        : 'GPS 위치 확인 중';
+
+  runTripDashboardFollowState.textContent =
+    isRunTripPaused
+      ? '따라가기 멈춤'
+      : '따라가기 ON';
+
+  runTripDashboardFollowState.classList.toggle(
+    'is-paused',
+    isRunTripPaused
+  );
+
+  pauseRunTripBtn.textContent =
+    isRunTripPaused
+      ? '다시 시작'
+      : '일시정지';
+}
+
+function resetRunTripDashboard() {
+  clearInterval(
+    runTripTimerInterval
+  );
+
+  runTripTimerInterval = null;
+
+  runTripElapsedSeconds = 0;
+  runTripActualDistanceMeters = 0;
+
+  runTripLastValidPosition = null;
+  runTripLastAcceptedTime = null;
+
+  runTripCurrentPaceText = `--'--"`;
+  isRunTripPaused = false;
+
+  runTripDashboard.classList.add(
+    'hidden'
+  );
+
+  updateRunTripDashboard();
+}
+
+function startRunTripTimer() {
+  clearInterval(
+    runTripTimerInterval
+  );
+
+  runTripTimerInterval =
+    setInterval(function () {
+      if (
+        !isRunTripFollowing ||
+        isRunTripPaused
+      ) {
+        return;
+      }
+
+      runTripElapsedSeconds++;
+
+      updateRunTripDashboard();
+    }, 1000);
+}
 function showRunTripEditMode() {
   stopRunTripFollowing({
     restoreRoute: false
@@ -1287,18 +1668,29 @@ function stopRunTripFollowing(options = {}) {
     );
   }
 
+  clearInterval(
+    runTripTimerInterval
+  );
+
+  runTripTimerInterval = null;
   runTripFollowWatchId = null;
+
   isRunTripFollowing = false;
+  isRunTripPaused = false;
 
   runTripPanel.classList.remove(
     'runtrip-following'
   );
 
   if (runTripFollowMarker) {
-    map.removeLayer(runTripFollowMarker);
+    map.removeLayer(
+      runTripFollowMarker
+    );
+
     runTripFollowMarker = null;
   }
 
+  resetRunTripDashboard();
   updateRunTripFollowButton();
 
   if (
@@ -1312,34 +1704,23 @@ function stopRunTripFollowing(options = {}) {
     });
   }
 }
-
-function startRunTripFollowing() {
-  if (!latestRunTripRouteSummary) {
-    alert(
-      '먼저 실제 보행 경로를 확인해 주세요.'
+function startRunTripLocationWatch() {
+  if (
+    runTripFollowWatchId !== null &&
+    runTripFollowWatchId !== undefined
+  ) {
+    navigator.geolocation.clearWatch(
+      runTripFollowWatchId
     );
-    return;
   }
-
-  if (!navigator.geolocation) {
-    alert(
-      '이 기기에서는 현재 위치 기능을 사용할 수 없어요.'
-    );
-    return;
-  }
-
-  isRunTripFollowing = true;
-
-  runTripPanel.classList.add(
-    'runtrip-following'
-  );
-
-  updateRunTripFollowButton();
 
   runTripFollowWatchId =
     navigator.geolocation.watchPosition(
       function (position) {
-        if (!isRunTripFollowing) {
+        if (
+          !isRunTripFollowing ||
+          isRunTripPaused
+        ) {
           return;
         }
 
@@ -1349,20 +1730,87 @@ function startRunTripFollowing() {
         const longitude =
           position.coords.longitude;
 
+        const accuracy =
+          position.coords.accuracy;
+
+        if (accuracy > MAX_ACCURACY) {
+          runTripDashboardGps.textContent =
+            `GPS 정확도 확인 중 · ${Math.round(
+              accuracy
+            )}m`;
+
+          return;
+        }
+
+        const currentTime =
+          Date.now();
+
+        const currentPosition = {
+          latitude: latitude,
+          longitude: longitude
+        };
+
+        if (runTripLastValidPosition) {
+          const distanceFromLast =
+            calculateDistance(
+              runTripLastValidPosition.latitude,
+              runTripLastValidPosition.longitude,
+              latitude,
+              longitude
+            );
+
+          if (
+            distanceFromLast >= MIN_DISTANCE
+          ) {
+            runTripActualDistanceMeters +=
+              distanceFromLast;
+
+            if (runTripLastAcceptedTime) {
+              const segmentSeconds =
+                (
+                  currentTime -
+                  runTripLastAcceptedTime
+                ) / 1000;
+
+              if (segmentSeconds > 0) {
+                runTripCurrentPaceText =
+                  formatPaceFromSeconds(
+                    segmentSeconds,
+                    distanceFromLast
+                  );
+              }
+            }
+
+            runTripLastValidPosition =
+              currentPosition;
+
+            runTripLastAcceptedTime =
+              currentTime;
+          }
+        } else {
+          runTripLastValidPosition =
+            currentPosition;
+
+          runTripLastAcceptedTime =
+            currentTime;
+        }
+
         const currentLatLng = [
           latitude,
           longitude
         ];
 
         if (!runTripFollowMarker) {
-          runTripFollowMarker = L.marker(
-            currentLatLng,
-            {
-              icon:
-                createRunTripFollowMarkerIcon(),
-              zIndexOffset: 1000
-            }
-          ).addTo(map);
+          runTripFollowMarker =
+            L.marker(
+              currentLatLng,
+              {
+                icon:
+                  createRunTripFollowMarkerIcon(),
+
+                zIndexOffset: 1000
+              }
+            ).addTo(map);
         } else {
           runTripFollowMarker.setLatLng(
             currentLatLng
@@ -1371,11 +1819,16 @@ function startRunTripFollowing() {
 
         map.setView(
           currentLatLng,
-          Math.max(map.getZoom(), 17),
+          Math.max(
+            map.getZoom(),
+            17
+          ),
           {
             animate: false
           }
         );
+
+        updateRunTripDashboard();
       },
 
       function (error) {
@@ -1383,6 +1836,9 @@ function startRunTripFollowing() {
           'RunTrip 위치 추적 오류:',
           error
         );
+
+        runTripDashboardGps.textContent =
+          'GPS 연결 실패';
 
         stopRunTripFollowing();
 
@@ -1397,6 +1853,42 @@ function startRunTripFollowing() {
         maximumAge: 1000
       }
     );
+}
+function startRunTripFollowing() {
+  if (!latestRunTripRouteSummary) {
+    alert(
+      '먼저 실제 보행 경로를 확인해 주세요.'
+    );
+
+    return;
+  }
+
+  if (!navigator.geolocation) {
+    alert(
+      '이 기기에서는 현재 위치 기능을 사용할 수 없어요.'
+    );
+
+    return;
+  }
+
+  resetRunTripDashboard();
+
+  isRunTripFollowing = true;
+  isRunTripPaused = false;
+
+  runTripPanel.classList.add(
+    'runtrip-following'
+  );
+
+  runTripDashboard.classList.remove(
+    'hidden'
+  );
+
+  updateRunTripFollowButton();
+  updateRunTripDashboard();
+
+  startRunTripTimer();
+  startRunTripLocationWatch();
 }
 function getPlaceSearchUrl(query) {
   const baseUrl =
@@ -3293,6 +3785,67 @@ startRunTripFollowBtn.addEventListener(
     }
 
     startRunTripFollowing();
+  }
+);
+pauseRunTripBtn.addEventListener(
+  'click',
+  function () {
+    if (!isRunTripFollowing) {
+      return;
+    }
+
+    if (isRunTripPaused) {
+      isRunTripPaused = false;
+
+      runTripLastValidPosition = null;
+      runTripLastAcceptedTime = null;
+
+      startRunTripTimer();
+      startRunTripLocationWatch();
+
+      updateRunTripDashboard();
+
+      return;
+    }
+
+    isRunTripPaused = true;
+
+    clearInterval(
+      runTripTimerInterval
+    );
+
+    runTripTimerInterval = null;
+
+    if (
+      runTripFollowWatchId !== null &&
+      runTripFollowWatchId !== undefined
+    ) {
+      navigator.geolocation.clearWatch(
+        runTripFollowWatchId
+      );
+    }
+
+    runTripFollowWatchId = null;
+
+    runTripLastValidPosition = null;
+    runTripLastAcceptedTime = null;
+
+    updateRunTripDashboard();
+  }
+);
+
+endRunTripBtn.addEventListener(
+  'click',
+  function () {
+    const shouldEnd = window.confirm(
+      '현재 RUNTRIP을 종료할까요?'
+    );
+
+    if (!shouldEnd) {
+      return;
+    }
+
+    stopRunTripFollowing();
   }
 );
 updateRunTripCreateButton();
