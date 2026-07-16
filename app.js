@@ -1295,6 +1295,10 @@ const pauseRunTripBtn = document.getElementById(
 const endRunTripBtn = document.getElementById(
   'endRunTripBtn'
 );
+const runTripConfirmedRoute =
+  runTripConfirmedSummary.querySelector(
+    '.runtrip-confirmed-route'
+  );
 const confirmedRunTripOrigin = document.getElementById(
   'confirmedRunTripOrigin'
 );
@@ -1623,7 +1627,8 @@ function showRunTripConfirmedMode() {
   runTripConfirmedSummary.classList.remove('hidden');
 
   createRunTripBtn.disabled = false;
-  createRunTripBtn.textContent = '수정';
+  createRunTripBtn.textContent =
+  'RUNTRIP 시작';
 
   requestAnimationFrame(function () {
   requestAnimationFrame(function () {
@@ -1639,6 +1644,54 @@ function showRunTripConfirmedMode() {
   });
 });
 }
+function openConfirmedRunTripRouteEditor() {
+  if (
+    !isRunTripConfirmed ||
+    isRunTripFollowing
+  ) {
+    return;
+  }
+
+  showRunTripEditMode();
+}
+
+runTripConfirmedRoute.setAttribute(
+  'role',
+  'button'
+);
+
+runTripConfirmedRoute.setAttribute(
+  'tabindex',
+  '0'
+);
+
+runTripConfirmedRoute.setAttribute(
+  'aria-label',
+  '출발지 경유지 도착지 수정'
+);
+
+runTripConfirmedRoute.addEventListener(
+  'click',
+  function () {
+    openConfirmedRunTripRouteEditor();
+  }
+);
+
+runTripConfirmedRoute.addEventListener(
+  'keydown',
+  function (event) {
+    if (
+      event.key !== 'Enter' &&
+      event.key !== ' '
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+
+    openConfirmedRunTripRouteEditor();
+  }
+);
 function updateRunTripFollowButton() {
   if (!startRunTripFollowBtn) {
     return;
@@ -3744,7 +3797,7 @@ createRunTripBtn.addEventListener(
   'click',
   async function () {
     if (isRunTripConfirmed) {
-      showRunTripEditMode();
+      startRunTripFollowing();
       return;
     }
 

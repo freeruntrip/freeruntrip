@@ -2717,3 +2717,78 @@ height: 100dvh;
     font-size: 15px;
   }
 }
+/* RunTrip 확인 화면:
+   별도 큰 시작 버튼 제거 */
+.runtrip-confirmed .runtrip-follow-actions {
+  display: none;
+}
+
+/* 출발지 · 경유지 · 도착지 영역을
+   경로 수정 버튼처럼 사용 */
+.runtrip-confirmed-route {
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.runtrip-confirmed-route:active {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* 확인 화면의 오른쪽 버튼 */
+.runtrip-confirmed
+.runtrip-editor-actions
+.create-runtrip-btn {
+  background: #facc15;
+  color: #111827;
+}
+/* 확인 화면 버튼 비율:
+   취소보다 RUNTRIP 시작을 더 강조 */
+.runtrip-confirmed
+.runtrip-editor-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.7fr;
+  gap: 12px;
+}
+
+.runtrip-confirmed
+.runtrip-editor-actions
+.runtrip-editor-action-btn {
+  width: 100%;
+  max-width: none;
+  flex: none;
+}
+
+.runtrip-confirmed
+.runtrip-editor-actions
+.runtrip-cancel-btn {
+  font-size: 13px;
+}
+
+.runtrip-confirmed
+.runtrip-editor-actions
+.create-runtrip-btn {
+  width: 100%;
+  white-space: nowrap;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+}
+@media (max-width: 390px) {
+  .runtrip-confirmed
+  .runtrip-editor-actions {
+    grid-template-columns: 1fr 1.65fr;
+    gap: 10px;
+  }
+
+  .runtrip-confirmed
+  .runtrip-editor-actions
+  .runtrip-cancel-btn {
+    font-size: 12px;
+  }
+
+  .runtrip-confirmed
+  .runtrip-editor-actions
+  .create-runtrip-btn {
+    font-size: 13px;
+  }
+}
