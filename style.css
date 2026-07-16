@@ -2797,3 +2797,43 @@ height: 100dvh;
 .runtrip-following .runtrip-editor-actions {
   display: none !important;
 }
+/* RunTrip 실행 화면 간소화:
+   평균 Pace · 전체 거리 · 남은 거리 */
+.runtrip-dashboard-stats {
+  grid-template-columns: repeat(3, 1fr);
+  border-bottom: none;
+}
+
+.runtrip-dashboard-stats > div {
+  padding: 12px 6px;
+  border-top: none !important;
+}
+
+.runtrip-dashboard-stats > div + div {
+  border-left: 1px solid
+    rgba(255, 255, 255, 0.1);
+}
+
+.runtrip-dashboard-stats strong {
+  font-size: 14px;
+}
+
+/* 기존 예상 남은 시간 스타일은 더 이상 사용하지 않음 */
+.runtrip-dashboard-remaining-time {
+  display: none;
+}
+
+/* 정보가 줄어든 만큼 패널 세로 공간 축소 */
+.runtrip-dashboard-timer-card {
+  padding-top: 8px;
+  padding-bottom: 5px;
+}
+
+.runtrip-dashboard-distance-card {
+  padding-top: 7px;
+  padding-bottom: 10px;
+}
+
+.runtrip-dashboard-actions {
+  padding-top: 10px;
+}

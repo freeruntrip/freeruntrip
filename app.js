@@ -1190,14 +1190,7 @@ runTripDashboard.innerHTML = `
     </strong>
   </div>
 
-  <div class="runtrip-dashboard-stats">
-    <div>
-      <span>현재 Pace</span>
-      <strong id="runTripDashboardCurrentPace">
-        --'--"
-      </strong>
-    </div>
-
+    <div class="runtrip-dashboard-stats">
     <div>
       <span>평균 Pace</span>
       <strong id="runTripDashboardAveragePace">
@@ -1218,14 +1211,6 @@ runTripDashboard.innerHTML = `
         0.0 km
       </strong>
     </div>
-  </div>
-
-  <div class="runtrip-dashboard-remaining-time">
-    <span>예상 남은 시간</span>
-
-    <strong id="runTripDashboardRemainingTime">
-      약 0분
-    </strong>
   </div>
 
   <div class="runtrip-dashboard-actions">
@@ -1260,10 +1245,6 @@ const runTripDashboardDistance = document.getElementById(
   'runTripDashboardDistance'
 );
 
-const runTripDashboardCurrentPace = document.getElementById(
-  'runTripDashboardCurrentPace'
-);
-
 const runTripDashboardAveragePace = document.getElementById(
   'runTripDashboardAveragePace'
 );
@@ -1274,10 +1255,6 @@ const runTripDashboardPlannedDistance = document.getElementById(
 
 const runTripDashboardRemainingDistance = document.getElementById(
   'runTripDashboardRemainingDistance'
-);
-
-const runTripDashboardRemainingTime = document.getElementById(
-  'runTripDashboardRemainingTime'
 );
 
 const runTripDashboardGps = document.getElementById(
@@ -1337,9 +1314,7 @@ let runTripTimerInterval = null;
 
 let runTripActualDistanceMeters = 0;
 let runTripLastValidPosition = null;
-let runTripLastAcceptedTime = null;
 
-let runTripCurrentPaceText = `--'--"`;
 function formatRunTripTimer(totalSeconds) {
   const safeSeconds = Math.max(
     0,
@@ -1391,75 +1366,6 @@ function getRunTripRemainingDistanceMeters() {
   );
 }
 
-function getRunTripEstimatedRemainingSeconds() {
-  const plannedDistanceMeters =
-    getRunTripPlannedDistanceMeters();
-
-  const remainingDistanceMeters =
-    getRunTripRemainingDistanceMeters();
-
-  if (
-    plannedDistanceMeters <= 0 ||
-    remainingDistanceMeters <= 0
-  ) {
-    return 0;
-  }
-
-  if (
-    runTripActualDistanceMeters >= 50 &&
-    runTripElapsedSeconds > 0
-  ) {
-    const averageSecondsPerMeter =
-      runTripElapsedSeconds /
-      runTripActualDistanceMeters;
-
-    return (
-      remainingDistanceMeters *
-      averageSecondsPerMeter
-    );
-  }
-
-  const plannedDurationSeconds =
-    (
-      Number(
-        latestRunTripRouteSummary
-          ?.durationMinutes
-      ) || 0
-    ) * 60;
-
-  return (
-    plannedDurationSeconds *
-    (
-      remainingDistanceMeters /
-      plannedDistanceMeters
-    )
-  );
-}
-
-function formatRunTripRemainingTime(secondsValue) {
-  const totalMinutes = Math.max(
-    0,
-    Math.ceil(secondsValue / 60)
-  );
-
-  if (totalMinutes < 60) {
-    return `약 ${totalMinutes}분`;
-  }
-
-  const hours = Math.floor(
-    totalMinutes / 60
-  );
-
-  const minutes =
-    totalMinutes % 60;
-
-  if (minutes === 0) {
-    return `약 ${hours}시간`;
-  }
-
-  return `약 ${hours}시간 ${minutes}분`;
-}
-
 function updateRunTripDashboard() {
   const plannedDistanceMeters =
     getRunTripPlannedDistanceMeters();
@@ -1487,18 +1393,10 @@ function updateRunTripDashboard() {
       remainingDistanceMeters / 1000
     ).toFixed(2)} km`;
 
-  runTripDashboardCurrentPace.textContent =
-    runTripCurrentPaceText;
-
   runTripDashboardAveragePace.textContent =
     formatPaceFromSeconds(
       runTripElapsedSeconds,
       runTripActualDistanceMeters
-    );
-
-  runTripDashboardRemainingTime.textContent =
-    formatRunTripRemainingTime(
-      getRunTripEstimatedRemainingSeconds()
     );
 
   runTripDashboardGps.textContent =
@@ -1535,9 +1433,7 @@ function resetRunTripDashboard() {
   runTripActualDistanceMeters = 0;
 
   runTripLastValidPosition = null;
-  runTripLastAcceptedTime = null;
 
-  runTripCurrentPaceText = `--'--"`;
   isRunTripPaused = false;
 
   runTripDashboard.classList.add(
@@ -1795,9 +1691,6 @@ function startRunTripLocationWatch() {
           return;
         }
 
-        const currentTime =
-          Date.now();
-
         const currentPosition = {
           latitude: latitude,
           longitude: longitude
@@ -1818,34 +1711,14 @@ function startRunTripLocationWatch() {
             runTripActualDistanceMeters +=
               distanceFromLast;
 
-            if (runTripLastAcceptedTime) {
-              const segmentSeconds =
-                (
-                  currentTime -
-                  runTripLastAcceptedTime
-                ) / 1000;
-
-              if (segmentSeconds > 0) {
-                runTripCurrentPaceText =
-                  formatPaceFromSeconds(
-                    segmentSeconds,
-                    distanceFromLast
-                  );
-              }
-            }
-
             runTripLastValidPosition =
               currentPosition;
 
-            runTripLastAcceptedTime =
-              currentTime;
           }
         } else {
           runTripLastValidPosition =
             currentPosition;
 
-          runTripLastAcceptedTime =
-            currentTime;
         }
 
         const currentLatLng = [
@@ -3851,7 +3724,6 @@ pauseRunTripBtn.addEventListener(
       isRunTripPaused = false;
 
       runTripLastValidPosition = null;
-      runTripLastAcceptedTime = null;
 
       startRunTripTimer();
       startRunTripLocationWatch();
@@ -3881,7 +3753,6 @@ pauseRunTripBtn.addEventListener(
     runTripFollowWatchId = null;
 
     runTripLastValidPosition = null;
-    runTripLastAcceptedTime = null;
 
     updateRunTripDashboard();
   }
