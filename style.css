@@ -2792,3 +2792,8 @@ height: 100dvh;
     font-size: 13px;
   }
 }
+/* RUNTRIP 실행 중에는
+   확인 화면의 취소 · 시작 버튼을 숨긴다 */
+.runtrip-following .runtrip-editor-actions {
+  display: none !important;
+}
