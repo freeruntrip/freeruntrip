@@ -1,8 +1,20 @@
-const map = L.map('map').setView([37.5665, 126.9780], 13);
+const map = L.map('map', {
+  zoomControl: true,
+  preferCanvas: true
+}).setView([37.5665, 126.9780], 13);
 
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; OpenStreetMap contributors'
-}).addTo(map);
+function createFreeRunTripTileLayer() {
+  return L.tileLayer(
+    'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {
+      attribution: '&copy; OpenStreetMap contributors',
+      className: 'freeruntrip-map-tile',
+      maxZoom: 19
+    }
+  );
+}
+
+createFreeRunTripTileLayer().addTo(map);
 const startBtn = document.getElementById('startBtn');
 const pauseBtn = document.getElementById('pauseBtn');
 const stopBtn = document.getElementById('stopBtn');
@@ -477,9 +489,7 @@ function showDetailMap(record) {
   if (!detailMap) {
     detailMap = L.map('detailMap');
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(detailMap);
+    createFreeRunTripTileLayer().addTo(detailMap);
   }
 
   detailRouteLines.forEach(function (line) {
@@ -2533,9 +2543,14 @@ function getRunTripPlaceLatLng(place) {
 function createRunTripPreviewMarkerIcon(label, type) {
   return L.divIcon({
     className: `runtrip-preview-marker ${type}`,
-    html: `<span>${escapePlaceSearchText(label)}</span>`,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18]
+    html: `
+      <div class="runtrip-preview-marker-body">
+        <span>${escapePlaceSearchText(label)}</span>
+      </div>
+      <div class="runtrip-preview-marker-tip"></div>
+    `,
+    iconSize: [42, 50],
+    iconAnchor: [21, 48]
   });
 }
 function createRunTripFollowMarkerIcon() {
