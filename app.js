@@ -1201,27 +1201,48 @@ runTripDashboard.innerHTML = `
   </div>
 
     <div class="runtrip-dashboard-stats">
-    <div>
-      <span>평균 Pace</span>
-      <strong id="runTripDashboardAveragePace">
-        --'--"
-      </strong>
-    </div>
-
-    <div>
-      <span>전체 거리</span>
-      <strong id="runTripDashboardPlannedDistance">
-        0.0 km
-      </strong>
-    </div>
-
-    <div>
-      <span>남은 거리</span>
-      <strong id="runTripDashboardRemainingDistance">
-        0.0 km
-      </strong>
-    </div>
+  <div>
+    <span>평균 Pace</span>
+    <strong id="runTripDashboardAveragePace">
+      --'--"
+    </strong>
   </div>
+
+  <div>
+    <span>전체 거리</span>
+    <strong id="runTripDashboardPlannedDistance">
+      0.0 km
+    </strong>
+  </div>
+
+  <div>
+    <span>칼로리</span>
+    <strong id="runTripDashboardCalories">
+      0 kcal
+    </strong>
+  </div>
+
+  <div>
+    <span>고도 상승</span>
+    <strong id="runTripDashboardElevationGain">
+      0 m
+    </strong>
+  </div>
+
+  <div>
+    <span>심박수</span>
+    <strong id="runTripDashboardHeartRate">
+      -- bpm
+    </strong>
+  </div>
+
+  <div>
+    <span>케이던스</span>
+    <strong id="runTripDashboardCadence">
+      -- spm
+    </strong>
+  </div>
+</div>
 
   <div class="runtrip-dashboard-actions">
     <button
@@ -1262,11 +1283,21 @@ const runTripDashboardAveragePace = document.getElementById(
 const runTripDashboardPlannedDistance = document.getElementById(
   'runTripDashboardPlannedDistance'
 );
-
-const runTripDashboardRemainingDistance = document.getElementById(
-  'runTripDashboardRemainingDistance'
+const runTripDashboardCalories = document.getElementById(
+  'runTripDashboardCalories'
 );
 
+const runTripDashboardElevationGain = document.getElementById(
+  'runTripDashboardElevationGain'
+);
+
+const runTripDashboardHeartRate = document.getElementById(
+  'runTripDashboardHeartRate'
+);
+
+const runTripDashboardCadence = document.getElementById(
+  'runTripDashboardCadence'
+);
 const runTripDashboardGps = document.getElementById(
   'runTripDashboardGps'
 );
@@ -1324,7 +1355,7 @@ let runTripTimerInterval = null;
 
 let runTripActualDistanceMeters = 0;
 let runTripLastValidPosition = null;
-
+const DEFAULT_RUNNER_WEIGHT_KG = 70;
 function formatRunTripTimer(totalSeconds) {
   const safeSeconds = Math.max(
     0,
@@ -1355,7 +1386,16 @@ function formatRunTripTimer(totalSeconds) {
     String(secondsPart).padStart(2, '0')
   ].join(':');
 }
+function calculateRunTripCalories(distanceMeters) {
+  const distanceKm = Math.max(
+    0,
+    Number(distanceMeters) || 0
+  ) / 1000;
 
+  return Math.round(
+    DEFAULT_RUNNER_WEIGHT_KG * distanceKm
+  );
+}
 function getRunTripPlannedDistanceMeters() {
   if (!latestRunTripRouteSummary) {
     return 0;
@@ -1368,40 +1408,36 @@ function getRunTripPlannedDistanceMeters() {
   ) * 1000;
 }
 
-function getRunTripRemainingDistanceMeters() {
-  return Math.max(
-    0,
-    getRunTripPlannedDistanceMeters() -
-      runTripActualDistanceMeters
-  );
-}
-
 function updateRunTripDashboard() {
   const plannedDistanceMeters =
     getRunTripPlannedDistanceMeters();
-
-  const remainingDistanceMeters =
-    getRunTripRemainingDistanceMeters();
 
   runTripDashboardTimer.textContent =
     formatRunTripTimer(
       runTripElapsedSeconds
     );
-
   runTripDashboardDistance.textContent =
-    `${(
-      runTripActualDistanceMeters / 1000
-    ).toFixed(2)} km`;
-
+  `${(
+    runTripActualDistanceMeters / 1000
+  ).toFixed(2)} km`;
   runTripDashboardPlannedDistance.textContent =
     `${(
       plannedDistanceMeters / 1000
     ).toFixed(1)} km`;
 
-  runTripDashboardRemainingDistance.textContent =
-    `${(
-      remainingDistanceMeters / 1000
-    ).toFixed(2)} km`;
+  runTripDashboardCalories.textContent =
+  `${calculateRunTripCalories(
+    runTripActualDistanceMeters
+  )} kcal`;
+
+runTripDashboardElevationGain.textContent =
+  '0 m';
+
+runTripDashboardHeartRate.textContent =
+  '-- bpm';
+
+runTripDashboardCadence.textContent =
+  '-- spm';
 
   runTripDashboardAveragePace.textContent =
     formatPaceFromSeconds(

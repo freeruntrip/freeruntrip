@@ -3029,3 +3029,99 @@ option {
 .leaflet-control-attribution a {
   color: #facc15 !important;
 }
+/* ========================================
+   RUNTRIP 실행 정보 6칸 최종 정리
+   1행: 평균 Pace · 전체 거리 · 칼로리
+   2행: 고도 상승 · 심박수 · 케이던스
+======================================== */
+
+.runtrip-dashboard-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+
+  border-top: 1px solid
+    rgba(255, 255, 255, 0.1);
+
+  border-bottom: none;
+}
+
+.runtrip-dashboard-stats > div {
+  min-width: 0;
+  padding: 10px 6px;
+
+  border: none;
+  text-align: center;
+}
+
+/* 각 행의 두 번째·세 번째 칸에 세로 구분선 */
+.runtrip-dashboard-stats > div:nth-child(3n + 2),
+.runtrip-dashboard-stats > div:nth-child(3n + 3) {
+  border-left: 1px solid
+    rgba(255, 255, 255, 0.1);
+}
+
+/* 두 번째 행 위쪽 가로 구분선 */
+.runtrip-dashboard-stats > div:nth-child(n + 4) {
+  border-top: 1px solid
+    rgba(255, 255, 255, 0.1);
+}
+
+.runtrip-dashboard-stats span {
+  display: block;
+  margin-bottom: 5px;
+
+  overflow: hidden;
+
+  color: #94a3b8;
+
+  font-size: 9px;
+  line-height: 1.2;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtrip-dashboard-stats strong {
+  display: block;
+
+  overflow: hidden;
+
+  color: #f8fafc;
+
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.25;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 칼로리 값은 브랜드 포인트로 강조 */
+#runTripDashboardCalories {
+  color: #facc15;
+}
+
+/* 실행 버튼과 정보 영역 사이 간격 */
+.runtrip-dashboard-actions {
+  padding-top: 9px;
+}
+
+/* 작은 아이폰 화면 최적화 */
+@media (max-width: 390px) {
+  .runtrip-dashboard-stats > div {
+    padding: 9px 4px;
+  }
+
+  .runtrip-dashboard-stats span {
+    margin-bottom: 4px;
+    font-size: 8px;
+  }
+
+  .runtrip-dashboard-stats strong {
+    font-size: 12px;
+  }
+
+  .runtrip-dashboard-actions {
+    padding-top: 8px;
+  }
+}
