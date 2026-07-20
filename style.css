@@ -3125,3 +3125,18 @@ option {
     padding-top: 8px;
   }
 }
+.hidden {
+  display: none !important;
+}
+
+.running-idle-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.running-navigation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

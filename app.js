@@ -19,6 +19,13 @@ const startBtn = document.getElementById('startBtn');
 const pauseBtn = document.getElementById('pauseBtn');
 const stopBtn = document.getElementById('stopBtn');
 const timer = document.getElementById('timer');
+const runningIdlePanel = document.getElementById(
+  'runningIdlePanel'
+);
+
+const runningDashboard = document.getElementById(
+  'runningDashboard'
+);
 
 let seconds = 0;
 let timerInterval;
@@ -61,10 +68,36 @@ let paused = false;
 let watchId;
 let lastValidPosition = null;
 let totalDistance = 0; // meters
+let totalElevationGain = 0;
+let lastValidAltitude = null;
 let recentPositions = [];
+
 const SMOOTHING_COUNT = 3;
 const distanceDisplay = document.getElementById('distance');
 const paceDisplay = document.getElementById('pace');
+const runningGpsStatus = document.getElementById(
+  'runningGpsStatus'
+);
+
+const runningCalories = document.getElementById(
+  'runningCalories'
+);
+
+const runningElevationGain = document.getElementById(
+  'runningElevationGain'
+);
+
+const runningHeartRate = document.getElementById(
+  'runningHeartRate'
+);
+
+const runningCadence = document.getElementById(
+  'runningCadence'
+);
+
+const runningGpsAccuracy = document.getElementById(
+  'runningGpsAccuracy'
+);
 const recordsList = document.getElementById('recordsList');
 const recordsSection = document.getElementById('records');
 const controlsSection = document.getElementById('controls');
@@ -742,9 +775,19 @@ renderRecordProfileFeed();
 startBtn.addEventListener('click', function () {
   console.log('러닝 시작 버튼 클릭됨');
 if (!isRunning) {
+  runningIdlePanel.classList.add('hidden');
+  runningDashboard.classList.remove('hidden');
   if (seconds === 0) {
     runStartTime = new Date();
+    totalElevationGain = 0;
+lastValidAltitude = null;
 
+runningCalories.textContent = '0 kcal';
+runningElevationGain.textContent = '0 m';
+runningHeartRate.textContent = '-- bpm';
+runningCadence.textContent = '-- spm';
+runningGpsStatus.textContent = 'GPS 위치 확인 중';
+runningGpsAccuracy.textContent = '확인 중';
   routeCoordinates = [];
   routeSegments = [];
   activeRouteSegment = [];
@@ -757,9 +800,10 @@ if (!isRunning) {
   }
 
   if (paused) {
-    routeLine = null;
-    lastValidPosition = null;
-    recentPositions = [];
+  routeLine = null;
+  lastValidPosition = null;
+  lastValidAltitude = null;
+  recentPositions = [];
 
    beginNewRouteSegment();
 
@@ -800,9 +844,26 @@ const accuracy = position.coords.accuracy;
 console.log(latitude, longitude, accuracy);
 
 if (accuracy > MAX_ACCURACY) {
-  console.log('GPS 정확도 낮음, 좌표 무시:', accuracy);
+  console.log(
+    'GPS 정확도 낮음, 좌표 무시:',
+    accuracy
+  );
+
+  runningGpsStatus.textContent =
+    'GPS 정확도 확인 중';
+
+  runningGpsAccuracy.textContent =
+    `${Math.round(accuracy)} m`;
+
   return;
 }
+
+runningGpsStatus.textContent =
+  'GPS 연결됨';
+
+runningGpsAccuracy.textContent =
+  `${Math.round(accuracy)} m`;
+
 const smoothedPosition = getSmoothedPosition(latitude, longitude);
 if (lastValidPosition) {
   const distanceFromLast = calculateDistance(
@@ -821,7 +882,7 @@ if (lastValidPosition) {
   const previousElapsedSeconds = lastGpsElapsedSeconds;
 
   totalDistance += distanceFromLast;
-
+  updateRunningElevation(position);
   addCompletedSplits(
     previousDistance,
     distanceFromLast,
@@ -830,12 +891,18 @@ if (lastValidPosition) {
   );
 
   distanceDisplay.textContent =
-    (totalDistance / 1000).toFixed(2) + ' km';
+  `${(totalDistance / 1000).toFixed(2)} km`;
 
-  if (totalDistance > 0 && seconds > 0) {
-    paceDisplay.textContent =
-      'Pace: ' + formatPaceFromSeconds(seconds, totalDistance);
-  }
+runningCalories.textContent =
+  `${calculateCalories(totalDistance)} kcal`;
+
+if (totalDistance > 0 && seconds > 0) {
+  paceDisplay.textContent =
+    formatPaceFromSeconds(
+      seconds,
+      totalDistance
+    );
+}
 
   console.log('총 이동거리:', totalDistance);
 }
@@ -902,6 +969,7 @@ routeLine = null;
 activeRouteSegment = null;
 
 lastValidPosition = null;
+lastValidAltitude = null;
 recentPositions = [];
 });
 stopBtn.addEventListener('click', function () {
@@ -943,8 +1011,22 @@ paceMoodModal.classList.add('hidden');
   seconds = 0;
   timer.textContent = '00:00';
   totalDistance = 0;
-  distanceDisplay.textContent = '0.00 km';
-  paceDisplay.textContent = 'Pace: --\'--"';
+totalElevationGain = 0;
+lastValidAltitude = null;
+
+distanceDisplay.textContent = '0.00 km';
+paceDisplay.textContent = `--'--"`;
+
+runningCalories.textContent = '0 kcal';
+runningElevationGain.textContent = '0 m';
+runningHeartRate.textContent = '-- bpm';
+runningCadence.textContent = '-- spm';
+
+runningGpsStatus.textContent =
+  'GPS 연결 준비';
+
+runningGpsAccuracy.textContent =
+  '대기 중';
  routeCoordinates = [];
 routeSegments = [];
 activeRouteSegment = [];
@@ -971,6 +1053,8 @@ lastGpsElapsedSeconds = 0;
   isRunning = false;
   runStartTime = null;
   paused = false;
+  runningDashboard.classList.add('hidden');
+  runningIdlePanel.classList.remove('hidden');
 });
 detailNumericPace.addEventListener('click', function () {
   if (detailNumericPace.dataset.showing === 'number') {
@@ -1386,7 +1470,7 @@ function formatRunTripTimer(totalSeconds) {
     String(secondsPart).padStart(2, '0')
   ].join(':');
 }
-function calculateRunTripCalories(distanceMeters) {
+function calculateCalories(distanceMeters) {
   const distanceKm = Math.max(
     0,
     Number(distanceMeters) || 0
@@ -1395,6 +1479,61 @@ function calculateRunTripCalories(distanceMeters) {
   return Math.round(
     DEFAULT_RUNNER_WEIGHT_KG * distanceKm
   );
+}
+function updateRunningElevation(position) {
+  const rawAltitude =
+    position.coords.altitude;
+
+  const rawAltitudeAccuracy =
+    position.coords.altitudeAccuracy;
+
+  if (
+    rawAltitude === null ||
+    rawAltitude === undefined
+  ) {
+    runningElevationGain.textContent =
+      `${Math.round(totalElevationGain)} m`;
+
+    return;
+  }
+
+  const altitude = Number(rawAltitude);
+
+  const altitudeAccuracy =
+    rawAltitudeAccuracy === null ||
+    rawAltitudeAccuracy === undefined
+      ? null
+      : Number(rawAltitudeAccuracy);
+
+  if (!Number.isFinite(altitude)) {
+    return;
+  }
+
+  if (
+    altitudeAccuracy !== null &&
+    Number.isFinite(altitudeAccuracy) &&
+    altitudeAccuracy > 30
+  ) {
+    return;
+  }
+
+  if (lastValidAltitude !== null) {
+    const elevationDifference =
+      altitude - lastValidAltitude;
+
+    if (
+      elevationDifference >= 2 &&
+      elevationDifference <= 30
+    ) {
+      totalElevationGain +=
+        elevationDifference;
+    }
+  }
+
+  lastValidAltitude = altitude;
+
+  runningElevationGain.textContent =
+    `${Math.round(totalElevationGain)} m`;
 }
 function getRunTripPlannedDistanceMeters() {
   if (!latestRunTripRouteSummary) {
@@ -1426,7 +1565,7 @@ function updateRunTripDashboard() {
     ).toFixed(1)} km`;
 
   runTripDashboardCalories.textContent =
-  `${calculateRunTripCalories(
+  `${calculateCalories(
     runTripActualDistanceMeters
   )} kcal`;
 

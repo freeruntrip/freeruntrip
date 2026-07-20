@@ -19,16 +19,97 @@
   <div id="map"></div>
 
   <div id="controls">
-    <button id="startBtn">러닝 시작</button>
-    <button id="pauseBtn">일시정지</button>
-    <button id="stopBtn">러닝 종료</button>
-<button id="profileFeedBtn">Record Profile Feed</button>
-<button id="monthlyReportBtn">월간 리포트</button>
-<button id="runTripBtn">RunTrip</button>
-    <div id="timer">00:00</div>
-    <div id="distance">0.00 km</div>
-    <div id="pace">Pace: --'--"</div>
-  </div>
+  <section id="runningIdlePanel" class="running-idle-panel">
+    <button id="startBtn" type="button">
+      러닝 시작
+    </button>
+
+    <div class="running-navigation-actions">
+      <button id="profileFeedBtn" type="button">
+        Record Profile Feed
+      </button>
+
+      <button id="monthlyReportBtn" type="button">
+        월간 리포트
+      </button>
+
+      <button id="runTripBtn" type="button">
+        RunTrip
+      </button>
+    </div>
+  </section>
+
+  <section
+    id="runningDashboard"
+    class="running-dashboard hidden"
+  >
+    <div class="running-dashboard-header">
+      <div>
+        <span class="running-dashboard-badge">
+          RUNNING ACTIVE
+        </span>
+
+        <strong id="runningGpsStatus">
+          GPS 연결 준비
+        </strong>
+      </div>
+    </div>
+
+    <div class="running-dashboard-main">
+      <div class="running-main-stat">
+        <span>경과 시간</span>
+        <strong id="timer">00:00</strong>
+      </div>
+
+      <div class="running-main-stat">
+        <span>전체 거리</span>
+        <strong id="distance">0.00 km</strong>
+      </div>
+    </div>
+
+    <div class="running-dashboard-stats">
+      <div>
+        <span>평균 Pace</span>
+        <strong id="pace">--'--"</strong>
+      </div>
+
+      <div>
+        <span>칼로리</span>
+        <strong id="runningCalories">0 kcal</strong>
+      </div>
+
+      <div>
+        <span>고도 상승</span>
+        <strong id="runningElevationGain">0 m</strong>
+      </div>
+
+      <div>
+        <span>심박수</span>
+        <strong id="runningHeartRate">-- bpm</strong>
+      </div>
+
+      <div>
+        <span>케이던스</span>
+        <strong id="runningCadence">-- spm</strong>
+      </div>
+
+      <div>
+        <span>GPS 상태</span>
+        <strong id="runningGpsAccuracy">대기 중</strong>
+      </div>
+    </div>
+
+    <div class="running-dashboard-actions">
+      <button id="pauseBtn" type="button">
+        일시정지
+      </button>
+
+      <button id="stopBtn" type="button">
+        러닝 종료
+      </button>
+    </div>
+  </section>
+</div>
 
 <div id="records">
   <h2>저장된 러닝 기록</h2>
