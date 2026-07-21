@@ -1,5 +1,5 @@
 const map = L.map('map', {
-  zoomControl: true,
+  zoomControl: false,
   preferCanvas: true
 }).setView([37.5665, 126.9780], 13);
 
