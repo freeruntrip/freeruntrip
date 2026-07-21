@@ -56,59 +56,44 @@
     </div>
 
     <div class="running-dashboard-main">
-      <div class="running-main-stat">
-        <span>경과 시간</span>
-        <strong id="timer">00:00</strong>
-      </div>
+  <div class="running-main-stat">
+    <span>시간</span>
+    <strong id="timer">00:00</strong>
+  </div>
 
-      <div class="running-main-stat">
-        <span>전체 거리</span>
-        <strong id="distance">0.00 km</strong>
-      </div>
-    </div>
+  <div class="running-main-stat">
+    <span>전체 거리</span>
+    <strong id="distance">0.00 km</strong>
+  </div>
+</div>
 
-    <div class="running-dashboard-stats">
-      <div>
-        <span>평균 Pace</span>
-        <strong id="pace">--'--"</strong>
-      </div>
+<div class="running-dashboard-stats">
+  <div>
+    <span>평균 Pace</span>
+    <strong id="pace">--'--"</strong>
+  </div>
 
-      <div>
-        <span>칼로리</span>
-        <strong id="runningCalories">0 kcal</strong>
-      </div>
+  <div>
+    <span>케이던스</span>
+    <strong id="runningCadence">-- spm</strong>
+  </div>
+</div>
+<div class="hidden" aria-hidden="true">
+  <span id="runningCalories">0 kcal</span>
+  <span id="runningElevationGain">0 m</span>
+  <span id="runningHeartRate">-- bpm</span>
+  <span id="runningGpsAccuracy">대기 중</span>
+</div>
+<div class="running-dashboard-actions">
+  <button id="pauseBtn" type="button">
+    일시정지
+  </button>
 
-      <div>
-        <span>고도 상승</span>
-        <strong id="runningElevationGain">0 m</strong>
-      </div>
-
-      <div>
-        <span>심박수</span>
-        <strong id="runningHeartRate">-- bpm</strong>
-      </div>
-
-      <div>
-        <span>케이던스</span>
-        <strong id="runningCadence">-- spm</strong>
-      </div>
-
-      <div>
-        <span>GPS 상태</span>
-        <strong id="runningGpsAccuracy">대기 중</strong>
-      </div>
-    </div>
-
-    <div class="running-dashboard-actions">
-      <button id="pauseBtn" type="button">
-        일시정지
-      </button>
-
-      <button id="stopBtn" type="button">
-        러닝 종료
-      </button>
-    </div>
-  </section>
+  <button id="stopBtn" type="button">
+    러닝 종료
+  </button>
+</div>
+</section>
 </div>
 
 <div id="records">
