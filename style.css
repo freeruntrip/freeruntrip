@@ -3140,3 +3140,493 @@ option {
   flex-wrap: wrap;
   gap: 8px;
 }
+/* ========================================
+   일반 러닝 모드 실행 화면
+======================================== */
+
+/* 러닝 중에는 controls가 화면 전체를 사용 */
+#controls:has(.running-dashboard:not(.hidden)) {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: block;
+  pointer-events: none;
+}
+
+/* 일반 러닝 실행 화면 */
+.running-dashboard {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+/* 정보 화면 */
+.running-info-view {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+
+  display: flex;
+  flex-direction: column;
+
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 24px)
+    20px
+    calc(env(safe-area-inset-bottom, 0px) + 22px);
+
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(250, 204, 21, 0.18),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      #172033,
+      #0f172a
+    );
+
+  color: #f8fafc;
+  pointer-events: auto;
+}
+
+.running-info-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.running-dashboard-badge {
+  color: #facc15;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+#runningGpsStatus {
+  color: #cbd5e1;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+/* 시간 · 거리 */
+.running-info-main {
+  flex: 1;
+
+  display: grid;
+  grid-template-columns: 1fr;
+  align-content: center;
+  gap: 28px;
+
+  padding: 28px 0;
+}
+
+.running-primary-stat {
+  text-align: center;
+}
+
+.running-primary-stat span {
+  display: block;
+  margin-bottom: 10px;
+
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.running-primary-stat strong {
+  display: block;
+
+  color: #f8fafc;
+  font-size: clamp(52px, 16vw, 78px);
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: -0.06em;
+}
+
+/* 거리 값 강조 */
+#distance {
+  color: #facc15;
+}
+
+/* 평균 Pace · 케이던스 */
+.running-info-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+
+  margin-bottom: 14px;
+
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.running-info-stats > div {
+  min-width: 0;
+  padding: 17px 10px;
+  text-align: center;
+}
+
+.running-info-stats > div + div {
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.running-info-stats span {
+  display: block;
+  margin-bottom: 7px;
+
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.running-info-stats strong {
+  display: block;
+
+  overflow: hidden;
+  color: #f8fafc;
+
+  font-size: 18px;
+  font-weight: 900;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 정보 화면 → 지도 보기 */
+.running-view-switch-btn {
+  width: 100%;
+  height: 48px;
+
+  margin-bottom: 10px;
+  padding: 0 16px;
+
+  border: 1px solid rgba(250, 204, 21, 0.5);
+  border-radius: 15px;
+
+  background: rgba(250, 204, 21, 0.1);
+  color: #facc15;
+
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 900;
+
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+/* 정보 화면 일시정지 · 종료 */
+.running-dashboard-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 10px;
+}
+
+.running-dashboard-actions button {
+  height: 52px;
+  padding: 0 12px;
+
+  border: none;
+  border-radius: 16px;
+
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 900;
+
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+#pauseBtn {
+  background: rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
+}
+
+#stopBtn {
+  background: #ef4444;
+  color: #ffffff;
+
+  box-shadow:
+    0 10px 22px
+    rgba(239, 68, 68, 0.22);
+}
+
+/* ========================================
+   일반 러닝 지도 화면
+======================================== */
+
+.running-map-view {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+
+  pointer-events: none;
+}
+
+/* 지도 → 정보 보기 */
+.running-info-return-btn {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  left: 16px;
+  z-index: 2;
+
+  min-width: 104px;
+  height: 44px;
+  padding: 0 15px;
+
+  border: 1px solid rgba(250, 204, 21, 0.48);
+  border-radius: 14px;
+
+  background: rgba(15, 23, 42, 0.9);
+  color: #facc15;
+
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 900;
+
+  box-shadow:
+    0 8px 22px
+    rgba(15, 23, 42, 0.3);
+
+  cursor: pointer;
+  pointer-events: auto;
+
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* 지도 하단 오버레이 */
+.running-map-bottom-panel {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  z-index: 2;
+
+  overflow: hidden;
+
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+
+  background: rgba(15, 23, 42, 0.94);
+
+  box-shadow:
+    0 14px 34px
+    rgba(0, 0, 0, 0.36);
+
+  pointer-events: auto;
+
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.running-map-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.running-map-stats > div {
+  min-width: 0;
+  padding: 12px 5px;
+  text-align: center;
+}
+
+.running-map-stats > div + div {
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.running-map-stats span {
+  display: block;
+  margin-bottom: 5px;
+
+  overflow: hidden;
+
+  color: #94a3b8;
+  font-size: 8px;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.running-map-stats strong {
+  display: block;
+
+  overflow: hidden;
+
+  color: #f8fafc;
+  font-size: 11px;
+  font-weight: 900;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#runningMapDistance {
+  color: #facc15;
+}
+
+/* 지도 화면 일시정지 · 종료 */
+.running-map-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 8px;
+
+  padding: 9px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.running-map-actions button {
+  height: 44px;
+  padding: 0 8px;
+
+  border: none;
+  border-radius: 13px;
+
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 900;
+
+  cursor: pointer;
+}
+
+#runningMapPauseBtn {
+  background: rgba(255, 255, 255, 0.12);
+  color: #f8fafc;
+}
+
+#runningMapStopBtn {
+  background: #ef4444;
+  color: #ffffff;
+}
+
+/* 버튼 터치 반응 */
+.running-view-switch-btn:active,
+.running-info-return-btn:active,
+.running-dashboard-actions button:active,
+.running-map-actions button:active {
+  transform: scale(0.97);
+}
+
+/* 작은 아이폰 화면 */
+@media (max-width: 390px) {
+  .running-info-view {
+    padding:
+      calc(env(safe-area-inset-top, 0px) + 18px)
+      16px
+      calc(env(safe-area-inset-bottom, 0px) + 16px);
+  }
+
+  .running-info-main {
+    gap: 22px;
+    padding: 20px 0;
+  }
+
+  .running-primary-stat strong {
+    font-size: 50px;
+  }
+
+  .running-info-stats > div {
+    padding: 14px 8px;
+  }
+
+  .running-info-stats strong {
+    font-size: 16px;
+  }
+
+  .running-dashboard-actions button {
+    height: 48px;
+    font-size: 13px;
+  }
+
+  .running-map-bottom-panel {
+    left: 9px;
+    right: 9px;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 9px);
+  }
+
+  .running-map-stats > div {
+    padding: 10px 3px;
+  }
+
+  .running-map-stats span {
+    font-size: 7px;
+  }
+
+  .running-map-stats strong {
+    font-size: 10px;
+  }
+
+  .running-map-actions button {
+    height: 42px;
+    font-size: 11px;
+  }
+}
+/* 일반 러닝 정보 화면 시간 표시 충돌 수정 */
+#runningInfoView #timer {
+  padding: 12px 10px;
+
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+
+  background: rgba(255, 255, 255, 0.07);
+  color: #f8fafc;
+
+  box-shadow: none;
+}
+/* Pace Mood 창 하단 버튼 */
+.pace-mood-modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 10px;
+
+  margin-top: 16px;
+}
+
+.pace-mood-modal-actions button {
+  min-width: 0;
+  height: 50px;
+  margin: 0;
+  padding: 0 10px;
+
+  border: none;
+  border-radius: 14px;
+
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 900;
+
+  cursor: pointer;
+}
+
+#backFromPaceMoodBtn {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+#saveRunWithMoodBtn {
+  width: auto;
+  margin: 0;
+  padding: 0 10px;
+
+  background: #111827;
+  color: #ffffff;
+}
+
+.pace-mood-modal-actions button:active {
+  transform: scale(0.97);
+}
+
+@media (max-width: 390px) {
+  .pace-mood-modal-actions {
+    grid-template-columns: 1fr 1.25fr;
+    gap: 8px;
+  }
+
+  .pace-mood-modal-actions button {
+    height: 48px;
+    font-size: 12px;
+  }
+}

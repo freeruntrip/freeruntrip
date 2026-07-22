@@ -26,7 +26,106 @@ const runningIdlePanel = document.getElementById(
 const runningDashboard = document.getElementById(
   'runningDashboard'
 );
+const runningInfoView = document.getElementById(
+  'runningInfoView'
+);
 
+const runningMapView = document.getElementById(
+  'runningMapView'
+);
+
+const showRunningMapBtn = document.getElementById(
+  'showRunningMapBtn'
+);
+
+const showRunningInfoBtn = document.getElementById(
+  'showRunningInfoBtn'
+);
+
+const runningMapTimer = document.getElementById(
+  'runningMapTimer'
+);
+
+const runningMapDistance = document.getElementById(
+  'runningMapDistance'
+);
+
+const runningMapPace = document.getElementById(
+  'runningMapPace'
+);
+
+const runningMapCadence = document.getElementById(
+  'runningMapCadence'
+);
+
+const runningMapPauseBtn = document.getElementById(
+  'runningMapPauseBtn'
+);
+
+const runningMapStopBtn = document.getElementById(
+  'runningMapStopBtn'
+);
+function syncRunningMapStats() {
+  runningMapTimer.textContent =
+    timer.textContent;
+
+  runningMapDistance.textContent =
+    distanceDisplay.textContent;
+
+  runningMapPace.textContent =
+    paceDisplay.textContent;
+
+  runningMapCadence.textContent =
+    runningCadence.textContent;
+
+  runningMapPauseBtn.textContent =
+    pauseBtn.textContent;
+}
+
+function showRunningInfoView() {
+  runningMapView.classList.add('hidden');
+  runningInfoView.classList.remove('hidden');
+}
+
+function showRunningMapView() {
+  syncRunningMapStats();
+
+  runningInfoView.classList.add('hidden');
+  runningMapView.classList.remove('hidden');
+
+  requestAnimationFrame(function () {
+    map.invalidateSize({
+      pan: false
+    });
+  });
+}
+showRunningMapBtn.addEventListener(
+  'click',
+  function () {
+    showRunningMapView();
+  }
+);
+
+showRunningInfoBtn.addEventListener(
+  'click',
+  function () {
+    showRunningInfoView();
+  }
+);
+
+runningMapPauseBtn.addEventListener(
+  'click',
+  function () {
+    pauseBtn.click();
+  }
+);
+
+runningMapStopBtn.addEventListener(
+  'click',
+  function () {
+    stopBtn.click();
+  }
+);
 let seconds = 0;
 let timerInterval;
 let isRunning = false;
@@ -121,6 +220,9 @@ const detailSplits = document.getElementById('detailSplits');
 const detailSplitsList = document.getElementById('detailSplitsList');
 const paceMoodModal = document.getElementById('paceMoodModal');
 const saveRunWithMoodBtn = document.getElementById('saveRunWithMoodBtn');
+const backFromPaceMoodBtn = document.getElementById(
+  'backFromPaceMoodBtn'
+);
 const runPhotoInput = document.getElementById('runPhotoInput');
 const runPhotoFileName = document.getElementById('runPhotoFileName');
 const runMemoInput = document.getElementById('runMemoInput');
@@ -777,7 +879,10 @@ startBtn.addEventListener('click', function () {
 if (!isRunning) {
   runningIdlePanel.classList.add('hidden');
   runningDashboard.classList.remove('hidden');
+
   if (seconds === 0) {
+    showRunningInfoView();
+    syncRunningMapStats();
     runStartTime = new Date();
     totalElevationGain = 0;
 lastValidAltitude = null;
@@ -805,12 +910,16 @@ runningGpsAccuracy.textContent = '확인 중';
   lastValidAltitude = null;
   recentPositions = [];
 
-   beginNewRouteSegment();
+  beginNewRouteSegment();
 
-    lastGpsElapsedSeconds = seconds;
-    paused = false;
-  }
-  isRunning = true;
+  lastGpsElapsedSeconds = seconds;
+  paused = false;
+}
+
+pauseBtn.textContent = '일시정지';
+runningMapPauseBtn.textContent = '일시정지';
+
+isRunning = true;
 
   setTimeout(function () {
   map.invalidateSize();
@@ -823,7 +932,7 @@ runningGpsAccuracy.textContent = '확인 중';
     const remainingSeconds = String(seconds % 60).padStart(2, '0');
 
     timer.textContent = `${minutes}:${remainingSeconds}`;
-
+    syncRunningMapStats();
     console.log('타이머 실행 중:', timer.textContent);
   }, 1000);
 watchId = navigator.geolocation.watchPosition(
@@ -904,7 +1013,9 @@ if (totalDistance > 0 && seconds > 0) {
     );
 }
 
-  console.log('총 이동거리:', totalDistance);
+syncRunningMapStats();
+
+console.log('총 이동거리:', totalDistance);
 }
 
 lastValidPosition = {
@@ -949,28 +1060,55 @@ function (error) {
 }
 });
 pauseBtn.addEventListener('click', function () {
+  // 이미 일시정지 상태라면 기존 시작 로직으로 재개한다.
+  if (paused && !isRunning) {
+    console.log('러닝 다시 시작');
+
+    startBtn.click();
+    return;
+  }
+
+  if (!isRunning) {
+    return;
+  }
+
   console.log('일시정지 버튼 클릭됨');
 
-  // 먼저 상태를 막아, 이미 대기 중인 GPS 콜백도 무시되게 한다.
+  // 먼저 상태를 변경해 대기 중인 GPS 콜백도 무시한다.
   paused = true;
   isRunning = false;
 
   clearInterval(timerInterval);
+  timerInterval = null;
 
   if (watchId !== null && watchId !== undefined) {
     navigator.geolocation.clearWatch(watchId);
-    console.log('pause watchId 종료:', watchId);
+
+    console.log(
+      'pause watchId 종료:',
+      watchId
+    );
   }
 
   watchId = null;
 
-// 현재 세그먼트를 닫고, 재시작 때 새 세그먼트를 만든다.
-routeLine = null;
-activeRouteSegment = null;
+  // 현재 경로 세그먼트를 닫는다.
+  // 재시작할 때 새 세그먼트를 만들어
+  // 일시정지 구간의 대각선 연결을 방지한다.
+  routeLine = null;
+  activeRouteSegment = null;
 
-lastValidPosition = null;
-lastValidAltitude = null;
-recentPositions = [];
+  lastValidPosition = null;
+  lastValidAltitude = null;
+  recentPositions = [];
+
+  pauseBtn.textContent = '다시 시작';
+  runningMapPauseBtn.textContent = '다시 시작';
+
+  runningGpsStatus.textContent =
+    'GPS 일시정지';
+
+  syncRunningMapStats();
 });
 stopBtn.addEventListener('click', function () {
   console.log('러닝 종료 버튼 클릭됨');
@@ -990,6 +1128,16 @@ stopBtn.addEventListener('click', function () {
 
   paceMoodModal.classList.remove('hidden');
 });
+backFromPaceMoodBtn.addEventListener(
+  'click',
+  function () {
+    paceMoodModal.classList.add('hidden');
+
+    // 종료 직전까지 측정한 시간·거리·경로를 유지한 채
+    // 일반 러닝을 다시 시작한다.
+    startBtn.click();
+  }
+);
 saveRunWithMoodBtn.addEventListener('click', function () {
   const activeMoodButton = document.querySelector('.pace-mood-option.active');
 
@@ -1053,6 +1201,8 @@ lastGpsElapsedSeconds = 0;
   isRunning = false;
   runStartTime = null;
   paused = false;
+  showRunningInfoView();
+  syncRunningMapStats();
   runningDashboard.classList.add('hidden');
   runningIdlePanel.classList.remove('hidden');
 });

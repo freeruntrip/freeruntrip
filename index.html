@@ -40,59 +40,136 @@
   </section>
 
   <section
-    id="runningDashboard"
-    class="running-dashboard hidden"
+  id="runningDashboard"
+  class="running-dashboard hidden"
+>
+  <!-- 일반 러닝 기본 정보 화면 -->
+  <div
+    id="runningInfoView"
+    class="running-info-view"
   >
-    <div class="running-dashboard-header">
-      <div>
-        <span class="running-dashboard-badge">
-          RUNNING ACTIVE
-        </span>
+    <header class="running-info-header">
+      <span class="running-dashboard-badge">
+        RUNNING ACTIVE
+      </span>
 
-        <strong id="runningGpsStatus">
-          GPS 연결 준비
-        </strong>
+      <strong id="runningGpsStatus">
+        GPS 연결 준비
+      </strong>
+    </header>
+
+    <div class="running-info-main">
+      <div class="running-primary-stat">
+        <span>시간</span>
+        <strong id="timer">00:00</strong>
+      </div>
+
+      <div class="running-primary-stat">
+        <span>거리</span>
+        <strong id="distance">0.00 km</strong>
       </div>
     </div>
 
-    <div class="running-dashboard-main">
-  <div class="running-main-stat">
-    <span>시간</span>
-    <strong id="timer">00:00</strong>
+    <div class="running-info-stats">
+      <div>
+        <span>평균 Pace</span>
+        <strong id="pace">--'--"</strong>
+      </div>
+
+      <div>
+        <span>케이던스</span>
+        <strong id="runningCadence">-- spm</strong>
+      </div>
+    </div>
+
+    <div
+      class="hidden"
+      aria-hidden="true"
+    >
+      <span id="runningCalories">0 kcal</span>
+      <span id="runningElevationGain">0 m</span>
+      <span id="runningHeartRate">-- bpm</span>
+      <span id="runningGpsAccuracy">대기 중</span>
+    </div>
+
+    <button
+      id="showRunningMapBtn"
+      class="running-view-switch-btn"
+      type="button"
+    >
+      지도 보기
+    </button>
+
+    <div class="running-dashboard-actions">
+      <button
+        id="pauseBtn"
+        type="button"
+      >
+        일시정지
+      </button>
+
+      <button
+        id="stopBtn"
+        type="button"
+      >
+        러닝 종료
+      </button>
+    </div>
   </div>
 
-  <div class="running-main-stat">
-    <span>전체 거리</span>
-    <strong id="distance">0.00 km</strong>
-  </div>
-</div>
+  <!-- 일반 러닝 지도 화면 위에 표시되는 UI -->
+  <div
+    id="runningMapView"
+    class="running-map-view hidden"
+  >
+    <button
+      id="showRunningInfoBtn"
+      class="running-info-return-btn"
+      type="button"
+    >
+      정보 보기
+    </button>
 
-<div class="running-dashboard-stats">
-  <div>
-    <span>평균 Pace</span>
-    <strong id="pace">--'--"</strong>
-  </div>
+    <div class="running-map-bottom-panel">
+      <div class="running-map-stats">
+        <div>
+          <span>시간</span>
+          <strong id="runningMapTimer">00:00</strong>
+        </div>
 
-  <div>
-    <span>케이던스</span>
-    <strong id="runningCadence">-- spm</strong>
-  </div>
-</div>
-<div class="hidden" aria-hidden="true">
-  <span id="runningCalories">0 kcal</span>
-  <span id="runningElevationGain">0 m</span>
-  <span id="runningHeartRate">-- bpm</span>
-  <span id="runningGpsAccuracy">대기 중</span>
-</div>
-<div class="running-dashboard-actions">
-  <button id="pauseBtn" type="button">
-    일시정지
-  </button>
+        <div>
+          <span>거리</span>
+          <strong id="runningMapDistance">0.00 km</strong>
+        </div>
 
-  <button id="stopBtn" type="button">
-    러닝 종료
-  </button>
-</div>
+        <div>
+          <span>평균 Pace</span>
+          <strong id="runningMapPace">--'--"</strong>
+        </div>
+
+        <div>
+          <span>케이던스</span>
+          <strong id="runningMapCadence">-- spm</strong>
+        </div>
+      </div>
+
+      <div class="running-map-actions">
+        <button
+          id="runningMapPauseBtn"
+          type="button"
+        >
+          일시정지
+        </button>
+
+        <button
+          id="runningMapStopBtn"
+          type="button"
+        >
+          러닝 종료
+        </button>
+      </div>
+    </div>
+  </div>
 </section>
 </div>
 
@@ -132,7 +209,21 @@
     <small><span id="runMemoCount">0</span>/80</small>
   </label>
 </div>
-    <button id="saveRunWithMoodBtn">이 Mood로 저장하기</button>
+    <div class="pace-mood-modal-actions">
+  <button
+    id="backFromPaceMoodBtn"
+    type="button"
+  >
+    러닝 계속하기
+  </button>
+
+  <button
+    id="saveRunWithMoodBtn"
+    type="button"
+  >
+    이 Mood로 저장하기
+  </button>
+</div>
   </div>
 </div>
 <div id="recordDetail" class="hidden">
