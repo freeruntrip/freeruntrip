@@ -1067,7 +1067,10 @@ function renderRecordProfileFeed() {
   const profileRunCount = document.getElementById('profileRunCount');
   const profileFollowers = document.getElementById('profileFollowers');
   const profileRecentRuns = document.getElementById('profileRecentRuns');
-
+  const publishedRecords =
+  runRecords.filter(function (record) {
+    return record.isPublished === true;
+  });
   const runCount = runRecords.length;
 
   const totalDistanceKm = runRecords.reduce(function (sum, record) {
@@ -1098,7 +1101,7 @@ function renderRecordProfileFeed() {
     return;
   }
 
-  if (runRecords.length === 0) {
+  if (publishedRecords.length === 0) {
     profileRecentRuns.innerHTML = `
       <div class="feed-card small-feed-card">
         <strong>0.00km</strong>
@@ -1108,8 +1111,14 @@ function renderRecordProfileFeed() {
     return;
   }
 
-profileRecentRuns.innerHTML = runRecords
-  .slice(0, 3)
+profileRecentRuns.innerHTML =
+  publishedRecords
+    .slice()
+    .sort(function (a, b) {
+      return (b.publishedAt || b.id || 0) -
+        (a.publishedAt || a.id || 0);
+    })
+    .slice(0, 3)
   .map(function (record) {
     const mood = record.emotionalPace || '마음 환기 Pace';
     const memo = record.memo || '';
@@ -1867,6 +1876,9 @@ let runTripTimerInterval = null;
 
 let runTripActualDistanceMeters = 0;
 let runTripLastValidPosition = null;
+let runTripStartTime = null;
+
+let runTripActualRouteCoordinates = [];
 const DEFAULT_RUNNER_WEIGHT_KG = 70;
 function formatRunTripTimer(totalSeconds) {
   const safeSeconds = Math.max(
@@ -2348,6 +2360,11 @@ function startRunTripLocationWatch() {
           longitude
         ];
 
+        runTripActualRouteCoordinates.push([
+          latitude,
+          longitude
+        ]);
+
         if (!runTripFollowMarker) {
           runTripFollowMarker =
             L.marker(
@@ -2421,6 +2438,10 @@ function startRunTripFollowing() {
 
   resetRunTripDashboard();
 
+  runTripStartTime = new Date();
+
+  runTripActualRouteCoordinates = [];
+
   isRunTripFollowing = true;
   isRunTripPaused = false;
   if (appBottomNavigation) {
@@ -2442,6 +2463,161 @@ function startRunTripFollowing() {
 
   startRunTripTimer();
   startRunTripLocationWatch();
+}
+function saveRunTripRecord() {
+  if (!runTripStartTime) {
+    return null;
+  }
+
+  const runTripEndTime = new Date();
+
+  const draft = getRunTripDraft();
+
+  const actualDistanceKm =
+    runTripActualDistanceMeters / 1000;
+
+  const plannedDistanceKm =
+    latestRunTripRouteSummary
+      ? Number(
+          latestRunTripRouteSummary.distanceKm
+        ) || 0
+      : 0;
+
+  const plannedDurationMinutes =
+    latestRunTripRouteSummary
+      ? Number(
+          latestRunTripRouteSummary.durationMinutes
+        ) || 0
+      : 0;
+
+  const actualRoute =
+    runTripActualRouteCoordinates.map(
+      function (point) {
+        return [
+          Number(point[0]),
+          Number(point[1])
+        ];
+      }
+    );
+
+  const plannedRoute =
+    latestRunTripRouteSummary &&
+    Array.isArray(
+      latestRunTripRouteSummary.coordinates
+    )
+      ? latestRunTripRouteSummary.coordinates.map(
+          function (point) {
+            return [
+              Number(point[0]),
+              Number(point[1])
+            ];
+          }
+        )
+      : [];
+
+  const record = {
+    id: Date.now(),
+
+    activityType: 'runtrip',
+
+    date:
+      runTripEndTime.toLocaleDateString(),
+
+    startTime:
+      runTripStartTime.toLocaleTimeString(
+        [],
+        {
+          hour: '2-digit',
+          minute: '2-digit'
+        }
+      ),
+
+    endTime:
+      runTripEndTime.toLocaleTimeString(
+        [],
+        {
+          hour: '2-digit',
+          minute: '2-digit'
+        }
+      ),
+
+    duration:
+      formatRunTripTimer(
+        runTripElapsedSeconds
+      ),
+
+    distance:
+      actualDistanceKm.toFixed(2),
+
+    pace:
+      formatPaceFromSeconds(
+        runTripElapsedSeconds,
+        runTripActualDistanceMeters
+      ),
+
+    emotionalPace:
+      'RunTrip Journey',
+
+    originName:
+      draft.origin?.name ||
+      '출발지',
+
+    destinationName:
+      draft.destination?.name ||
+      '도착지',
+
+    waypointNames:
+      draft.waypoints.map(
+        function (waypoint) {
+          return waypoint.name;
+        }
+      ),
+
+    returnToStart:
+      draft.returnToStart,
+
+    plannedDistance:
+      plannedDistanceKm.toFixed(2),
+
+    plannedDurationMinutes:
+      plannedDurationMinutes,
+
+    routeCoordinates:
+      actualRoute.length > 0
+        ? actualRoute
+        : plannedRoute,
+
+    routeSegments:
+      actualRoute.length >= 2
+        ? [actualRoute]
+        : plannedRoute.length >= 2
+          ? [plannedRoute]
+          : [],
+
+    plannedRouteCoordinates:
+      plannedRoute,
+
+    photo: '',
+
+    memo: ''
+  };
+
+  runRecords.unshift(record);
+
+  localStorage.setItem(
+    'runRecords',
+    JSON.stringify(runRecords)
+  );
+
+  renderRunRecords();
+  renderMonthlyReport();
+
+  console.log(
+    '저장된 RunTrip 기록:',
+    record
+  );
+
+  return record;
 }
 function getPlaceSearchUrl(query) {
   const baseUrl =
@@ -3612,15 +3788,36 @@ function parseRecordDate(dateText) {
 }
 
 function durationToSeconds(durationText) {
-  const parts = String(durationText || '0:00')
+  const parts = String(
+    durationText || '0:00'
+  )
     .split(':')
     .map(Number);
 
-  if (parts.length !== 2 || parts.some(isNaN)) {
+  if (
+    parts.some(function (part) {
+      return !Number.isFinite(part);
+    })
+  ) {
     return 0;
   }
 
-  return parts[0] * 60 + parts[1];
+  if (parts.length === 3) {
+    return (
+      parts[0] * 3600 +
+      parts[1] * 60 +
+      parts[2]
+    );
+  }
+
+  if (parts.length === 2) {
+    return (
+      parts[0] * 60 +
+      parts[1]
+    );
+  }
+
+  return 0;
 }
 
 function formatAnalysisDuration(totalSeconds) {
@@ -4404,14 +4601,23 @@ endRunTripBtn.addEventListener(
   'click',
   function () {
     const shouldEnd = window.confirm(
-      '현재 RUNTRIP을 종료할까요?'
+      '현재 RUNTRIP을 종료하고 기록을 저장할까요?'
     );
 
     if (!shouldEnd) {
       return;
     }
 
+    saveRunTripRecord();
+
     stopRunTripFollowing();
+
+    runTripStartTime = null;
+    runTripActualRouteCoordinates = [];
+
+    setTimeout(function () {
+      openAppPage('records');
+    }, 0);
   }
 );
 updateRunTripCreateButton();
