@@ -1961,6 +1961,15 @@ function stopRunTripFollowing(options = {}) {
 
   isRunTripFollowing = false;
   isRunTripPaused = false;
+  if (appBottomNavigation) {
+  appBottomNavigation.classList.remove(
+    'hidden'
+  );
+
+  updateBottomNavigationActiveState(
+    'runtrip'
+  );
+}
 
   runTripPanel.classList.remove(
     'runtrip-following'
@@ -2136,6 +2145,11 @@ function startRunTripFollowing() {
 
   isRunTripFollowing = true;
   isRunTripPaused = false;
+  if (appBottomNavigation) {
+  appBottomNavigation.classList.add(
+    'hidden'
+  );
+}
 
   runTripPanel.classList.add(
     'runtrip-following'
@@ -4116,7 +4130,7 @@ updateRunTripCreateButton();
 updateRunTripWaypointControls();
 connectExistingRunTripRouteOrderButtons();
 /* ========================================
-   FreeRunTrip 앱 페이지 전환 V1
+   FreeRunTrip 앱 페이지 전환 V2
 ======================================== */
 
 const homeScreen = document.getElementById(
@@ -4131,56 +4145,49 @@ const appNavButtons = document.querySelectorAll(
   '.app-nav-button'
 );
 
-const homeStartRunningBtn = document.getElementById(
-  'homeStartRunningBtn'
-);
-
-const homeOpenRunTripBtn = document.getElementById(
-  'homeOpenRunTripBtn'
-);
-
-const homeOpenRecordsBtn = document.getElementById(
-  'homeOpenRecordsBtn'
-);
-
-const homeTotalDistance = document.getElementById(
-  'homeTotalDistance'
-);
-
-const homeRunCount = document.getElementById(
-  'homeRunCount'
-);
-
-const homeRecentRun = document.getElementById(
-  'homeRecentRun'
-);
-
 let currentAppPage = 'home';
 
 function hideAllMainAppScreens() {
   homeScreen.classList.add('hidden');
 
-  map.getContainer().style.display = 'none';
+  map.getContainer().style.display =
+    'none';
 
-  controlsSection.style.display = 'none';
+  controlsSection.style.display =
+    'none';
 
-  recordsSection.classList.add('hidden');
+  recordsSection.classList.add(
+    'hidden'
+  );
 
-  recordDetail.classList.add('hidden');
+  recordDetail.classList.add(
+    'hidden'
+  );
 
-  profileFeedScreen.classList.add('hidden');
+  profileFeedScreen.classList.add(
+    'hidden'
+  );
 
-  monthlyReportScreen.classList.add('hidden');
+  monthlyReportScreen.classList.add(
+    'hidden'
+  );
 
-  runTripPanel.classList.add('hidden');
+  runTripPanel.classList.add(
+    'hidden'
+  );
 
-  runTripSearchScreen.classList.add('hidden');
+  runTripSearchScreen.classList.add(
+    'hidden'
+  );
 }
 
-function updateBottomNavigationActiveState(pageName) {
+function updateBottomNavigationActiveState(
+  pageName
+) {
   appNavButtons.forEach(function (button) {
     const isActive =
-      button.dataset.pageTarget === pageName;
+      button.dataset.pageTarget ===
+      pageName;
 
     button.classList.toggle(
       'active',
@@ -4189,61 +4196,27 @@ function updateBottomNavigationActiveState(pageName) {
   });
 }
 
+/* 홈은 현재 정적인 샘플 콘텐츠 피드이므로
+   별도의 개인 기록 렌더링을 하지 않는다. */
 function renderHomeScreen() {
-  const totalDistanceKm = runRecords.reduce(
-    function (sum, record) {
-      return (
-        sum +
-        (Number(record.distance) || 0)
-      );
-    },
-    0
+  return;
+}
+
+function showBottomNavigation() {
+  appBottomNavigation.classList.remove(
+    'hidden'
   );
+}
 
-  homeTotalDistance.textContent =
-    `${totalDistanceKm.toFixed(1)} km`;
-
-  homeRunCount.textContent =
-    `${runRecords.length} Runs`;
-
-  if (runRecords.length === 0) {
-    homeRecentRun.innerHTML = `
-      <div class="home-empty-card">
-        아직 저장된 러닝 기록이 없습니다.
-      </div>
-    `;
-
-    return;
-  }
-
-  const latestRecord = runRecords
-    .slice()
-    .sort(function (a, b) {
-      return (b.id || 0) - (a.id || 0);
-    })[0];
-
-  homeRecentRun.innerHTML = `
-    <article class="home-runtrip-card">
-      <span>
-        ${latestRecord.date || '최근 러닝'}
-      </span>
-
-      <strong>
-        ${latestRecord.distance || '0.00'}km ·
-        ${latestRecord.duration || '00:00'}
-      </strong>
-
-      <p>
-        ${
-          latestRecord.emotionalPace ||
-          '마음 환기 Pace'
-        }
-      </p>
-    </article>
-  `;
+function hideBottomNavigation() {
+  appBottomNavigation.classList.add(
+    'hidden'
+  );
 }
 
 function openAppPage(pageName) {
+  /* 실제 러닝 또는 RunTrip 실행 중에는
+     다른 탭으로 이동하지 않는다. */
   if (
     isRunning ||
     isRunTripFollowing
@@ -4259,14 +4232,20 @@ function openAppPage(pageName) {
     pageName
   );
 
-  appBottomNavigation.classList.remove(
-    'hidden'
-  );
+  /* 일반 앱 페이지에서는 하단 메뉴 유지 */
+  showBottomNavigation();
 
   if (pageName === 'home') {
     renderHomeScreen();
 
-    homeScreen.classList.remove('hidden');
+    homeScreen.classList.remove(
+      'hidden'
+    );
+
+    window.scrollTo({
+      top: 0,
+      behavior: 'auto'
+    });
 
     return;
   }
@@ -4292,11 +4271,11 @@ function openAppPage(pageName) {
   }
 
   if (pageName === 'runtrip') {
-    appBottomNavigation.classList.add(
-      'hidden'
-    );
-
+    /* RunTrip 생성·준비 화면에서도
+       하단 메뉴를 계속 표시한다. */
     openRunTripPanel();
+
+    showBottomNavigation();
 
     return;
   }
@@ -4336,58 +4315,35 @@ appNavButtons.forEach(function (button) {
   );
 });
 
-homeStartRunningBtn.addEventListener(
-  'click',
-  function () {
-    openAppPage('running');
-  }
-);
-
-homeOpenRunTripBtn.addEventListener(
-  'click',
-  function () {
-    openAppPage('runtrip');
-  }
-);
-
-homeOpenRecordsBtn.addEventListener(
-  'click',
-  function () {
-    openAppPage('records');
-  }
-);
-
-/* 기존 러닝 시작 버튼을 누르면
-   하단 메뉴를 숨긴다 */
+/* 일반 러닝을 실제로 시작하면
+   하단 메뉴를 숨긴다. */
 startBtn.addEventListener(
   'click',
   function () {
     if (isRunning) {
-      appBottomNavigation.classList.add(
-        'hidden'
-      );
+      hideBottomNavigation();
     }
   }
 );
 
-/* 러닝 저장이 끝난 뒤
-   러닝 페이지로 복귀 */
+/* 일반 러닝 저장이 완료되면
+   러닝 준비 화면과 하단 메뉴를 복원한다. */
 saveRunWithMoodBtn.addEventListener(
   'click',
   function () {
     setTimeout(function () {
-      appBottomNavigation.classList.remove(
-        'hidden'
-      );
+      currentAppPage = 'running';
 
       updateBottomNavigationActiveState(
         'running'
       );
+
+      showBottomNavigation();
     }, 0);
   }
 );
 
-/* RunTrip 취소 시 홈으로 복귀 */
+/* RunTrip 취소 시 홈으로 이동 */
 backFromRunTripBtn.addEventListener(
   'click',
   function () {
@@ -4397,8 +4353,7 @@ backFromRunTripBtn.addEventListener(
   }
 );
 
-/* 기존 프로필 뒤로가기 버튼도
-   홈으로 연결 */
+/* 기존 프로필 뒤로가기는 홈으로 연결 */
 backFromProfileFeedBtn.addEventListener(
   'click',
   function () {
@@ -4408,19 +4363,19 @@ backFromProfileFeedBtn.addEventListener(
   }
 );
 
-/* 기록 상세 뒤로가기 시
-   기록 탭 유지 */
+/* 기록 상세에서 목록으로 돌아가면
+   기록 탭과 하단 메뉴를 유지한다. */
 backToRecordsBtn.addEventListener(
   'click',
   function () {
     setTimeout(function () {
+      currentAppPage = 'records';
+
       updateBottomNavigationActiveState(
         'records'
       );
 
-      appBottomNavigation.classList.remove(
-        'hidden'
-      );
+      showBottomNavigation();
     }, 0);
   }
 );

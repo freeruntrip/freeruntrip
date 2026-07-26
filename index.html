@@ -16,114 +16,236 @@
 
 <body>
 
-  <!-- FreeRunTrip 홈 페이지 -->
-  <section
-    id="homeScreen"
-    class="app-page home-screen hidden"
-    data-app-page="home"
-  >
-    <header class="home-header">
-      <div>
-        <p class="home-eyebrow">FREERUNTRIP</p>
-        <h1>도시를 여행하는 새로운 방식</h1>
+  <!-- FreeRunTrip 홈 콘텐츠 피드 -->
+<section
+  id="homeScreen"
+  class="app-page home-screen hidden"
+  data-app-page="home"
+>
+  <header class="home-feed-header">
+    <strong class="home-feed-logo">
+      FreeRunTrip
+    </strong>
+
+    <div class="home-feed-header-actions">
+      <button
+        id="homeNotificationBtn"
+        class="home-feed-header-btn"
+        type="button"
+        aria-label="알림"
+      >
+        ♡
+      </button>
+
+      <button
+        id="homeMessageBtn"
+        class="home-feed-header-btn"
+        type="button"
+        aria-label="메시지"
+      >
+        ✉
+      </button>
+    </div>
+  </header>
+
+  <main class="home-feed-content">
+    <!-- 팔로잉 계정 공개 콘텐츠 -->
+    <article class="feed-post" data-feed-type="following">
+      <header class="feed-post-header">
+        <div class="feed-post-profile">
+          <div class="feed-post-avatar">
+            R
+          </div>
+
+          <div>
+            <strong>running.seoul</strong>
+            <span>서울 · 12분 전</span>
+          </div>
+        </div>
+
+        <button
+          class="feed-post-menu-btn"
+          type="button"
+          aria-label="게시물 메뉴"
+        >
+          ···
+        </button>
+      </header>
+
+      <div class="feed-post-visual feed-post-run-visual">
+        <div class="feed-post-visual-placeholder">
+          <span>RUN PHOTO</span>
+          <strong>한강을 따라 달린 저녁 러닝</strong>
+        </div>
       </div>
 
-      <span class="home-status-badge">
-        RUN · TRIP · RECORD
-      </span>
-    </header>
+      <div class="feed-post-actions">
+        <div>
+          <button type="button" aria-label="좋아요">
+            ♡
+          </button>
 
-    <main class="home-content">
-      <section class="home-hero-card">
-        <p class="home-card-label">
-          TODAY'S RUN
-        </p>
+          <button type="button" aria-label="댓글">
+            ◯
+          </button>
 
-        <h2>오늘은 어떤 도시를 달려볼까요?</h2>
+          <button type="button" aria-label="공유">
+            ↗
+          </button>
+        </div>
+
+        <button type="button" aria-label="저장">
+          ▢
+        </button>
+      </div>
+
+      <div class="feed-post-body">
+        <strong>좋아요 24개</strong>
 
         <p>
-          일반 러닝을 시작하거나 여행지의 새로운 RunTrip 경로를 만들어보세요.
+          <b>running.seoul</b>
+          퇴근 후 한강에서 가볍게 달렸어요.
         </p>
 
-        <div class="home-primary-actions">
-          <button
-            id="homeStartRunningBtn"
-            type="button"
-          >
-            러닝 시작
-          </button>
-
-          <button
-            id="homeOpenRunTripBtn"
-            type="button"
-          >
-            RunTrip 만들기
-          </button>
+        <div class="feed-run-summary">
+          <span>5.24 km</span>
+          <span>34:18</span>
+          <span>마음 환기 Pace</span>
         </div>
-      </section>
 
-      <section class="home-summary-grid">
-        <article class="home-summary-card">
-          <span>누적 거리</span>
-          <strong id="homeTotalDistance">
-            0.0 km
-          </strong>
-        </article>
+        <button
+          class="feed-post-comments-btn"
+          type="button"
+        >
+          댓글 3개 모두 보기
+        </button>
+      </div>
+    </article>
 
-        <article class="home-summary-card">
-          <span>러닝 횟수</span>
-          <strong id="homeRunCount">
-            0 Runs
-          </strong>
-        </article>
-      </section>
+    <!-- FreeRunTrip 공식 추천 RunTrip -->
+    <article class="feed-post official-feed-post" data-feed-type="official">
+      <header class="feed-post-header">
+        <div class="feed-post-profile">
+          <div class="feed-post-avatar official-avatar">
+            F
+          </div>
 
-      <section class="home-section">
-        <div class="home-section-heading">
           <div>
-            <p class="home-card-label">
-              RECENT RUN
-            </p>
+            <div class="feed-account-name">
+              <strong>freeruntrip.official</strong>
+              <span class="official-badge">공식</span>
+            </div>
 
-            <h2>최근 러닝</h2>
+            <span>추천 RunTrip · 서울</span>
           </div>
+        </div>
 
-          <button
-            id="homeOpenRecordsBtn"
-            type="button"
-          >
-            전체 기록
+        <button
+          class="feed-post-menu-btn"
+          type="button"
+          aria-label="게시물 메뉴"
+        >
+          ···
+        </button>
+      </header>
+
+      <div class="feed-post-visual official-runtrip-visual">
+        <div class="feed-post-visual-placeholder">
+          <span>OFFICIAL RUNTRIP</span>
+          <strong>서울 야경을 따라 달리는 코스</strong>
+          <small>여의도 한강공원 → 마포대교 → 밤섬 전망대</small>
+        </div>
+      </div>
+
+      <div class="feed-post-actions">
+        <div>
+          <button type="button" aria-label="좋아요">
+            ♡
+          </button>
+
+          <button type="button" aria-label="댓글">
+            ◯
+          </button>
+
+          <button type="button" aria-label="공유">
+            ↗
           </button>
         </div>
 
-        <div id="homeRecentRun">
-          <div class="home-empty-card">
-            아직 저장된 러닝 기록이 없습니다.
-          </div>
-        </div>
-      </section>
+        <button type="button" aria-label="저장">
+          ▢
+        </button>
+      </div>
 
-      <section class="home-section">
-        <div class="home-section-heading">
+      <div class="feed-post-body">
+        <strong>좋아요 128개</strong>
+
+        <p>
+          <b>freeruntrip.official</b>
+          도시의 야경과 한강을 함께 경험할 수 있는 공식 추천 코스입니다.
+        </p>
+
+        <div class="feed-run-summary">
+          <span>7.8 km</span>
+          <span>야경 코스</span>
+          <span>초급</span>
+        </div>
+
+        <button
+          class="feed-runtrip-detail-btn"
+          type="button"
+        >
+          RunTrip 코스 보기
+        </button>
+      </div>
+    </article>
+
+    <!-- 광고 콘텐츠 -->
+    <article class="feed-post sponsored-feed-post" data-feed-type="sponsored">
+      <header class="feed-post-header">
+        <div class="feed-post-profile">
+          <div class="feed-post-avatar sponsored-avatar">
+            A
+          </div>
+
           <div>
-            <p class="home-card-label">
-              RECOMMENDED RUNTRIP
-            </p>
-
-            <h2>추천 RunTrip</h2>
+            <strong>runnerstay.seoul</strong>
+            <span>광고</span>
           </div>
         </div>
 
-        <article class="home-runtrip-card">
-          <span>여행지 러닝</span>
-          <strong>숙소에서 출발해 도시를 탐험해보세요</strong>
-          <p>
-            출발지와 도착지를 설정하고 나만의 여행 러닝 경로를 만들 수 있습니다.
-          </p>
-        </article>
-      </section>
-    </main>
-  </section>
+        <button
+          class="feed-post-menu-btn"
+          type="button"
+          aria-label="광고 메뉴"
+        >
+          ···
+        </button>
+      </header>
+
+      <div class="feed-post-visual sponsored-visual">
+        <div class="feed-post-visual-placeholder">
+          <span>SPONSORED</span>
+          <strong>러너를 위한 한강 근처 숙소</strong>
+          <small>숙소에서 바로 출발하는 서울 러닝 여행</small>
+        </div>
+      </div>
+
+      <div class="feed-post-body">
+        <p>
+          여행지에서도 러닝을 이어갈 수 있도록 한강 러닝 코스와 가까운 숙소를 만나보세요.
+        </p>
+
+        <button
+          class="feed-sponsored-action-btn"
+          type="button"
+        >
+          자세히 보기
+        </button>
+      </div>
+    </article>
+  </main>
+</section>
 
   <div id="map"></div>
 
