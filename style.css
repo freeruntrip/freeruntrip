@@ -1,4 +1,3 @@
-@import url("https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/galmuri.css");
 html,
 body {
 margin: 0;
@@ -1607,8 +1606,12 @@ height: 100dvh;
   width: 100%;
   height: 100%;
 
-  font-family:
-    "Galmuri11",
+    font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans KR",
+    Arial,
     sans-serif !important;
 
   font-size: 15px;
@@ -2964,7 +2967,7 @@ height: 100dvh;
   padding-top: 10px;
 }
 /* ========================================
-   FreeRunTrip 전체 픽셀 폰트 적용
+   FreeRunTrip 기본 UI 폰트
 ======================================== */
 
 html,
@@ -2974,7 +2977,13 @@ input,
 textarea,
 select,
 option {
-  font-family: "Galmuri11", sans-serif !important;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans KR",
+    Arial,
+    sans-serif !important;
 }
 /* ========================================
    FreeRunTrip 픽셀 어드벤처 지도
@@ -3012,8 +3021,12 @@ option {
 
   color: #facc15 !important;
 
-  font-family:
-    "Galmuri11",
+    font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans KR",
+    Arial,
     sans-serif !important;
 }
 
@@ -3628,5 +3641,663 @@ option {
   .pace-mood-modal-actions button {
     height: 48px;
     font-size: 12px;
+  }
+}
+/* ========================================
+   FreeRunTrip 앱 페이지 기본 구조
+======================================== */
+
+.app-page {
+  min-height: 100dvh;
+  box-sizing: border-box;
+}
+
+.home-screen {
+  position: relative;
+  z-index: 10;
+
+  min-height: 100dvh;
+
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 24px)
+    18px
+    calc(env(safe-area-inset-bottom, 0px) + 104px);
+
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(125, 211, 252, 0.34),
+      transparent 32%
+    ),
+    linear-gradient(
+      180deg,
+      #eef8ff 0%,
+      #f8fbfd 44%,
+      #f3f4f6 100%
+    );
+
+  color: #0f172a;
+}
+
+.home-header {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+
+  margin-bottom: 22px;
+}
+
+.home-eyebrow,
+.home-card-label {
+  margin: 0 0 6px;
+
+  color: #0284c7;
+
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+.home-header h1 {
+  max-width: 310px;
+
+  margin: 0;
+
+  color: #0f172a;
+
+  font-size: clamp(27px, 8vw, 38px);
+  font-weight: 900;
+  line-height: 1.25;
+  letter-spacing: -0.04em;
+}
+
+.home-status-badge {
+  width: fit-content;
+
+  padding: 8px 11px;
+
+  border: 1px solid rgba(2, 132, 199, 0.18);
+  border-radius: 999px;
+
+  background: rgba(255, 255, 255, 0.72);
+  color: #0369a1;
+
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+
+  box-shadow:
+    0 8px 22px
+    rgba(15, 23, 42, 0.06);
+
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.home-content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.home-hero-card {
+  overflow: hidden;
+
+  padding: 22px 18px;
+
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 26px;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.96),
+      rgba(224, 242, 254, 0.9)
+    );
+
+  box-shadow:
+    0 16px 36px
+    rgba(15, 23, 42, 0.1);
+}
+
+.home-hero-card h2 {
+  margin: 0;
+
+  color: #0f172a;
+
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1.35;
+  letter-spacing: -0.035em;
+}
+
+.home-hero-card > p:not(.home-card-label) {
+  margin: 12px 0 0;
+
+  color: #64748b;
+
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.home-primary-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+
+  margin-top: 20px;
+}
+
+.home-primary-actions button {
+  min-width: 0;
+  height: 50px;
+
+  padding: 0 10px;
+
+  border: none;
+  border-radius: 15px;
+
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 900;
+
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#homeStartRunningBtn {
+  background: #0f172a;
+  color: #ffffff;
+
+  box-shadow:
+    0 10px 22px
+    rgba(15, 23, 42, 0.18);
+}
+
+#homeOpenRunTripBtn {
+  border: 1px solid rgba(2, 132, 199, 0.24);
+
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.home-primary-actions button:active {
+  transform: scale(0.97);
+}
+
+.home-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.home-summary-card {
+  min-width: 0;
+
+  padding: 17px 15px;
+
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  border-radius: 20px;
+
+  background: rgba(255, 255, 255, 0.88);
+
+  box-shadow:
+    0 9px 24px
+    rgba(15, 23, 42, 0.06);
+}
+
+.home-summary-card span {
+  display: block;
+
+  margin-bottom: 9px;
+
+  color: #64748b;
+
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.home-summary-card strong {
+  display: block;
+
+  overflow: hidden;
+
+  color: #0f172a;
+
+  font-size: 20px;
+  font-weight: 900;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-section {
+  padding: 18px;
+
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 24px;
+
+  background: rgba(255, 255, 255, 0.82);
+
+  box-shadow:
+    0 10px 26px
+    rgba(15, 23, 42, 0.06);
+}
+
+.home-section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+
+  margin-bottom: 14px;
+}
+
+.home-section-heading h2 {
+  margin: 0;
+
+  color: #0f172a;
+
+  font-size: 19px;
+  font-weight: 900;
+}
+
+#homeOpenRecordsBtn {
+  flex-shrink: 0;
+
+  padding: 8px 10px;
+
+  border: none;
+  border-radius: 11px;
+
+  background: #e2e8f0;
+  color: #334155;
+
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.home-empty-card {
+  padding: 20px 14px;
+
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+
+  color: #94a3b8;
+
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.home-runtrip-card {
+  padding: 18px;
+
+  border-radius: 18px;
+
+  background:
+    linear-gradient(
+      135deg,
+      #0f172a,
+      #1e3a5f
+    );
+
+  color: #ffffff;
+}
+
+.home-runtrip-card span {
+  display: block;
+
+  margin-bottom: 9px;
+
+  color: #7dd3fc;
+
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.home-runtrip-card strong {
+  display: block;
+
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1.45;
+}
+
+.home-runtrip-card p {
+  margin: 9px 0 0;
+
+  color: #cbd5e1;
+
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ========================================
+   FreeRunTrip 하단 내비게이션
+======================================== */
+
+.app-bottom-navigation {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom:
+    calc(
+      env(safe-area-inset-bottom, 0px)
+      + 10px
+    );
+
+  z-index: 1300;
+
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+
+  min-height: 66px;
+
+  padding: 7px;
+
+  box-sizing: border-box;
+
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 22px;
+
+  background: rgba(255, 255, 255, 0.92);
+
+  box-shadow:
+    0 14px 34px
+    rgba(15, 23, 42, 0.16);
+
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.app-nav-button {
+  min-width: 0;
+
+  padding: 5px 2px;
+
+  border: none;
+  border-radius: 15px;
+
+  background: transparent;
+  color: #94a3b8;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+
+  font-family: inherit;
+
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-nav-icon {
+  display: grid;
+  place-items: center;
+
+  min-height: 18px;
+
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.app-nav-label {
+  overflow: hidden;
+
+  max-width: 100%;
+
+  font-size: 8px;
+  font-weight: 900;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-nav-button.active {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.app-nav-button.app-nav-runtrip .app-nav-icon {
+  color: #f59e0b;
+}
+
+.app-nav-button:active {
+  transform: scale(0.95);
+}
+
+@media (min-width: 720px) {
+  .home-screen {
+    max-width: 620px;
+    margin: 0 auto;
+  }
+
+  .app-bottom-navigation {
+    left: 50%;
+    right: auto;
+
+    width: min(590px, calc(100% - 24px));
+
+    transform: translateX(-50%);
+  }
+
+  .app-nav-button:active {
+    transform: scale(0.95);
+  }
+}
+
+@media (max-width: 390px) {
+  .home-screen {
+    padding-left: 15px;
+    padding-right: 15px;
+  }
+
+  .home-hero-card {
+    padding: 19px 16px;
+  }
+
+  .home-primary-actions button {
+    height: 47px;
+    font-size: 12px;
+  }
+
+  .app-bottom-navigation {
+    left: 9px;
+    right: 9px;
+
+    min-height: 63px;
+
+    padding: 6px;
+  }
+
+  .app-nav-icon {
+    font-size: 16px;
+  }
+
+  .app-nav-label {
+    font-size: 7px;
+  }
+}
+/* ========================================
+   FreeRunTrip 모바일 앱 프레임 통일
+======================================== */
+
+:root {
+  --app-mobile-width: 430px;
+}
+
+html {
+  background: #e8edf2;
+}
+
+body {
+  width: 100%;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  background: #e8edf2;
+}
+
+/* 홈과 모든 일반 콘텐츠 화면의 공통 폭 */
+#homeScreen,
+#records,
+#recordDetail,
+#profileFeedScreen,
+#monthlyReportScreen {
+  width: min(100%, var(--app-mobile-width));
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+}
+
+/* 지도도 모바일 앱 화면 안에 고정 */
+#map {
+  width: min(100%, var(--app-mobile-width));
+  height: 100dvh;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* 일반 러닝 시작 전 버튼 영역 */
+#controls {
+  left: 50%;
+  width: min(
+    calc(100% - 32px),
+    calc(var(--app-mobile-width) - 32px)
+  );
+
+  transform: translateX(-50%);
+  box-sizing: border-box;
+}
+
+#controls .running-idle-panel {
+  width: 100%;
+}
+
+#controls .running-idle-panel > button {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.running-navigation-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+}
+
+.running-navigation-actions button {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#runTripBtn {
+  grid-column: 1 / -1;
+}
+
+/* 일반 러닝 실행 화면도 중앙 모바일 폭 */
+.running-dashboard {
+  left: 50%;
+  right: auto;
+  width: min(100%, var(--app-mobile-width));
+
+  transform: translateX(-50%);
+}
+
+/* :has 규칙으로 전체 화면이 되던 controls 폭 보정 */
+#controls:has(.running-dashboard:not(.hidden)) {
+  left: 50%;
+  right: auto;
+
+  width: min(100%, var(--app-mobile-width));
+
+  transform: translateX(-50%);
+}
+
+/* RunTrip 지도·패널 전체를 모바일 폭으로 제한 */
+.runtrip-panel {
+  left: 50%;
+  right: auto;
+
+  width: min(100%, var(--app-mobile-width));
+
+  transform: translateX(-50%);
+}
+
+.runtrip-editor-card {
+  width: 100%;
+}
+
+/* RunTrip 장소 검색 화면 */
+.runtrip-search-screen {
+  left: 50%;
+  right: auto;
+
+  width: min(100%, var(--app-mobile-width));
+
+  transform: translateX(-50%);
+}
+
+/* 하단 메뉴도 홈 화면과 같은 폭 */
+.app-bottom-navigation {
+  left: 50%;
+  right: auto;
+
+  width: min(
+    calc(100% - 18px),
+    calc(var(--app-mobile-width) - 18px)
+  );
+
+  transform: translateX(-50%);
+}
+
+/* 기록 화면 하단 메뉴 공간 */
+#records,
+#profileFeedScreen,
+#monthlyReportScreen {
+  padding-bottom:
+    calc(
+      env(safe-area-inset-bottom, 0px)
+      + 96px
+    );
+}
+
+/* PC에서 모바일 앱 바깥 영역 구분 */
+@media (min-width: 431px) {
+  #homeScreen,
+  #records,
+  #recordDetail,
+  #profileFeedScreen,
+  #monthlyReportScreen,
+  #map {
+    box-shadow:
+      0 0 0 1px rgba(15, 23, 42, 0.06),
+      0 18px 50px rgba(15, 23, 42, 0.1);
+  }
+}
+
+/* 실제 모바일에서는 화면을 완전히 채움 */
+@media (max-width: 430px) {
+  html,
+  body {
+    background: #ffffff;
+  }
+
+  #homeScreen,
+  #records,
+  #recordDetail,
+  #profileFeedScreen,
+  #monthlyReportScreen,
+  #map,
+  .running-dashboard,
+  .runtrip-panel,
+  .runtrip-search-screen {
+    width: 100%;
+    max-width: none;
+    box-shadow: none;
   }
 }
