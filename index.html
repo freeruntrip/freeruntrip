@@ -404,10 +404,112 @@
 </section>
 </div>
 
-<div id="records">
-  <h2>저장된 러닝 기록</h2>
+<section
+  id="records"
+  class="records-screen hidden"
+  data-app-page="records"
+>
+  <header class="records-header">
+    <div>
+      <p class="records-eyebrow">
+        MY ACTIVITY
+      </p>
+
+      <h2>기록</h2>
+
+      <p class="records-description">
+        모든 러닝과 RunTrip 활동을 한곳에서 확인하세요.
+      </p>
+    </div>
+  </header>
+
+  <section class="records-summary-grid">
+    <article class="records-summary-card">
+      <span>누적 거리</span>
+
+      <strong id="recordsTotalDistance">
+        0.0 km
+      </strong>
+    </article>
+
+    <article class="records-summary-card">
+      <span>전체 활동</span>
+
+      <strong id="recordsTotalCount">
+        0회
+      </strong>
+    </article>
+  </section>
+
+  <button
+    id="recordsAnalysisBtn"
+    class="records-analysis-btn"
+    type="button"
+  >
+    <span>
+      <small>ACTIVITY ANALYSIS</small>
+      <strong>내 러닝 활동 분석 보기</strong>
+    </span>
+
+    <span aria-hidden="true">
+      ›
+    </span>
+  </button>
+
+  <div
+    class="records-filter-tabs"
+    role="tablist"
+    aria-label="기록 유형 선택"
+  >
+    <button
+      class="records-filter-tab active"
+      type="button"
+      data-record-filter="all"
+      role="tab"
+      aria-selected="true"
+    >
+      전체
+    </button>
+
+    <button
+      class="records-filter-tab"
+      type="button"
+      data-record-filter="running"
+      role="tab"
+      aria-selected="false"
+    >
+      러닝
+    </button>
+
+    <button
+      class="records-filter-tab"
+      type="button"
+      data-record-filter="runtrip"
+      role="tab"
+      aria-selected="false"
+    >
+      RunTrip
+    </button>
+  </div>
+
+  <div class="records-list-heading">
+    <div>
+      <p class="records-eyebrow">
+        ACTIVITY HISTORY
+      </p>
+
+      <h3 id="recordsListTitle">
+        전체 기록
+      </h3>
+    </div>
+
+    <span id="recordsFilteredCount">
+      0개
+    </span>
+  </div>
+
   <div id="recordsList"></div>
-</div>
+</section>
 <div id="paceMoodModal" class="hidden">
   <div class="pace-mood-modal-card">
     <p class="card-label">TODAY'S PACE MOOD</p>

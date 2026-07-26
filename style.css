@@ -4858,3 +4858,370 @@ body {
     padding-right: 12px;
   }
 }
+/* ========================================
+   FreeRunTrip 기록 페이지 V1
+======================================== */
+
+.records-screen {
+  width: min(100%, var(--app-mobile-width));
+  min-height: 100dvh;
+  margin: 0 auto;
+
+  box-sizing: border-box;
+
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 24px)
+    16px
+    calc(env(safe-area-inset-bottom, 0px) + 104px);
+
+  background:
+    radial-gradient(
+      circle at top right,
+      rgba(56, 189, 248, 0.18),
+      transparent 30%
+    ),
+    #f8fafc;
+
+  color: #0f172a;
+}
+
+.records-header {
+  margin-bottom: 18px;
+}
+
+.records-eyebrow {
+  margin: 0 0 6px;
+
+  color: #0284c7;
+
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+.records-header h2 {
+  margin: 0;
+
+  color: #0f172a;
+
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+
+.records-description {
+  margin: 9px 0 0;
+
+  color: #64748b;
+
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.records-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+
+  margin-bottom: 12px;
+}
+
+.records-summary-card {
+  min-width: 0;
+
+  padding: 17px 15px;
+
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+
+  background: #ffffff;
+
+  box-shadow:
+    0 8px 22px rgba(15, 23, 42, 0.06);
+}
+
+.records-summary-card span {
+  display: block;
+
+  margin-bottom: 9px;
+
+  color: #64748b;
+
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.records-summary-card strong {
+  display: block;
+
+  overflow: hidden;
+
+  color: #0f172a;
+
+  font-size: 21px;
+  font-weight: 900;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.records-analysis-btn {
+  width: 100%;
+  min-height: 66px;
+
+  margin-bottom: 18px;
+  padding: 12px 16px;
+
+  border: none;
+  border-radius: 18px;
+
+  background:
+    linear-gradient(
+      135deg,
+      #0f172a,
+      #1e3a5f
+    );
+
+  color: #ffffff;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+
+  font-family: inherit;
+  text-align: left;
+
+  box-shadow:
+    0 12px 26px rgba(15, 23, 42, 0.16);
+
+  cursor: pointer;
+}
+
+.records-analysis-btn > span:first-child {
+  min-width: 0;
+}
+
+.records-analysis-btn small {
+  display: block;
+
+  margin-bottom: 5px;
+
+  color: #7dd3fc;
+
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.records-analysis-btn strong {
+  display: block;
+
+  color: #ffffff;
+
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.records-analysis-btn > span:last-child {
+  flex-shrink: 0;
+
+  font-size: 28px;
+  font-weight: 300;
+  line-height: 1;
+}
+
+.records-analysis-btn:active {
+  transform: scale(0.98);
+}
+
+.records-filter-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+
+  margin-bottom: 20px;
+  padding: 4px;
+
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+
+  background: #ffffff;
+}
+
+.records-filter-tab {
+  height: 39px;
+
+  padding: 0 8px;
+
+  border: none;
+  border-radius: 999px;
+
+  background: transparent;
+  color: #94a3b8;
+
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 900;
+
+  cursor: pointer;
+}
+
+.records-filter-tab.active {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.records-filter-tab:active {
+  transform: scale(0.97);
+}
+
+.records-list-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+
+  margin-bottom: 12px;
+}
+
+.records-list-heading h3 {
+  margin: 0;
+
+  color: #0f172a;
+
+  font-size: 19px;
+  font-weight: 900;
+}
+
+#recordsFilteredCount {
+  flex-shrink: 0;
+
+  padding: 6px 9px;
+
+  border-radius: 999px;
+
+  background: #e0f2fe;
+  color: #0369a1;
+
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.records-screen #recordsList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.records-screen .record-card {
+  margin: 0;
+  padding: 16px;
+
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+
+  background: #ffffff;
+
+  box-shadow:
+    0 8px 20px rgba(15, 23, 42, 0.05);
+
+  color: #0f172a;
+
+  font-size: 13px;
+  line-height: 1.55;
+
+  cursor: pointer;
+}
+
+.records-screen .record-card div:first-child {
+  color: #64748b;
+
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.records-screen .record-card div:nth-child(2) {
+  margin-top: 4px;
+
+  color: #94a3b8;
+
+  font-size: 10px;
+}
+
+.records-screen .record-card div:nth-child(3) {
+  margin-top: 12px;
+
+  color: #0f172a;
+
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.records-screen .record-card div:nth-child(4) {
+  margin-top: 3px;
+
+  color: #64748b;
+
+  font-size: 12px;
+}
+
+.records-screen .record-card div:nth-child(5) {
+  margin-top: 11px;
+
+  width: fit-content;
+
+  padding: 6px 9px;
+
+  border-radius: 999px;
+
+  background: #fef3c7;
+  color: #92400e;
+
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.records-empty-state {
+  padding: 34px 18px;
+
+  border: 1px dashed #cbd5e1;
+  border-radius: 18px;
+
+  background: rgba(255, 255, 255, 0.72);
+  color: #94a3b8;
+
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+@media (max-width: 390px) {
+  .records-screen {
+    padding-left: 13px;
+    padding-right: 13px;
+  }
+
+  .records-header h2 {
+    font-size: 27px;
+  }
+
+  .records-summary-card {
+    padding: 15px 13px;
+  }
+
+  .records-summary-card strong {
+    font-size: 19px;
+  }
+
+  .records-analysis-btn {
+    min-height: 62px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .records-filter-tab {
+    height: 37px;
+    font-size: 11px;
+  }
+}

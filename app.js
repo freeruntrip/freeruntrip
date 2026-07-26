@@ -199,6 +199,31 @@ const runningGpsAccuracy = document.getElementById(
 );
 const recordsList = document.getElementById('recordsList');
 const recordsSection = document.getElementById('records');
+const recordsTotalDistance = document.getElementById(
+  'recordsTotalDistance'
+);
+
+const recordsTotalCount = document.getElementById(
+  'recordsTotalCount'
+);
+
+const recordsAnalysisBtn = document.getElementById(
+  'recordsAnalysisBtn'
+);
+
+const recordsListTitle = document.getElementById(
+  'recordsListTitle'
+);
+
+const recordsFilteredCount = document.getElementById(
+  'recordsFilteredCount'
+);
+
+const recordsFilterTabs = document.querySelectorAll(
+  '.records-filter-tab'
+);
+
+let selectedRecordFilter = 'all';
 const controlsSection = document.getElementById('controls');
 const recordDetail = document.getElementById('recordDetail');
 const backToRecordsBtn = document.getElementById('backToRecordsBtn');
@@ -553,6 +578,8 @@ function saveRunRecord() {
   const record = {
     id: Date.now(),
 
+    activityType: 'running',
+
     date: runEndTime.toLocaleDateString(),
 
     startTime: runStartTime.toLocaleTimeString([], {
@@ -681,107 +708,358 @@ if (bounds.isValid()) {
     detailMap.invalidateSize();
   }, 100);
 }
-function renderRunRecords() {
-  recordsList.innerHTML = '';
-
- runRecords.sort(function (a, b) {
-  return (b.id || 0) - (a.id || 0);
-});
-
-  runRecords.forEach(function (record) {
-    const recordCard = document.createElement('div');
-    recordCard.className = 'record-card';
-
-    recordCard.innerHTML = `
-      <div>${record.date}</div>
-      <div>${record.startTime} ~ ${record.endTime}</div>
-      <div>${record.distance} km</div>
-      <div>${record.duration}</div>
-      <div class="pace-toggle" data-showing="emotional">
-  ${record.emotionalPace || '마음 환기 Pace'}
-</div>
-    `;
-    recordCard.addEventListener('click', function () {
-  detailDate.textContent = record.date;
-  detailTimeRange.textContent = record.startTime + ' ~ ' + record.endTime;
-  detailDistance.textContent = record.distance + ' km';
-  detailDuration.textContent = record.duration;
-  detailPaceTitle.textContent = 'Pace Mood';
-detailNumericPace.textContent = record.emotionalPace || '마음 환기 Pace';
-detailPaceHint.textContent = '터치하면 숫자 Pace로 바뀝니다';
-
-detailNumericPace.dataset.showing = 'emotional';
-detailNumericPace.dataset.numericPace = record.pace;
-detailNumericPace.dataset.emotionalPace = record.emotionalPace || '마음 환기 Pace';
-renderDetailSplits(record);
-const hasPhoto = Boolean(record.photo);
-const hasMemo = Boolean(record.memo);
-
-if (hasPhoto || hasMemo) {
-  detailMemory.classList.remove('hidden');
-
-  if (hasPhoto) {
-    detailRunPhoto.src = record.photo;
-    detailRunPhoto.classList.remove('hidden');
-  } else {
-    detailRunPhoto.removeAttribute('src');
-    detailRunPhoto.classList.add('hidden');
+function getRecordActivityType(record) {
+  if (
+    record.activityType === 'runtrip' ||
+    record.type === 'runtrip'
+  ) {
+    return 'runtrip';
   }
 
-  if (hasMemo) {
-    detailRunMemo.textContent = record.memo;
-    detailRunMemoWrap.classList.remove('hidden');
-  } else {
-    detailRunMemo.textContent = '';
-    detailRunMemoWrap.classList.add('hidden');
-  }
-} else {
-  detailMemory.classList.add('hidden');
-  detailRunPhoto.removeAttribute('src');
-  detailRunMemo.textContent = '';
-}
-selectedDetailRecord = record;
-
-detailMapSection.classList.add('hidden');
-toggleDetailMapBtn.textContent = '지도 보기';
-
-const hasRoute =
-  (Array.isArray(record.routeSegments) &&
-    record.routeSegments.some(function (segment) {
-      return Array.isArray(segment) && segment.length > 0;
-    })) ||
-  (Array.isArray(record.routeCoordinates) &&
-    record.routeCoordinates.length > 0);
-
-toggleDetailMapBtn.disabled = !hasRoute;
-
-if (!hasRoute) {
-  toggleDetailMapBtn.textContent = '경로 데이터가 없습니다';
+  return 'running';
 }
 
-map.getContainer().style.display = 'none';
-controlsSection.style.display = 'none';
-
-recordsSection.classList.add('hidden');
-recordDetail.classList.remove('hidden');
-});
-const paceToggle = recordCard.querySelector('.pace-toggle');
-
-paceToggle.addEventListener('click', function (event) {
-  event.stopPropagation();
-
-  if (paceToggle.dataset.showing === 'emotional') {
-    paceToggle.textContent = record.pace;
-    paceToggle.dataset.showing = 'number';
-  } else {
-    paceToggle.textContent = record.emotionalPace || '마음 환기 Pace';
-    paceToggle.dataset.showing = 'emotional';
+function getFilteredRunRecords() {
+  if (selectedRecordFilter === 'all') {
+    return runRecords;
   }
-});
-    recordsList.appendChild(recordCard);
+
+  return runRecords.filter(function (record) {
+    return (
+      getRecordActivityType(record) ===
+      selectedRecordFilter
+    );
   });
 }
 
+function getRecordFilterTitle() {
+  if (selectedRecordFilter === 'running') {
+    return '러닝 기록';
+  }
+
+  if (selectedRecordFilter === 'runtrip') {
+    return 'RunTrip 기록';
+  }
+
+  return '전체 기록';
+}
+
+function renderRecordsSummary() {
+  const totalDistanceKm = runRecords.reduce(
+    function (sum, record) {
+      return (
+        sum +
+        (Number(record.distance) || 0)
+      );
+    },
+    0
+  );
+
+  recordsTotalDistance.textContent =
+    `${totalDistanceKm.toFixed(1)} km`;
+
+  recordsTotalCount.textContent =
+    `${runRecords.length}회`;
+}
+
+function renderRecordsEmptyState() {
+  let message =
+    '아직 저장된 활동 기록이 없습니다.';
+
+  if (selectedRecordFilter === 'running') {
+    message =
+      '아직 저장된 일반 러닝 기록이 없습니다.';
+  }
+
+  if (selectedRecordFilter === 'runtrip') {
+    message =
+      '아직 저장된 RunTrip 기록이 없습니다.';
+  }
+
+  recordsList.innerHTML = `
+    <div class="records-empty-state">
+      ${message}
+    </div>
+  `;
+}
+function renderRunRecords() {
+  recordsList.innerHTML = '';
+
+  runRecords.sort(function (a, b) {
+    return (b.id || 0) - (a.id || 0);
+  });
+
+  renderRecordsSummary();
+
+  const filteredRecords =
+    getFilteredRunRecords();
+
+  recordsListTitle.textContent =
+    getRecordFilterTitle();
+
+  recordsFilteredCount.textContent =
+    `${filteredRecords.length}개`;
+
+  if (filteredRecords.length === 0) {
+    renderRecordsEmptyState();
+    return;
+  }
+
+  filteredRecords.forEach(function (record) {
+    const recordCard =
+      document.createElement('div');
+
+    const activityType =
+      getRecordActivityType(record);
+
+    recordCard.className =
+      `record-card ${activityType}-record-card`;
+
+    const activityLabel =
+      activityType === 'runtrip'
+        ? 'RunTrip'
+        : '러닝';
+
+    recordCard.innerHTML = `
+      <div>
+        ${activityLabel} · ${record.date}
+      </div>
+
+      <div>
+        ${record.startTime} ~ ${record.endTime}
+      </div>
+
+      <div>
+        ${record.distance} km
+      </div>
+
+      <div>
+        ${record.duration}
+      </div>
+
+      <div
+        class="pace-toggle"
+        data-showing="emotional"
+      >
+        ${
+          record.emotionalPace ||
+          '마음 환기 Pace'
+        }
+      </div>
+    `;
+
+    recordCard.addEventListener(
+      'click',
+      function () {
+        detailDate.textContent =
+          record.date;
+
+        detailTimeRange.textContent =
+          record.startTime +
+          ' ~ ' +
+          record.endTime;
+
+        detailDistance.textContent =
+          record.distance + ' km';
+
+        detailDuration.textContent =
+          record.duration;
+
+        detailPaceTitle.textContent =
+          'Pace Mood';
+
+        detailNumericPace.textContent =
+          record.emotionalPace ||
+          '마음 환기 Pace';
+
+        detailPaceHint.textContent =
+          '터치하면 숫자 Pace로 바뀝니다';
+
+        detailNumericPace.dataset.showing =
+          'emotional';
+
+        detailNumericPace.dataset.numericPace =
+          record.pace;
+
+        detailNumericPace.dataset.emotionalPace =
+          record.emotionalPace ||
+          '마음 환기 Pace';
+
+        renderDetailSplits(record);
+
+        const hasPhoto =
+          Boolean(record.photo);
+
+        const hasMemo =
+          Boolean(record.memo);
+
+        if (hasPhoto || hasMemo) {
+          detailMemory.classList.remove(
+            'hidden'
+          );
+
+          if (hasPhoto) {
+            detailRunPhoto.src =
+              record.photo;
+
+            detailRunPhoto.classList.remove(
+              'hidden'
+            );
+          } else {
+            detailRunPhoto.removeAttribute(
+              'src'
+            );
+
+            detailRunPhoto.classList.add(
+              'hidden'
+            );
+          }
+
+          if (hasMemo) {
+            detailRunMemo.textContent =
+              record.memo;
+
+            detailRunMemoWrap.classList.remove(
+              'hidden'
+            );
+          } else {
+            detailRunMemo.textContent = '';
+
+            detailRunMemoWrap.classList.add(
+              'hidden'
+            );
+          }
+        } else {
+          detailMemory.classList.add(
+            'hidden'
+          );
+
+          detailRunPhoto.removeAttribute(
+            'src'
+          );
+
+          detailRunMemo.textContent = '';
+        }
+
+        selectedDetailRecord = record;
+
+        detailMapSection.classList.add(
+          'hidden'
+        );
+
+        toggleDetailMapBtn.textContent =
+          '지도 보기';
+
+        const hasRoute =
+          (
+            Array.isArray(
+              record.routeSegments
+            ) &&
+            record.routeSegments.some(
+              function (segment) {
+                return (
+                  Array.isArray(segment) &&
+                  segment.length > 0
+                );
+              }
+            )
+          ) ||
+          (
+            Array.isArray(
+              record.routeCoordinates
+            ) &&
+            record.routeCoordinates.length >
+              0
+          );
+
+        toggleDetailMapBtn.disabled =
+          !hasRoute;
+
+        if (!hasRoute) {
+          toggleDetailMapBtn.textContent =
+            '경로 데이터가 없습니다';
+        }
+
+        map.getContainer().style.display =
+          'none';
+
+        controlsSection.style.display =
+          'none';
+
+        recordsSection.classList.add(
+          'hidden'
+        );
+
+        recordDetail.classList.remove(
+          'hidden'
+        );
+      }
+    );
+
+    const paceToggle =
+      recordCard.querySelector(
+        '.pace-toggle'
+      );
+
+    paceToggle.addEventListener(
+      'click',
+      function (event) {
+        event.stopPropagation();
+
+        if (
+          paceToggle.dataset.showing ===
+          'emotional'
+        ) {
+          paceToggle.textContent =
+            record.pace;
+
+          paceToggle.dataset.showing =
+            'number';
+        } else {
+          paceToggle.textContent =
+            record.emotionalPace ||
+            '마음 환기 Pace';
+
+          paceToggle.dataset.showing =
+            'emotional';
+        }
+      }
+    );
+
+    recordsList.appendChild(
+      recordCard
+    );
+  });
+}
+recordsFilterTabs.forEach(function (tab) {
+  tab.addEventListener(
+    'click',
+    function () {
+      selectedRecordFilter =
+        tab.dataset.recordFilter ||
+        'all';
+
+      recordsFilterTabs.forEach(
+        function (item) {
+          const isActive =
+            item === tab;
+
+          item.classList.toggle(
+            'active',
+            isActive
+          );
+
+          item.setAttribute(
+            'aria-selected',
+            String(isActive)
+          );
+        }
+      );
+
+      renderRunRecords();
+    }
+  );
+});
 function renderRecordProfileFeed() {
   const profileTotalDistanceHero = document.getElementById('profileTotalDistanceHero');
   const profileRunCountHero = document.getElementById('profileRunCountHero');
@@ -3918,13 +4196,23 @@ monthlyReportBtn.addEventListener('click', function () {
   monthlyReportScreen.classList.remove('hidden');
 });
 
-backFromMonthlyReportBtn.addEventListener('click', function () {
-  monthlyReportScreen.classList.add('hidden');
+recordsAnalysisBtn.addEventListener(
+  'click',
+  function () {
+    monthlyReportBtn.click();
+  }
+);
 
-  map.getContainer().style.display = 'block';
-  controlsSection.style.display = 'flex';
-  recordsSection.classList.remove('hidden');
-});
+backFromMonthlyReportBtn.addEventListener(
+  'click',
+  function () {
+    monthlyReportScreen.classList.add(
+      'hidden'
+    );
+
+    openAppPage('records');
+  }
+);
 const paceMoodOptions = document.querySelectorAll('.pace-mood-option');
 
 paceMoodOptions.forEach(function (button) {
