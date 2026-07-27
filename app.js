@@ -172,6 +172,8 @@ let lastValidAltitude = null;
 let recentPositions = [];
 
 const SMOOTHING_COUNT = 3;
+const DEFAULT_RUNNER_WEIGHT_KG = 70;
+
 const distanceDisplay = document.getElementById('distance');
 const paceDisplay = document.getElementById('pace');
 const runningGpsStatus = document.getElementById(
@@ -247,6 +249,45 @@ const detailDistance = document.getElementById(
   'detailDistance'
 );
 const detailDuration = document.getElementById('detailDuration');
+const detailCalories = document.getElementById(
+  'detailCalories'
+);
+
+const detailPlannedDistanceCard = document.getElementById(
+  'detailPlannedDistanceCard'
+);
+
+const detailPlannedDistance = document.getElementById(
+  'detailPlannedDistance'
+);
+
+const detailRunTripInfo = document.getElementById(
+  'detailRunTripInfo'
+);
+
+const detailRunTripOrigin = document.getElementById(
+  'detailRunTripOrigin'
+);
+
+const detailRunTripDestination = document.getElementById(
+  'detailRunTripDestination'
+);
+
+const detailRunTripWaypointsWrap = document.getElementById(
+  'detailRunTripWaypointsWrap'
+);
+
+const detailRunTripWaypoints = document.getElementById(
+  'detailRunTripWaypoints'
+);
+
+const detailPlannedDuration = document.getElementById(
+  'detailPlannedDuration'
+);
+
+const detailDistanceDifference = document.getElementById(
+  'detailDistanceDifference'
+);
 const detailNumericPace = document.getElementById('detailNumericPace');
 const detailPaceTitle = document.getElementById('detailPaceTitle');
 const detailPaceHint = document.getElementById('detailPaceHint');
@@ -612,6 +653,10 @@ function saveRunRecord() {
 
     distance: (totalDistance / 1000).toFixed(2),
 
+    calories: calculateCalories(
+      totalDistance
+    ),
+
     pace: paceDisplay.textContent,
 
     emotionalPace: getEmotionalPaceLabel(),
@@ -769,6 +814,18 @@ function normalizeActivityRecord(record) {
 
     distance:
       distanceKm.toFixed(2),
+
+    calories:
+      Number.isFinite(
+        Number(record.calories)
+      )
+        ? Math.round(
+          Number(record.calories)
+          )
+        : Math.round(
+             DEFAULT_RUNNER_WEIGHT_KG *
+             distanceKm
+          ),
 
     duration:
       record.duration ||
@@ -1176,6 +1233,148 @@ if (isRunTrip) {
 
     detailDuration.textContent =
       record.duration;
+
+    detailCalories.textContent =
+  `${record.calories} kcal`;
+
+if (isRunTrip) {
+  const rawPlannedDistance =
+    Number(record.plannedDistance);
+
+  const hasPlannedDistance =
+    Number.isFinite(rawPlannedDistance) &&
+    rawPlannedDistance > 0;
+
+  const plannedDistanceKm =
+    hasPlannedDistance
+     ? rawPlannedDistance
+     : 0;
+
+  const actualDistanceKm =
+    Number(record.distance) || 0;
+
+  const distanceDifferenceKm =
+    actualDistanceKm -
+    plannedDistanceKm;
+
+  if (hasPlannedDistance) {
+    detailPlannedDistance.textContent =
+    `${plannedDistanceKm.toFixed(2)} km`;
+
+    detailPlannedDistanceCard.classList.remove(
+      'hidden'
+    );
+  } else {
+    detailPlannedDistance.textContent =
+      '정보 없음';
+
+     detailPlannedDistanceCard.classList.add(
+      'hidden'
+    );
+  }
+
+  detailRunTripInfo.classList.remove(
+    'hidden'
+  );
+
+  detailRunTripOrigin.textContent =
+    record.originName;
+
+  detailRunTripDestination.textContent =
+    record.destinationName;
+
+  const rawPlannedDuration =
+  Number(
+    record.plannedDurationMinutes
+  );
+
+const hasPlannedDuration =
+  Number.isFinite(
+    rawPlannedDuration
+  ) &&
+  rawPlannedDuration > 0;
+
+detailPlannedDuration.textContent =
+  hasPlannedDuration
+    ? `약 ${Math.round(
+        rawPlannedDuration
+      )}분`
+    : '정보 없음';
+
+  if (hasPlannedDistance) {
+  const differencePrefix =
+    distanceDifferenceKm > 0
+      ? '+'
+      : '';
+
+  detailDistanceDifference.textContent =
+    `${differencePrefix}${distanceDifferenceKm.toFixed(
+      2
+    )} km`;
+} else {
+  detailDistanceDifference.textContent =
+    '정보 없음';
+}
+
+  if (
+    Array.isArray(
+      record.waypointNames
+    ) &&
+    record.waypointNames.length > 0
+  ) {
+    detailRunTripWaypointsWrap.classList.remove(
+      'hidden'
+    );
+
+    detailRunTripWaypoints.innerHTML =
+      record.waypointNames
+        .map(function (
+          waypointName,
+          index
+        ) {
+          return `
+            <div class="detail-runtrip-waypoint">
+              <span
+                class="detail-runtrip-waypoint-number"
+              >
+                ${index + 1}
+              </span>
+
+              <strong
+                class="detail-runtrip-waypoint-name"
+              >
+                ${escapePlaceSearchText(
+                  waypointName
+                )}
+              </strong>
+            </div>
+          `;
+        })
+        .join('');
+  } else {
+    detailRunTripWaypointsWrap.classList.add(
+      'hidden'
+    );
+
+    detailRunTripWaypoints.innerHTML =
+      '';
+  }
+} else {
+  detailPlannedDistanceCard.classList.add(
+    'hidden'
+  );
+
+  detailRunTripInfo.classList.add(
+    'hidden'
+  );
+
+  detailRunTripWaypointsWrap.classList.add(
+    'hidden'
+  );
+
+  detailRunTripWaypoints.innerHTML =
+    '';
+}
 
     detailPaceTitle.textContent =
       'Pace Mood';
@@ -1855,19 +2054,21 @@ toggleDetailMapBtn.addEventListener('click', function () {
     toggleDetailMapBtn.textContent = '지도 보기';
   }
 });
-backToRecordsBtn.addEventListener('click', function () {
-  detailMapSection.classList.add('hidden');
-  toggleDetailMapBtn.textContent = '지도 보기';
+backToRecordsBtn.addEventListener(
+  'click',
+  function () {
+    detailMapSection.classList.add(
+      'hidden'
+    );
 
-  recordDetail.classList.add('hidden');
+    toggleDetailMapBtn.textContent =
+      '지도 보기';
 
-  map.getContainer().style.display = 'block';
-  controlsSection.style.display = 'flex';
+    selectedDetailRecord = null;
 
-  recordsSection.classList.remove('hidden');
-
-  selectedDetailRecord = null;
-});
+    openAppPage('records');
+  }
+);
 const profileFeedBtn = document.getElementById('profileFeedBtn');
 const profileFeedScreen = document.getElementById('profileFeedScreen');
 const backFromProfileFeedBtn = document.getElementById('backFromProfileFeedBtn');
@@ -2211,7 +2412,6 @@ let runTripLastValidPosition = null;
 let runTripStartTime = null;
 
 let runTripActualRouteCoordinates = [];
-const DEFAULT_RUNNER_WEIGHT_KG = 70;
 function formatRunTripTimer(totalSeconds) {
   const safeSeconds = Math.max(
     0,
@@ -2881,7 +3081,12 @@ function saveRunTripRecord() {
     distance:
       actualDistanceKm.toFixed(2),
 
-    pace:
+    calories:
+      calculateCalories(
+        runTripActualDistanceMeters
+      ),
+
+pace:
       formatPaceFromSeconds(
         runTripElapsedSeconds,
         runTripActualDistanceMeters
@@ -5192,20 +5397,6 @@ backFromProfileFeedBtn.addEventListener(
 
 /* 기록 상세에서 목록으로 돌아가면
    기록 탭과 하단 메뉴를 유지한다. */
-backToRecordsBtn.addEventListener(
-  'click',
-  function () {
-    setTimeout(function () {
-      currentAppPage = 'records';
-
-      updateBottomNavigationActiveState(
-        'records'
-      );
-
-      showBottomNavigation();
-    }, 0);
-  }
-);
 
 /* 첫 앱 화면 */
 openAppPage('home');

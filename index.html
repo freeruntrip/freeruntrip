@@ -583,16 +583,94 @@
   ></div>
 
   <div id="detailStats">
+  <div>
+    <span>실제 거리</span>
+    <strong id="detailDistance">0.00 km</strong>
+  </div>
+
+  <div>
+    <span>운동 시간</span>
+    <strong id="detailDuration">00:00</strong>
+  </div>
+
+  <div>
+    <span>칼로리</span>
+    <strong id="detailCalories">0 kcal</strong>
+  </div>
+
+  <div
+    id="detailPlannedDistanceCard"
+    class="hidden"
+  >
+    <span>예상 거리</span>
+    <strong id="detailPlannedDistance">0.00 km</strong>
+  </div>
+</div>
+
+<section
+  id="detailRunTripInfo"
+  class="detail-runtrip-info hidden"
+>
+  <div class="detail-runtrip-info-heading">
     <div>
-      <span>거리</span>
-      <strong id="detailDistance">0.00 km</strong>
+      <p class="card-label">RUNTRIP ROUTE</p>
+      <h3>여행 경로</h3>
+    </div>
+  </div>
+
+  <div class="detail-runtrip-route-list">
+    <div class="detail-runtrip-route-item">
+      <span class="detail-runtrip-point start">
+        S
+      </span>
+
+      <div>
+        <small>출발지</small>
+        <strong id="detailRunTripOrigin">
+          출발지
+        </strong>
+      </div>
+    </div>
+
+    <div
+      id="detailRunTripWaypointsWrap"
+      class="detail-runtrip-waypoints hidden"
+    >
+      <p>경유지</p>
+
+      <div id="detailRunTripWaypoints"></div>
+    </div>
+
+    <div class="detail-runtrip-route-item">
+      <span class="detail-runtrip-point destination">
+        D
+      </span>
+
+      <div>
+        <small>도착지</small>
+        <strong id="detailRunTripDestination">
+          도착지
+        </strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="detail-runtrip-comparison">
+    <div>
+      <span>예상 시간</span>
+      <strong id="detailPlannedDuration">
+        0분
+      </strong>
     </div>
 
     <div>
-      <span>시간</span>
-      <strong id="detailDuration">00:00</strong>
+      <span>거리 차이</span>
+      <strong id="detailDistanceDifference">
+        0.00 km
+      </strong>
     </div>
   </div>
+</section>
 
 <div id="detailPaceCard">
   <span id="detailPaceTitle">Pace Mood</span>

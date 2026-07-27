@@ -5545,3 +5545,326 @@ body {
   font-weight: 800;
   line-height: 1.55;
 }
+/* ========================================
+   기록 상세 V1 확장
+======================================== */
+
+#recordDetail {
+  padding-bottom:
+    calc(
+      env(safe-area-inset-bottom, 0px)
+      + 36px
+    );
+}
+
+#detailStats {
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+}
+
+#detailStats > div {
+  min-width: 0;
+  min-height: 88px;
+
+  box-sizing: border-box;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+#detailStats strong {
+  display: block;
+
+  overflow: hidden;
+
+  color: #f8fafc;
+
+  font-size: 21px;
+  font-weight: 900;
+  line-height: 1.25;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#detailCalories {
+  color: #facc15;
+}
+
+#detailPlannedDistanceCard {
+  border: 1px solid
+    rgba(250, 204, 21, 0.22);
+
+  background:
+    rgba(250, 204, 21, 0.1)
+    !important;
+}
+
+#detailPlannedDistance {
+  color: #fde047
+    !important;
+}
+
+/* RunTrip 상세 경로 카드 */
+.detail-runtrip-info {
+  margin-bottom: 20px;
+  padding: 18px;
+
+  border: 1px solid
+    rgba(250, 204, 21, 0.24);
+
+  border-radius: 22px;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(250, 204, 21, 0.12),
+      rgba(255, 255, 255, 0.07)
+    );
+}
+
+.detail-runtrip-info-heading {
+  margin-bottom: 15px;
+}
+
+.detail-runtrip-info-heading
+.card-label {
+  margin-bottom: 5px;
+  color: #facc15;
+}
+
+.detail-runtrip-info-heading h3 {
+  margin: 0;
+
+  color: #f8fafc;
+
+  font-size: 19px;
+  font-weight: 900;
+}
+
+/* 출발지 · 도착지 */
+.detail-runtrip-route-list {
+  overflow: hidden;
+
+  border: 1px solid
+    rgba(255, 255, 255, 0.1);
+
+  border-radius: 17px;
+
+  background:
+    rgba(15, 23, 42, 0.46);
+}
+
+.detail-runtrip-route-item {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  align-items: center;
+  gap: 11px;
+
+  min-height: 65px;
+  padding: 11px 13px;
+
+  box-sizing: border-box;
+}
+
+.detail-runtrip-route-item
++ .detail-runtrip-route-item {
+  border-top: 1px solid
+    rgba(255, 255, 255, 0.09);
+}
+
+.detail-runtrip-point {
+  width: 32px;
+  height: 32px;
+
+  border-radius: 50%;
+
+  display: grid;
+  place-items: center;
+
+  color: #ffffff;
+
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.detail-runtrip-point.start {
+  background: #16a34a;
+}
+
+.detail-runtrip-point.destination {
+  background: #ef4444;
+}
+
+.detail-runtrip-route-item small {
+  display: block;
+
+  margin-bottom: 4px;
+
+  color: #94a3b8;
+
+  font-size: 10px;
+}
+
+.detail-runtrip-route-item strong {
+  display: block;
+
+  overflow: hidden;
+
+  color: #f8fafc;
+
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.4;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 경유지 */
+.detail-runtrip-waypoints {
+  padding: 13px;
+
+  border-top: 1px solid
+    rgba(255, 255, 255, 0.09);
+
+  border-bottom: 1px solid
+    rgba(255, 255, 255, 0.09);
+
+  background:
+    rgba(250, 204, 21, 0.05);
+}
+
+.detail-runtrip-waypoints > p {
+  margin: 0 0 9px;
+
+  color: #facc15;
+
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+#detailRunTripWaypoints {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.detail-runtrip-waypoint {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  align-items: center;
+  gap: 9px;
+
+  min-width: 0;
+}
+
+.detail-runtrip-waypoint-number {
+  width: 26px;
+  height: 26px;
+
+  border-radius: 50%;
+
+  display: grid;
+  place-items: center;
+
+  background: #facc15;
+  color: #111827;
+
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.detail-runtrip-waypoint-name {
+  overflow: hidden;
+
+  color: #f8fafc;
+
+  font-size: 13px;
+  font-weight: 800;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 예상 시간 · 거리 차이 */
+.detail-runtrip-comparison {
+  display: grid;
+  grid-template-columns:
+    repeat(2, minmax(0, 1fr));
+
+  margin-top: 12px;
+
+  overflow: hidden;
+
+  border: 1px solid
+    rgba(255, 255, 255, 0.1);
+
+  border-radius: 16px;
+
+  background:
+    rgba(255, 255, 255, 0.06);
+}
+
+.detail-runtrip-comparison > div {
+  min-width: 0;
+  padding: 14px 10px;
+
+  text-align: center;
+}
+
+.detail-runtrip-comparison
+> div + div {
+  border-left: 1px solid
+    rgba(255, 255, 255, 0.1);
+}
+
+.detail-runtrip-comparison span {
+  display: block;
+
+  margin-bottom: 6px;
+
+  color: #94a3b8;
+
+  font-size: 10px;
+}
+
+.detail-runtrip-comparison strong {
+  display: block;
+
+  overflow: hidden;
+
+  color: #facc15;
+
+  font-size: 17px;
+  font-weight: 900;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 390px) {
+  #recordDetail {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  #detailStats > div {
+    min-height: 82px;
+    padding: 13px;
+  }
+
+  #detailStats strong {
+    font-size: 18px;
+  }
+
+  .detail-runtrip-info {
+    padding: 15px;
+  }
+
+  .detail-runtrip-comparison strong {
+    font-size: 15px;
+  }
+}
