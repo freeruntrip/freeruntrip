@@ -1296,9 +1296,9 @@ const hasPlannedDuration =
 
 detailPlannedDuration.textContent =
   hasPlannedDuration
-    ? `약 ${Math.round(
+    ? `약 ${formatRunTripPlannedDuration(
         rawPlannedDuration
-      )}분`
+      )}`
     : '정보 없음';
 
   if (hasPlannedDistance) {
@@ -2412,6 +2412,29 @@ let runTripLastValidPosition = null;
 let runTripStartTime = null;
 
 let runTripActualRouteCoordinates = [];
+function formatRunTripPlannedDuration(totalMinutes) {
+  const safeMinutes = Math.max(
+    0,
+    Math.round(Number(totalMinutes) || 0)
+  );
+
+  const hours = Math.floor(
+    safeMinutes / 60
+  );
+
+  const minutes =
+    safeMinutes % 60;
+
+  if (hours > 0 && minutes > 0) {
+    return `${hours}시간 ${minutes}분`;
+  }
+
+  if (hours > 0) {
+    return `${hours}시간`;
+  }
+
+  return `${minutes}분`;
+}
 function formatRunTripTimer(totalSeconds) {
   const safeSeconds = Math.max(
     0,
@@ -2671,7 +2694,9 @@ function showRunTripConfirmedMode() {
     `${latestRunTripRouteSummary.distanceKm.toFixed(1)}km`;
 
   confirmedRunTripDuration.textContent =
-    `약 ${latestRunTripRouteSummary.durationMinutes}분`;
+  `약 ${formatRunTripPlannedDuration(
+    latestRunTripRouteSummary.durationMinutes
+  )}`;
 
   isRunTripConfirmed = true;
 

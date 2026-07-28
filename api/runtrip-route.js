@@ -1,6 +1,8 @@
 const TMAP_PEDESTRIAN_ROUTE_URL =
   "https://apis.openapi.sk.com/tmap/routes/pedestrian?version=1";
 
+const RUNTRIP_DURATION_CORRECTION_FACTOR = 1.24;
+
 function setCorsHeaders(response) {
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -150,7 +152,10 @@ module.exports = async function handler(request, response) {
     const features = Array.isArray(data?.features) ? data.features : [];
     const coordinates = extractRouteCoordinates(features);
     const summary = getRouteSummary(features);
-
+    
+    const correctedDurationSeconds = Math.round(
+        summary.durationSeconds * RUNTRIP_DURATION_CORRECTION_FACTOR
+      );
     if (coordinates.length < 2) {
       return response.status(502).json({
         error: "TMAP 응답에서 경로 좌표를 찾지 못했습니다.",
@@ -160,7 +165,7 @@ module.exports = async function handler(request, response) {
     return response.status(200).json({
       coordinates,
       distanceMeters: summary.distanceMeters,
-      durationSeconds: summary.durationSeconds,
+      durationSeconds: correctedDurationSeconds,
     });
   } catch (error) {
     console.error("RunTrip route server error:", error);
