@@ -56,6 +56,16 @@ function getShortAddress(address) {
 
   const parts = normalizedAddress.split(' ');
 
+  const roadIndex = parts.findIndex(function (part) {
+    return /(?:대로|로|길)$/.test(part);
+  });
+
+  if (roadIndex >= 0) {
+    return parts
+      .slice(roadIndex)
+      .join(' ');
+  }
+
   if (parts.length <= 2) {
     return normalizedAddress;
   }
