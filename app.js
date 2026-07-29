@@ -2515,6 +2515,30 @@ let runTripLastValidPosition = null;
 let runTripStartTime = null;
 
 let runTripActualRouteCoordinates = [];
+let runTripActualRouteSegments = [];
+let runTripActiveRouteSegment = null;
+
+function beginNewRunTripRouteSegment() {
+  runTripActiveRouteSegment = [];
+
+  runTripActualRouteSegments.push(
+    runTripActiveRouteSegment
+  );
+}
+
+function appendRunTripRoutePoint(point) {
+  if (!runTripActiveRouteSegment) {
+    beginNewRunTripRouteSegment();
+  }
+
+  runTripActualRouteCoordinates.push(
+    point
+  );
+
+  runTripActiveRouteSegment.push(
+    point
+  );
+}
 function formatRunTripPlannedDuration(totalMinutes) {
   const safeMinutes = Math.max(
     0,
@@ -3020,7 +3044,7 @@ function startRunTripLocationWatch() {
           longitude
         ];
 
-        runTripActualRouteCoordinates.push([
+        appendRunTripRoutePoint([
           latitude,
           longitude
         ]);
@@ -3101,6 +3125,10 @@ function startRunTripFollowing() {
   runTripStartTime = new Date();
 
   runTripActualRouteCoordinates = [];
+  runTripActualRouteSegments = [];
+  runTripActiveRouteSegment = null;
+
+  beginNewRunTripRouteSegment();
 
   isRunTripFollowing = true;
   isRunTripPaused = false;
@@ -3251,9 +3279,23 @@ pace:
   actualRoute,
 
 routeSegments:
-  actualRoute.length >= 2
-    ? [actualRoute]
-    : [],
+  runTripActualRouteSegments
+    .filter(function (segment) {
+      return (
+        Array.isArray(segment) &&
+        segment.length >= 2
+      );
+    })
+    .map(function (segment) {
+      return segment.map(
+        function (point) {
+          return [
+            Number(point[0]),
+            Number(point[1])
+          ];
+        }
+      );
+    }),
 
 plannedRouteCoordinates:
   plannedRoute,
@@ -5222,17 +5264,19 @@ pauseRunTripBtn.addEventListener(
     }
 
     if (isRunTripPaused) {
-      isRunTripPaused = false;
+  isRunTripPaused = false;
 
-      runTripLastValidPosition = null;
+  runTripLastValidPosition = null;
 
-      startRunTripTimer();
-      startRunTripLocationWatch();
+  beginNewRunTripRouteSegment();
 
-      updateRunTripDashboard();
+  startRunTripTimer();
+  startRunTripLocationWatch();
 
-      return;
-    }
+  updateRunTripDashboard();
+
+  return;
+}
 
     isRunTripPaused = true;
 
@@ -5254,6 +5298,7 @@ pauseRunTripBtn.addEventListener(
     runTripFollowWatchId = null;
 
     runTripLastValidPosition = null;
+    runTripActiveRouteSegment = null;
 
     updateRunTripDashboard();
   }
@@ -5276,6 +5321,8 @@ endRunTripBtn.addEventListener(
 
     runTripStartTime = null;
     runTripActualRouteCoordinates = [];
+    runTripActualRouteSegments = [];
+    runTripActiveRouteSegment = null;
 
     setTimeout(function () {
       openAppPage('records');
