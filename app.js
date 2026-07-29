@@ -693,16 +693,107 @@ renderMonthlyReport();
 
   console.log('저장된 러닝 기록:', record);
 }
-function showDetailMap(record) {
-  const savedSegments =
-    Array.isArray(record.routeSegments) &&
-    record.routeSegments.length > 0
-      ? record.routeSegments
-      : [record.routeCoordinates || []];
+function getDetailRouteData(record) {
+  const isRunTrip =
+    getRecordActivityType(record) ===
+    'runtrip';
 
-  const validSegments = savedSegments.filter(function (segment) {
-    return Array.isArray(segment) && segment.length > 0;
-  });
+  const actualDistanceKm =
+    Number(record.distance) || 0;
+
+  const hasMeasuredRunTripDistance =
+    !isRunTrip ||
+    actualDistanceKm >= 0.01;
+
+  const actualSegments =
+    Array.isArray(record.routeSegments)
+      ? record.routeSegments.filter(
+          function (segment) {
+            return (
+              Array.isArray(segment) &&
+              segment.length > 0
+            );
+          }
+        )
+      : [];
+
+  const actualCoordinates =
+    Array.isArray(record.routeCoordinates)
+      ? record.routeCoordinates
+      : [];
+
+  const plannedCoordinates =
+    Array.isArray(
+      record.plannedRouteCoordinates
+    )
+      ? record.plannedRouteCoordinates
+      : [];
+
+  if (
+    hasMeasuredRunTripDistance &&
+    actualSegments.length > 0
+  ) {
+    return {
+      type: 'actual',
+      segments: actualSegments
+    };
+  }
+
+  if (
+    hasMeasuredRunTripDistance &&
+    actualCoordinates.length > 0
+  ) {
+    return {
+      type: 'actual',
+      segments: [actualCoordinates]
+    };
+  }
+
+  if (
+    isRunTrip &&
+    plannedCoordinates.length > 0
+  ) {
+    return {
+      type: 'planned',
+      segments: [plannedCoordinates]
+    };
+  }
+
+  /*
+    과거 RunTrip 기록은 예정 경로가
+    routeCoordinates/routeSegments에 저장되어 있다.
+    실제 거리가 없을 때만 예정 경로로 판별한다.
+  */
+  if (
+    isRunTrip &&
+    !hasMeasuredRunTripDistance
+  ) {
+    if (actualSegments.length > 0) {
+      return {
+        type: 'planned',
+        segments: actualSegments
+      };
+    }
+
+    if (actualCoordinates.length > 0) {
+      return {
+        type: 'planned',
+        segments: [actualCoordinates]
+      };
+    }
+  }
+
+  return {
+    type: 'none',
+    segments: []
+  };
+}
+function showDetailMap(record) {
+  const routeData =
+  getDetailRouteData(record);
+
+const validSegments =
+  routeData.segments;
 
   if (validSegments.length === 0) {
     detailMapElement.innerHTML = '';
@@ -732,12 +823,12 @@ function showDetailMap(record) {
 
     if (segment.length >= 2) {
       const routeLine = L.polyline(segment, {
-        color: '#facc15',
-        weight: 6,
-        opacity: 0.9,
-        lineCap: 'round',
-        lineJoin: 'round'
-      }).addTo(detailMap);
+  color: '#facc15',
+  weight: 6,
+  opacity: 0.9,
+  lineCap: 'round',
+  lineJoin: 'round'
+}).addTo(detailMap);
 
       detailRouteLines.push(routeLine);
     }
@@ -1302,15 +1393,28 @@ detailPlannedDuration.textContent =
     : '정보 없음';
 
   if (hasPlannedDistance) {
-  const differencePrefix =
-    distanceDifferenceKm > 0
-      ? '+'
-      : '';
+  const hasActualDistance =
+    Number.isFinite(actualDistanceKm) &&
+    actualDistanceKm >= 0.01;
 
-  detailDistanceDifference.textContent =
-    `${differencePrefix}${distanceDifferenceKm.toFixed(
-      2
-    )} km`;
+  if (!hasActualDistance) {
+    detailDistanceDifference.textContent =
+      '측정 전';
+  } else {
+    const absoluteDifferenceKm =
+      Math.abs(distanceDifferenceKm);
+
+    if (absoluteDifferenceKm < 0.01) {
+      detailDistanceDifference.textContent =
+        '예상 거리와 동일';
+    } else if (distanceDifferenceKm > 0) {
+      detailDistanceDifference.textContent =
+        `${absoluteDifferenceKm.toFixed(2)} km 더 김`;
+    } else {
+      detailDistanceDifference.textContent =
+        `${absoluteDifferenceKm.toFixed(2)} km 더 짧음`;
+    }
+  }
 } else {
   detailDistanceDifference.textContent =
     '정보 없음';
@@ -1457,38 +1561,28 @@ detailPlannedDuration.textContent =
       'hidden'
     );
 
-    toggleDetailMapBtn.textContent =
-      '지도 보기';
+    const detailRouteData =
+  getDetailRouteData(record);
 
-    const hasRoute =
-      (
-        Array.isArray(
-          record.routeSegments
-        ) &&
-        record.routeSegments.some(
-          function (segment) {
-            return (
-              Array.isArray(segment) &&
-              segment.length > 0
-            );
-          }
-        )
-      ) ||
-      (
-        Array.isArray(
-          record.routeCoordinates
-        ) &&
-        record.routeCoordinates.length >
-          0
-      );
+const hasRoute =
+  detailRouteData.type !== 'none' &&
+  detailRouteData.segments.length > 0;
 
-    toggleDetailMapBtn.disabled =
-      !hasRoute;
+toggleDetailMapBtn.disabled =
+  !hasRoute;
 
-    if (!hasRoute) {
-      toggleDetailMapBtn.textContent =
-        '경로 데이터가 없습니다';
-    }
+if (!hasRoute) {
+  toggleDetailMapBtn.textContent =
+    '경로 데이터가 없습니다';
+} else if (
+  detailRouteData.type === 'planned'
+) {
+  toggleDetailMapBtn.textContent =
+    '예정 경로 보기';
+} else {
+  toggleDetailMapBtn.textContent =
+    '실제 경로 보기';
+}
 
     map.getContainer().style.display =
       'none';
@@ -2051,7 +2145,16 @@ toggleDetailMapBtn.addEventListener('click', function () {
     showDetailMap(selectedDetailRecord);
   } else {
     detailMapSection.classList.add('hidden');
-    toggleDetailMapBtn.textContent = '지도 보기';
+
+const routeData =
+  getDetailRouteData(
+    selectedDetailRecord
+  );
+
+toggleDetailMapBtn.textContent =
+  routeData.type === 'planned'
+    ? '예정 경로 보기'
+    : '실제 경로 보기';
   }
 });
 backToRecordsBtn.addEventListener(
@@ -3145,19 +3248,15 @@ pace:
       plannedDurationMinutes,
 
     routeCoordinates:
-      actualRoute.length > 0
-        ? actualRoute
-        : plannedRoute,
+  actualRoute,
 
-    routeSegments:
-      actualRoute.length >= 2
-        ? [actualRoute]
-        : plannedRoute.length >= 2
-          ? [plannedRoute]
-          : [],
+routeSegments:
+  actualRoute.length >= 2
+    ? [actualRoute]
+    : [],
 
-    plannedRouteCoordinates:
-      plannedRoute,
+plannedRouteCoordinates:
+  plannedRoute,
 
     photo: '',
 
