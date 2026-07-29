@@ -9,6 +9,110 @@ function jsonResponse(data, status = 200) {
   });
 }
 
+function createKakaoHeaders(kakaoRestApiKey) {
+  return {
+    Authorization: `KakaoAK ${kakaoRestApiKey}`,
+  };
+}
+
+function normalizeKeywordPlaces(documents = []) {
+  return documents.map((place) => ({
+    id: `keyword-${place.id}`,
+    name: place.place_name,
+    address: place.road_address_name || place.address_name || '',
+    roadAddress: place.road_address_name || '',
+    lotAddress: place.address_name || '',
+    latitude: Number(place.y),
+    longitude: Number(place.x),
+    category: place.category_name || '',
+    source: 'keyword',
+  }));
+}
+
+function normalizeAddressPlaces(documents = []) {
+  return documents.map((place) => {
+    const roadAddress = place.road_address?.address_name || '';
+    const lotAddress = place.address?.address_name || place.address_name || '';
+    const buildingName = place.road_address?.building_name || '';
+
+    return {
+      id: `address-${place.x}-${place.y}`,
+      name: buildingName || roadAddress || lotAddress,
+      address: roadAddress || lotAddress,
+      roadAddress,
+      lotAddress,
+      latitude: Number(place.y),
+      longitude: Number(place.x),
+      category: '주소',
+      source: 'address',
+    };
+  });
+}
+
+function mergePlaces(addressPlaces, keywordPlaces, limit = 15) {
+  const mergedPlaces = [];
+  const placeKeys = new Set();
+
+  [...addressPlaces, ...keywordPlaces].forEach((place) => {
+    if (
+      !Number.isFinite(place.latitude) ||
+      !Number.isFinite(place.longitude)
+    ) {
+      return;
+    }
+
+    const coordinateKey = [
+      place.latitude.toFixed(6),
+      place.longitude.toFixed(6),
+    ].join(',');
+
+    const addressKey = (place.address || '')
+      .replace(/\s+/g, '')
+      .toLowerCase();
+
+    const duplicateKey = addressKey || coordinateKey;
+
+    if (placeKeys.has(duplicateKey)) {
+      return;
+    }
+
+    placeKeys.add(duplicateKey);
+    mergedPlaces.push(place);
+  });
+
+  return mergedPlaces.slice(0, limit);
+}
+
+async function requestKakaoSearch({
+  endpoint,
+  query,
+  kakaoRestApiKey,
+  size = 10,
+}) {
+  const kakaoUrl = new URL(endpoint);
+
+  kakaoUrl.searchParams.set('query', query);
+  kakaoUrl.searchParams.set('size', String(size));
+
+  const response = await fetch(kakaoUrl, {
+    headers: createKakaoHeaders(kakaoRestApiKey),
+  });
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    data,
+  };
+}
+
 export default {
   async fetch(request) {
     if (request.method === 'OPTIONS') {
@@ -20,6 +124,16 @@ export default {
           'Access-Control-Allow-Headers': 'Content-Type',
         },
       });
+    }
+
+    if (request.method !== 'GET') {
+      return jsonResponse(
+        {
+          error: '지원하지 않는 요청 방식이에요.',
+          places: [],
+        },
+        405
+      );
     }
 
     const url = new URL(request.url);
@@ -58,47 +172,65 @@ export default {
     }
 
     try {
-      const kakaoUrl = new URL(
-        'https://dapi.kakao.com/v2/local/search/keyword.json'
-      );
+      const [addressResult, keywordResult] = await Promise.all([
+        requestKakaoSearch({
+          endpoint:
+            'https://dapi.kakao.com/v2/local/search/address.json',
+          query,
+          kakaoRestApiKey,
+          size: 10,
+        }),
+        requestKakaoSearch({
+          endpoint:
+            'https://dapi.kakao.com/v2/local/search/keyword.json',
+          query,
+          kakaoRestApiKey,
+          size: 10,
+        }),
+      ]);
 
-      kakaoUrl.searchParams.set('query', query);
-      kakaoUrl.searchParams.set('size', '10');
-
-      const kakaoResponse = await fetch(kakaoUrl, {
-        headers: {
-          Authorization: `KakaoAK ${kakaoRestApiKey}`,
-        },
-      });
-
-      const kakaoData = await kakaoResponse.json();
-
-      if (!kakaoResponse.ok) {
+      if (!addressResult.ok && !keywordResult.ok) {
         return jsonResponse(
           {
             error: '카카오 장소 검색에 실패했어요.',
-            kakaoStatus: kakaoResponse.status,
+            kakaoStatus:
+              keywordResult.status || addressResult.status,
             kakaoMessage:
-              kakaoData.msg ||
-              kakaoData.message ||
+              keywordResult.data?.msg ||
+              keywordResult.data?.message ||
+              addressResult.data?.msg ||
+              addressResult.data?.message ||
               '카카오에서 자세한 오류 메시지를 보내지 않았어요.',
             places: [],
           },
-          kakaoResponse.status
+          keywordResult.status || addressResult.status || 500
         );
       }
 
-      const places = (kakaoData.documents || []).map((place) => ({
-        id: place.id,
-        name: place.place_name,
-        address: place.road_address_name || place.address_name || '',
-        latitude: Number(place.y),
-        longitude: Number(place.x),
-        category: place.category_name || '',
-      }));
+      const addressPlaces = addressResult.ok
+        ? normalizeAddressPlaces(addressResult.data.documents)
+        : [];
 
-      return jsonResponse({ places });
+      const keywordPlaces = keywordResult.ok
+        ? normalizeKeywordPlaces(keywordResult.data.documents)
+        : [];
+
+      const places = mergePlaces(
+        addressPlaces,
+        keywordPlaces,
+        15
+      );
+
+      return jsonResponse({
+        places,
+        searchSources: {
+          address: addressResult.ok,
+          keyword: keywordResult.ok,
+        },
+      });
     } catch (error) {
+      console.error('Kakao place search error:', error);
+
       return jsonResponse(
         {
           error: '장소 검색 중 문제가 발생했어요.',
