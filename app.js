@@ -2803,10 +2803,14 @@ function showRunTripConfirmedMode() {
   const draft = getRunTripDraft();
 
   confirmedRunTripOrigin.textContent =
-    draft.origin?.name || '출발지';
+  getRunTripPlaceDisplayName(
+    draft.origin
+  ) || '출발지';
 
   confirmedRunTripDestination.textContent =
-    draft.destination?.name || '도착지';
+  getRunTripPlaceDisplayName(
+    draft.destination
+  ) || '도착지';
 
   if (draft.waypoints.length > 0) {
     confirmedRunTripWaypointRow.classList.remove('hidden');
@@ -3252,19 +3256,23 @@ pace:
       'RunTrip Journey',
 
     originName:
-      draft.origin?.name ||
-      '출발지',
+      getRunTripPlaceDisplayName(
+       draft.origin
+      ) || '출발지',
 
     destinationName:
-      draft.destination?.name ||
-      '도착지',
+      getRunTripPlaceDisplayName(
+       draft.destination
+      ) || '도착지',
 
     waypointNames:
-      draft.waypoints.map(
-        function (waypoint) {
-          return waypoint.name;
-        }
-      ),
+       draft.waypoints.map(
+         function (waypoint) {
+          return getRunTripPlaceDisplayName(
+            waypoint
+      );
+    }
+  ),
 
     returnToStart:
       draft.returnToStart,
@@ -3341,7 +3349,43 @@ function escapePlaceSearchText(value) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
+function getRunTripPlaceDisplayName(place) {
+  if (!place) {
+    return '';
+  }
 
+  return (
+    place.displayName ||
+    place.name ||
+    place.address ||
+    ''
+  );
+}
+
+function getRunTripPlacePrimaryText(place) {
+  if (!place) {
+    return '';
+  }
+
+  return (
+    place.primaryText ||
+    place.name ||
+    place.address ||
+    ''
+  );
+}
+
+function getRunTripPlaceSecondaryText(place) {
+  if (!place) {
+    return '';
+  }
+
+  return (
+    place.secondaryText ||
+    place.address ||
+    ''
+  );
+}
 function hidePlaceSearchResults(resultsElement) {
   resultsElement.innerHTML = '';
   resultsElement.classList.add('hidden');
@@ -3378,12 +3422,22 @@ function renderPlaceSearchResults(
           data-place-index="${index}"
         >
           <span class="runtrip-place-search-name">
-            ${escapePlaceSearchText(place.name)}
-          </span>
+  ${escapePlaceSearchText(
+    getRunTripPlacePrimaryText(place)
+  )}
+</span>
 
-          <span class="runtrip-place-search-address">
-            ${escapePlaceSearchText(place.address)}
-          </span>
+${
+  getRunTripPlaceSecondaryText(place)
+    ? `
+      <span class="runtrip-place-search-address">
+        ${escapePlaceSearchText(
+          getRunTripPlaceSecondaryText(place)
+        )}
+      </span>
+    `
+    : ''
+}
         </button>
       `;
     })
@@ -3623,16 +3677,24 @@ connectRunTripPlaceSearch(
     renderRunTripMapPreview();
   },
   function (place) {
-    selectedRunTripOrigin = place;
-    runTripOriginInput.value = place.name;
+  const displayName =
+    getRunTripPlaceDisplayName(place);
 
-    hidePlaceSearchResults(runTripOriginSearchResults);
-    updateRunTripCreateButton();
-    renderRunTripMapPreview();
+  selectedRunTripOrigin = place;
 
-    runTripStatus.textContent =
-      `${place.name}을(를) 출발지로 선택했어요.`;
-  }
+  runTripOriginInput.value =
+    displayName;
+
+  hidePlaceSearchResults(
+    runTripOriginSearchResults
+  );
+
+  updateRunTripCreateButton();
+  renderRunTripMapPreview();
+
+  runTripStatus.textContent =
+    `${displayName}을(를) 출발지로 선택했어요.`;
+}
 );
 
 connectRunTripPlaceSearch(
@@ -3644,16 +3706,24 @@ connectRunTripPlaceSearch(
     renderRunTripMapPreview();
   },
   function (place) {
-    selectedRunTripDestination = place;
-    runTripDestinationInput.value = place.name;
+  const displayName =
+    getRunTripPlaceDisplayName(place);
 
-    hidePlaceSearchResults(runTripDestinationSearchResults);
-    updateRunTripCreateButton();
-    renderRunTripMapPreview();
+  selectedRunTripDestination = place;
 
-    runTripStatus.textContent =
-      `${place.name}을(를) 도착지로 선택했어요.`;
-  }
+  runTripDestinationInput.value =
+    displayName;
+
+  hidePlaceSearchResults(
+    runTripDestinationSearchResults
+  );
+
+  updateRunTripCreateButton();
+  renderRunTripMapPreview();
+
+  runTripStatus.textContent =
+    `${displayName}을(를) 도착지로 선택했어요.`;
+}
 );
 const MAX_RUNTRIP_WAYPOINTS = 3;
 let runTripWaypointCount = 0;
@@ -3752,7 +3822,7 @@ function getRunTripOrderedPlaceSlots() {
       setPlace: function (place) {
         selectedRunTripOrigin = place;
         runTripOriginInput.value = place
-          ? place.name
+          ? getRunTripPlaceDisplayName(place)
           : '';
       }
     }
@@ -3769,7 +3839,7 @@ function getRunTripOrderedPlaceSlots() {
       setPlace: function (place) {
         input.runTripPlace = place;
         input.value = place
-          ? place.name
+          ? getRunTripPlaceDisplayName(place)
           : '';
       }
     });
@@ -3785,7 +3855,7 @@ function getRunTripOrderedPlaceSlots() {
     setPlace: function (place) {
       selectedRunTripDestination = place;
       runTripDestinationInput.value = place
-        ? place.name
+        ? getRunTripPlaceDisplayName(place)
         : '';
     }
   });
@@ -3966,15 +4036,23 @@ function addRunTripWaypoint() {
   renderRunTripMapPreview();
 },
     function (place) {
-  waypointInput.runTripPlace = place;
-  waypointInput.value = place.name;
+  const displayName =
+    getRunTripPlaceDisplayName(place);
 
-  hidePlaceSearchResults(waypointSearchResults);
+  waypointInput.runTripPlace = place;
+
+  waypointInput.value =
+    displayName;
+
+  hidePlaceSearchResults(
+    waypointSearchResults
+  );
+
   updateRunTripCreateButton();
   renderRunTripMapPreview();
 
   runTripStatus.textContent =
-    `${place.name}을(를) 경유지로 선택했어요.`;
+    `${displayName}을(를) 경유지로 선택했어요.`;
 }
   );
 
@@ -4268,8 +4346,13 @@ async function renderRunTripMapPreview() {
       originPoint,
       destinationPoint,
       waypointPoints,
-      draft.origin.name || '출발지',
-      draft.destination.name || '도착지'
+      getRunTripPlaceDisplayName(
+         draft.origin
+     ) || '출발지',
+
+      getRunTripPlaceDisplayName(
+         draft.destination
+      ) || '도착지'
     );
 
     if (requestId !== runTripRouteRequestId) {
@@ -4288,8 +4371,13 @@ async function renderRunTripMapPreview() {
         destinationPoint,
         originPoint,
         [],
-        draft.destination.name || '도착지',
-        draft.origin.name || '출발지'
+        getRunTripPlaceDisplayName(
+           draft.destination
+        ) || '도착지',
+
+        getRunTripPlaceDisplayName(
+           draft.origin
+        ) || '출발지'
       );
 
       if (requestId !== runTripRouteRequestId) {

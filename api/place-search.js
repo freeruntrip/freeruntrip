@@ -16,34 +16,100 @@ function createKakaoHeaders(kakaoRestApiKey) {
 }
 
 function normalizeKeywordPlaces(documents = []) {
-  return documents.map((place) => ({
-    id: `keyword-${place.id}`,
-    name: place.place_name,
-    address: place.road_address_name || place.address_name || '',
-    roadAddress: place.road_address_name || '',
-    lotAddress: place.address_name || '',
-    latitude: Number(place.y),
-    longitude: Number(place.x),
-    category: place.category_name || '',
-    source: 'keyword',
-  }));
+  return documents.map((place) => {
+    const roadAddress = place.road_address_name || '';
+    const lotAddress = place.address_name || '';
+    const placeName = place.place_name || '';
+
+    return {
+      id: `keyword-${place.id}`,
+
+      name: placeName,
+      displayName: placeName,
+      primaryText: placeName,
+      secondaryText: roadAddress || lotAddress,
+
+      address: roadAddress || lotAddress,
+      roadAddress,
+      lotAddress,
+      buildingName: placeName,
+
+      latitude: Number(place.y),
+      longitude: Number(place.x),
+
+      category: place.category_name || '',
+      resultType: 'place',
+      source: 'keyword',
+    };
+  });
+}
+
+function getShortAddress(address) {
+  const normalizedAddress =
+    String(address || '')
+      .trim()
+      .replace(/\s+/g, ' ');
+
+  if (!normalizedAddress) {
+    return '';
+  }
+
+  const parts = normalizedAddress.split(' ');
+
+  if (parts.length <= 2) {
+    return normalizedAddress;
+  }
+
+  return parts.slice(-2).join(' ');
 }
 
 function normalizeAddressPlaces(documents = []) {
   return documents.map((place) => {
-    const roadAddress = place.road_address?.address_name || '';
-    const lotAddress = place.address?.address_name || place.address_name || '';
-    const buildingName = place.road_address?.building_name || '';
+    const roadAddress =
+      place.road_address?.address_name || '';
+
+    const lotAddress =
+      place.address?.address_name ||
+      place.address_name ||
+      '';
+
+    const buildingName =
+      place.road_address?.building_name || '';
+
+    const mainAddress =
+      roadAddress || lotAddress;
+
+    const shortAddress =
+      getShortAddress(mainAddress);
+
+    const addressType =
+      roadAddress
+        ? '도로명 주소'
+        : '지번 주소';
+
+    const secondaryParts = [
+      buildingName,
+      addressType,
+    ].filter(Boolean);
 
     return {
       id: `address-${place.x}-${place.y}`,
-      name: buildingName || roadAddress || lotAddress,
-      address: roadAddress || lotAddress,
+
+      name: shortAddress || mainAddress,
+      displayName: shortAddress || mainAddress,
+      primaryText: mainAddress,
+      secondaryText: secondaryParts.join(' · '),
+
+      address: mainAddress,
       roadAddress,
       lotAddress,
+      buildingName,
+
       latitude: Number(place.y),
       longitude: Number(place.x),
+
       category: '주소',
+      resultType: 'address',
       source: 'address',
     };
   });
@@ -70,7 +136,8 @@ function mergePlaces(addressPlaces, keywordPlaces, limit = 15) {
       .replace(/\s+/g, '')
       .toLowerCase();
 
-    const duplicateKey = addressKey || coordinateKey;
+    const duplicateKey =
+      addressKey || coordinateKey;
 
     if (placeKeys.has(duplicateKey)) {
       return;
