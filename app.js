@@ -316,6 +316,7 @@ let detailMap = null;
 let detailRouteLines = [];
 let detailStartMarker = null;
 let detailFinishMarker = null;
+let detailWaypointMarkers = [];
 let detailDirectionMarkers = [];
 let selectedDetailRecord = null;
 const MAX_ACCURACY = 100; // meters
@@ -582,25 +583,96 @@ function createRunMarkerIcon(label, className) {
     iconAnchor: [32, 14]
   });
 }
+function createRunTripDetailMarkerIcon(
+  label,
+  type
+) {
+  return L.divIcon({
+    className:
+      `runtrip-preview-marker ${type}`,
 
+    html: `
+      <div class="runtrip-preview-marker-body">
+        <span>
+          ${escapePlaceSearchText(label)}
+        </span>
+      </div>
+
+      <div
+        class="runtrip-preview-marker-tip"
+      ></div>
+    `,
+
+    iconSize: [42, 50],
+    iconAnchor: [21, 48]
+  });
+}
 function clearDetailRouteDecorations() {
   if (detailStartMarker) {
-    detailMap.removeLayer(detailStartMarker);
+    detailMap.removeLayer(
+      detailStartMarker
+    );
+
     detailStartMarker = null;
   }
 
   if (detailFinishMarker) {
-    detailMap.removeLayer(detailFinishMarker);
+    detailMap.removeLayer(
+      detailFinishMarker
+    );
+
     detailFinishMarker = null;
   }
 
-  detailDirectionMarkers.forEach(function (marker) {
-    detailMap.removeLayer(marker);
-  });
+  detailWaypointMarkers.forEach(
+    function (marker) {
+      detailMap.removeLayer(marker);
+    }
+  );
+
+  detailWaypointMarkers = [];
+
+  detailDirectionMarkers.forEach(
+    function (marker) {
+      detailMap.removeLayer(marker);
+    }
+  );
 
   detailDirectionMarkers = [];
 }
+function getSavedRunTripPlaceLatLng(
+  place
+) {
+  if (!place) {
+    return null;
+  }
 
+  const latitude =
+    Number(
+      place.latitude ??
+      place.lat ??
+      place.y
+    );
+
+  const longitude =
+    Number(
+      place.longitude ??
+      place.lng ??
+      place.x
+    );
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return null;
+  }
+
+  return [
+    latitude,
+    longitude
+  ];
+}
 function addDirectionArrowsToDetailMap(points) {
   if (!points || points.length < 2) {
     return;
@@ -836,17 +908,130 @@ const validSegments =
     addDirectionArrowsToDetailMap(segment);
   });
 
-  const startPoint = validSegments[0][0];
-  const lastSegment = validSegments[validSegments.length - 1];
-  const finishPoint = lastSegment[lastSegment.length - 1];
+  const routeStartPoint =
+  validSegments[0][0];
 
-  detailStartMarker = L.marker(startPoint, {
-    icon: createRunMarkerIcon('START', 'start-marker')
-  }).addTo(detailMap);
+const lastSegment =
+  validSegments[
+    validSegments.length - 1
+  ];
 
-  detailFinishMarker = L.marker(finishPoint, {
-    icon: createRunMarkerIcon('FINISH', 'finish-marker')
-  }).addTo(detailMap);
+const routeFinishPoint =
+  lastSegment[
+    lastSegment.length - 1
+  ];
+
+const isRunTrip =
+  getRecordActivityType(record) ===
+  'runtrip';
+
+if (isRunTrip) {
+  const savedOriginPoint =
+    getSavedRunTripPlaceLatLng(
+      record.originPlace
+    );
+
+  const savedDestinationPoint =
+    getSavedRunTripPlaceLatLng(
+      record.destinationPlace
+    );
+
+  const startPoint =
+    savedOriginPoint ||
+    routeStartPoint;
+
+  const finishPoint =
+    savedDestinationPoint ||
+    routeFinishPoint;
+
+  detailStartMarker = L.marker(
+    startPoint,
+    {
+      icon:
+        createRunTripDetailMarkerIcon(
+          'S',
+          'start'
+        )
+    }
+  ).addTo(detailMap);
+
+  const waypointPlaces =
+    Array.isArray(
+      record.waypointPlaces
+    )
+      ? record.waypointPlaces
+      : [];
+
+  waypointPlaces.forEach(
+    function (waypoint, index) {
+      const waypointPoint =
+        getSavedRunTripPlaceLatLng(
+          waypoint
+        );
+
+      if (!waypointPoint) {
+        return;
+      }
+
+      const marker = L.marker(
+        waypointPoint,
+        {
+          icon:
+            createRunTripDetailMarkerIcon(
+              String(index + 1),
+              'waypoint'
+            )
+        }
+      ).addTo(detailMap);
+
+      detailWaypointMarkers.push(
+        marker
+      );
+
+      allPoints.push(
+        waypointPoint
+      );
+    }
+  );
+
+  detailFinishMarker = L.marker(
+    finishPoint,
+    {
+      icon:
+        createRunTripDetailMarkerIcon(
+          'D',
+          'destination'
+        )
+    }
+  ).addTo(detailMap);
+
+  allPoints.push(
+    startPoint,
+    finishPoint
+  );
+} else {
+  detailStartMarker = L.marker(
+    routeStartPoint,
+    {
+      icon:
+        createRunMarkerIcon(
+          'START',
+          'start-marker'
+        )
+    }
+  ).addTo(detailMap);
+
+  detailFinishMarker = L.marker(
+    routeFinishPoint,
+    {
+      icon:
+        createRunMarkerIcon(
+          'FINISH',
+          'finish-marker'
+        )
+    }
+  ).addTo(detailMap);
+}
 
   const bounds = L.latLngBounds(allPoints);
 
@@ -3165,8 +3350,27 @@ function saveRunTripRecord() {
 
   const draft = getRunTripDraft();
 
-  const actualDistanceKm =
-    runTripActualDistanceMeters / 1000;
+const savedOriginPlace =
+  createRunTripPlaceRecord(
+    draft.origin
+  );
+
+const savedDestinationPlace =
+  createRunTripPlaceRecord(
+    draft.destination
+  );
+
+const savedWaypointPlaces =
+  draft.waypoints
+    .map(function (waypoint) {
+      return createRunTripPlaceRecord(
+        waypoint
+      );
+    })
+    .filter(Boolean);
+
+const actualDistanceKm =
+  runTripActualDistanceMeters / 1000;
 
   const plannedDistanceKm =
     latestRunTripRouteSummary
@@ -3256,23 +3460,32 @@ pace:
       'RunTrip Journey',
 
     originName:
-      getRunTripPlaceDisplayName(
-       draft.origin
+       getRunTripPlaceDisplayName(
+         draft.origin
       ) || '출발지',
 
     destinationName:
       getRunTripPlaceDisplayName(
-       draft.destination
+        draft.destination
       ) || '도착지',
 
     waypointNames:
        draft.waypoints.map(
-         function (waypoint) {
+        function (waypoint) {
           return getRunTripPlaceDisplayName(
-            waypoint
+        waypoint
       );
     }
   ),
+
+originPlace:
+  savedOriginPlace,
+
+destinationPlace:
+  savedDestinationPlace,
+
+waypointPlaces:
+  savedWaypointPlaces,
 
     returnToStart:
       draft.returnToStart,
@@ -4114,7 +4327,56 @@ function getRunTripPlaceLatLng(place) {
 
   return [latitude, longitude];
 }
+function createRunTripPlaceRecord(place) {
+  if (!place) {
+    return null;
+  }
 
+  const latLng =
+    getRunTripPlaceLatLng(place);
+
+  if (!latLng) {
+    return null;
+  }
+
+  return {
+    displayName:
+      getRunTripPlaceDisplayName(place),
+
+    primaryText:
+      getRunTripPlacePrimaryText(place),
+
+    secondaryText:
+      getRunTripPlaceSecondaryText(place),
+
+    name:
+      place.name || '',
+
+    address:
+      place.address || '',
+
+    roadAddress:
+      place.roadAddress || '',
+
+    lotAddress:
+      place.lotAddress || '',
+
+    buildingName:
+      place.buildingName || '',
+
+    resultType:
+      place.resultType || '',
+
+    source:
+      place.source || '',
+
+    latitude:
+      Number(latLng[0]),
+
+    longitude:
+      Number(latLng[1])
+  };
+}
 function createRunTripPreviewMarkerIcon(label, type) {
   return L.divIcon({
     className: `runtrip-preview-marker ${type}`,
@@ -4262,6 +4524,7 @@ async function renderRunTripMapPreview() {
   clearRunTripMapPreview();
 
   const draft = getRunTripDraft();
+
   const previewMarkers = [];
 
   const originLatLng = getRunTripPlaceLatLng(draft.origin);
