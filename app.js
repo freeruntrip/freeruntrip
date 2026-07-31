@@ -777,7 +777,7 @@ function getDetailRouteData(record) {
     !isRunTrip ||
     actualDistanceKm >= 0.01;
 
-  const actualSegments =
+  const savedSegments =
     Array.isArray(record.routeSegments)
       ? record.routeSegments.filter(
           function (segment) {
@@ -789,7 +789,7 @@ function getDetailRouteData(record) {
         )
       : [];
 
-  const actualCoordinates =
+  const savedCoordinates =
     Array.isArray(record.routeCoordinates)
       ? record.routeCoordinates
       : [];
@@ -801,73 +801,73 @@ function getDetailRouteData(record) {
       ? record.plannedRouteCoordinates
       : [];
 
-  if (
-    hasMeasuredRunTripDistance &&
-    actualSegments.length > 0
-  ) {
-    return {
-      type: 'actual',
-      segments: actualSegments
-    };
-  }
+  let actualSegments = [];
+  let plannedSegments = [];
 
   if (
     hasMeasuredRunTripDistance &&
-    actualCoordinates.length > 0
+    savedSegments.length > 0
   ) {
-    return {
-      type: 'actual',
-      segments: [actualCoordinates]
-    };
+    actualSegments =
+      savedSegments;
+  } else if (
+    hasMeasuredRunTripDistance &&
+    savedCoordinates.length > 0
+  ) {
+    actualSegments = [
+      savedCoordinates
+    ];
   }
 
   if (
     isRunTrip &&
     plannedCoordinates.length > 0
   ) {
-    return {
-      type: 'planned',
-      segments: [plannedCoordinates]
-    };
+    plannedSegments = [
+      plannedCoordinates
+    ];
   }
 
   /*
-    과거 RunTrip 기록은 예정 경로가
-    routeCoordinates/routeSegments에 저장되어 있다.
-    실제 거리가 없을 때만 예정 경로로 판별한다.
+    과거 RunTrip 기록은 실제 이동 거리가 없고
+    예정 경로가 routeCoordinates 또는
+    routeSegments에 저장되어 있을 수 있다.
   */
   if (
     isRunTrip &&
-    !hasMeasuredRunTripDistance
+    !hasMeasuredRunTripDistance &&
+    plannedSegments.length === 0
   ) {
-    if (actualSegments.length > 0) {
-      return {
-        type: 'planned',
-        segments: actualSegments
-      };
-    }
-
-    if (actualCoordinates.length > 0) {
-      return {
-        type: 'planned',
-        segments: [actualCoordinates]
-      };
+    if (savedSegments.length > 0) {
+      plannedSegments =
+        savedSegments;
+    } else if (
+      savedCoordinates.length > 0
+    ) {
+      plannedSegments = [
+        savedCoordinates
+      ];
     }
   }
 
   return {
-    type: 'none',
-    segments: []
+    isRunTrip: isRunTrip,
+    actualSegments: actualSegments,
+    plannedSegments: plannedSegments,
+    hasActual:
+      actualSegments.length > 0,
+    hasPlanned:
+      plannedSegments.length > 0
   };
 }
 function showDetailMap(record) {
   const routeData =
-  getDetailRouteData(record);
+    getDetailRouteData(record);
 
-const validSegments =
-  routeData.segments;
-
-  if (validSegments.length === 0) {
+  if (
+    !routeData.hasActual &&
+    !routeData.hasPlanned
+  ) {
     detailMapElement.innerHTML = '';
     return;
   }
@@ -875,12 +875,16 @@ const validSegments =
   if (!detailMap) {
     detailMap = L.map('detailMap');
 
-    createFreeRunTripTileLayer().addTo(detailMap);
+    createFreeRunTripTileLayer().addTo(
+      detailMap
+    );
   }
 
-  detailRouteLines.forEach(function (line) {
-    detailMap.removeLayer(line);
-  });
+  detailRouteLines.forEach(
+    function (line) {
+      detailMap.removeLayer(line);
+    }
+  );
 
   detailRouteLines = [];
 
@@ -888,158 +892,209 @@ const validSegments =
 
   const allPoints = [];
 
-  validSegments.forEach(function (segment) {
-    segment.forEach(function (point) {
-      allPoints.push(point);
-    });
+  /*
+    RunTrip 예정 경로:
+    실제 이동 경로 아래에 보이도록
+    먼저 회색 점선으로 그린다.
+  */
+  routeData.plannedSegments.forEach(
+    function (segment) {
+      segment.forEach(
+        function (point) {
+          allPoints.push(point);
+        }
+      );
 
-    if (segment.length >= 2) {
-      const routeLine = L.polyline(segment, {
-  color: '#facc15',
-  weight: 6,
-  opacity: 0.9,
-  lineCap: 'round',
-  lineJoin: 'round'
-}).addTo(detailMap);
-
-      detailRouteLines.push(routeLine);
-    }
-
-    addDirectionArrowsToDetailMap(segment);
-  });
-
-  const routeStartPoint =
-  validSegments[0][0];
-
-const lastSegment =
-  validSegments[
-    validSegments.length - 1
-  ];
-
-const routeFinishPoint =
-  lastSegment[
-    lastSegment.length - 1
-  ];
-
-const isRunTrip =
-  getRecordActivityType(record) ===
-  'runtrip';
-
-if (isRunTrip) {
-  const savedOriginPoint =
-    getSavedRunTripPlaceLatLng(
-      record.originPlace
-    );
-
-  const savedDestinationPoint =
-    getSavedRunTripPlaceLatLng(
-      record.destinationPlace
-    );
-
-  const startPoint =
-    savedOriginPoint ||
-    routeStartPoint;
-
-  const finishPoint =
-    savedDestinationPoint ||
-    routeFinishPoint;
-
-  detailStartMarker = L.marker(
-    startPoint,
-    {
-      icon:
-        createRunTripDetailMarkerIcon(
-          'S',
-          'start'
-        )
-    }
-  ).addTo(detailMap);
-
-  const waypointPlaces =
-    Array.isArray(
-      record.waypointPlaces
-    )
-      ? record.waypointPlaces
-      : [];
-
-  waypointPlaces.forEach(
-    function (waypoint, index) {
-      const waypointPoint =
-        getSavedRunTripPlaceLatLng(
-          waypoint
-        );
-
-      if (!waypointPoint) {
+      if (segment.length < 2) {
         return;
       }
 
-      const marker = L.marker(
-        waypointPoint,
+      const plannedLine =
+        L.polyline(segment, {
+          color: '#64748b',
+          weight: 5,
+          opacity: 0.85,
+          dashArray: '10 10',
+          lineCap: 'round',
+          lineJoin: 'round'
+        }).addTo(detailMap);
+
+      detailRouteLines.push(
+        plannedLine
+      );
+    }
+  );
+
+  /*
+    실제 이동 경로:
+    노란색 실선으로 표시하고
+    실제 이동 방향 화살표를 추가한다.
+  */
+  routeData.actualSegments.forEach(
+    function (segment) {
+      segment.forEach(
+        function (point) {
+          allPoints.push(point);
+        }
+      );
+
+      if (segment.length >= 2) {
+        const actualLine =
+          L.polyline(segment, {
+            color: '#facc15',
+            weight: 6,
+            opacity: 0.95,
+            lineCap: 'round',
+            lineJoin: 'round'
+          }).addTo(detailMap);
+
+        detailRouteLines.push(
+          actualLine
+        );
+      }
+
+      addDirectionArrowsToDetailMap(
+        segment
+      );
+    }
+  );
+
+  const markerSegments =
+    routeData.hasActual
+      ? routeData.actualSegments
+      : routeData.plannedSegments;
+
+  const routeStartPoint =
+    markerSegments[0][0];
+
+  const lastSegment =
+    markerSegments[
+      markerSegments.length - 1
+    ];
+
+  const routeFinishPoint =
+    lastSegment[
+      lastSegment.length - 1
+    ];
+
+  if (routeData.isRunTrip) {
+    const savedOriginPoint =
+      getSavedRunTripPlaceLatLng(
+        record.originPlace
+      );
+
+    const savedDestinationPoint =
+      getSavedRunTripPlaceLatLng(
+        record.destinationPlace
+      );
+
+    const startPoint =
+      savedOriginPoint ||
+      routeStartPoint;
+
+    const finishPoint =
+      savedDestinationPoint ||
+      routeFinishPoint;
+
+    detailStartMarker =
+      L.marker(startPoint, {
+        icon:
+          createRunTripDetailMarkerIcon(
+            'S',
+            'start'
+          )
+      }).addTo(detailMap);
+
+    const waypointPlaces =
+      Array.isArray(
+        record.waypointPlaces
+      )
+        ? record.waypointPlaces
+        : [];
+
+    waypointPlaces.forEach(
+      function (waypoint, index) {
+        const waypointPoint =
+          getSavedRunTripPlaceLatLng(
+            waypoint
+          );
+
+        if (!waypointPoint) {
+          return;
+        }
+
+        const marker =
+          L.marker(
+            waypointPoint,
+            {
+              icon:
+                createRunTripDetailMarkerIcon(
+                  String(index + 1),
+                  'waypoint'
+                )
+            }
+          ).addTo(detailMap);
+
+        detailWaypointMarkers.push(
+          marker
+        );
+
+        allPoints.push(
+          waypointPoint
+        );
+      }
+    );
+
+    detailFinishMarker =
+      L.marker(finishPoint, {
+        icon:
+          createRunTripDetailMarkerIcon(
+            'D',
+            'destination'
+          )
+      }).addTo(detailMap);
+
+    allPoints.push(
+      startPoint,
+      finishPoint
+    );
+  } else {
+    detailStartMarker =
+      L.marker(
+        routeStartPoint,
         {
           icon:
-            createRunTripDetailMarkerIcon(
-              String(index + 1),
-              'waypoint'
+            createRunMarkerIcon(
+              'START',
+              'start-marker'
             )
         }
       ).addTo(detailMap);
 
-      detailWaypointMarkers.push(
-        marker
-      );
+    detailFinishMarker =
+      L.marker(
+        routeFinishPoint,
+        {
+          icon:
+            createRunMarkerIcon(
+              'FINISH',
+              'finish-marker'
+            )
+        }
+      ).addTo(detailMap);
+  }
 
-      allPoints.push(
-        waypointPoint
-      );
-    }
-  );
+  const bounds =
+    L.latLngBounds(allPoints);
 
-  detailFinishMarker = L.marker(
-    finishPoint,
-    {
-      icon:
-        createRunTripDetailMarkerIcon(
-          'D',
-          'destination'
-        )
-    }
-  ).addTo(detailMap);
-
-  allPoints.push(
-    startPoint,
-    finishPoint
-  );
-} else {
-  detailStartMarker = L.marker(
-    routeStartPoint,
-    {
-      icon:
-        createRunMarkerIcon(
-          'START',
-          'start-marker'
-        )
-    }
-  ).addTo(detailMap);
-
-  detailFinishMarker = L.marker(
-    routeFinishPoint,
-    {
-      icon:
-        createRunMarkerIcon(
-          'FINISH',
-          'finish-marker'
-        )
-    }
-  ).addTo(detailMap);
-}
-
-  const bounds = L.latLngBounds(allPoints);
-
-if (bounds.isValid()) {
-  detailMap.fitBounds(bounds, {
-    padding: [20, 20]
-  });
-}
+  if (bounds.isValid()) {
+    detailMap.fitBounds(
+      bounds,
+      {
+        padding: [20, 20]
+      }
+    );
+  }
 
   setTimeout(function () {
     detailMap.invalidateSize();
@@ -1747,20 +1802,26 @@ detailPlannedDuration.textContent =
     );
 
     const detailRouteData =
-  getDetailRouteData(record);
+      getDetailRouteData(record);
 
-const hasRoute =
-  detailRouteData.type !== 'none' &&
-  detailRouteData.segments.length > 0;
+    const hasRoute =
+      detailRouteData.hasActual ||
+      detailRouteData.hasPlanned;
 
-toggleDetailMapBtn.disabled =
-  !hasRoute;
+    toggleDetailMapBtn.disabled =
+      !hasRoute;
 
 if (!hasRoute) {
   toggleDetailMapBtn.textContent =
     '경로 데이터가 없습니다';
 } else if (
-  detailRouteData.type === 'planned'
+  detailRouteData.hasActual &&
+  detailRouteData.hasPlanned
+) {
+  toggleDetailMapBtn.textContent =
+    '예정·실제 경로 비교';
+} else if (
+  detailRouteData.hasPlanned
 ) {
   toggleDetailMapBtn.textContent =
     '예정 경로 보기';
@@ -2336,10 +2397,21 @@ const routeData =
     selectedDetailRecord
   );
 
-toggleDetailMapBtn.textContent =
-  routeData.type === 'planned'
-    ? '예정 경로 보기'
-    : '실제 경로 보기';
+if (
+  routeData.hasActual &&
+  routeData.hasPlanned
+) {
+  toggleDetailMapBtn.textContent =
+    '예정·실제 경로 비교';
+} else if (
+  routeData.hasPlanned
+) {
+  toggleDetailMapBtn.textContent =
+    '예정 경로 보기';
+} else {
+  toggleDetailMapBtn.textContent =
+    '실제 경로 보기';
+}
   }
 });
 backToRecordsBtn.addEventListener(
