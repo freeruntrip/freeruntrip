@@ -5868,3 +5868,42 @@ body {
     font-size: 15px;
   }
 }
+.detail-map-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+}
+
+.detail-map-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-map-legend-item strong {
+  color: #334155;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.detail-map-legend-line {
+  display: inline-block;
+  width: 36px;
+  height: 0;
+  flex-shrink: 0;
+}
+
+.detail-map-legend-line.planned {
+  border-top: 4px dashed #64748b;
+}
+
+.detail-map-legend-line.actual {
+  border-top: 5px solid #facc15;
+  border-radius: 999px;
+}

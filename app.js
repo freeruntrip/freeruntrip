@@ -295,6 +295,19 @@ const detailMapElement = document.getElementById('detailMap');
 const detailMemory = document.getElementById('detailMemory');
 const detailMapSection = document.getElementById('detailMapSection');
 const toggleDetailMapBtn = document.getElementById('toggleDetailMapBtn');
+const detailMapLegend = document.getElementById(
+  'detailMapLegend'
+);
+
+const detailPlannedRouteLegend =
+  document.getElementById(
+    'detailPlannedRouteLegend'
+  );
+
+const detailActualRouteLegend =
+  document.getElementById(
+    'detailActualRouteLegend'
+  );
 const detailRunPhoto = document.getElementById('detailRunPhoto');
 const detailRunMemoWrap = document.getElementById('detailRunMemoWrap');
 const detailRunMemo = document.getElementById('detailRunMemo');
@@ -863,6 +876,21 @@ function getDetailRouteData(record) {
 function showDetailMap(record) {
   const routeData =
     getDetailRouteData(record);
+  detailMapLegend.classList.toggle(
+    'hidden',
+    !routeData.hasActual &&
+    !routeData.hasPlanned
+  );
+
+detailPlannedRouteLegend.classList.toggle(
+  'hidden',
+  !routeData.hasPlanned
+);
+
+detailActualRouteLegend.classList.toggle(
+  'hidden',
+  !routeData.hasActual
+);
 
   if (
     !routeData.hasActual &&

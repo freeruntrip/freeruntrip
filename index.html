@@ -702,8 +702,38 @@
   </button>
 
   <div id="detailMapSection" class="hidden">
-    <div id="detailMap"></div>
+  <div
+    id="detailMapLegend"
+    class="detail-map-legend hidden"
+    aria-label="경로 표시 안내"
+  >
+    <div
+      id="detailPlannedRouteLegend"
+      class="detail-map-legend-item hidden"
+    >
+      <span
+        class="detail-map-legend-line planned"
+        aria-hidden="true"
+      ></span>
+
+      <strong>예정 경로</strong>
+    </div>
+
+    <div
+      id="detailActualRouteLegend"
+      class="detail-map-legend-item hidden"
+    >
+      <span
+        class="detail-map-legend-line actual"
+        aria-hidden="true"
+      ></span>
+
+      <strong>실제 이동 경로</strong>
+    </div>
   </div>
+
+  <div id="detailMap"></div>
+</div>
 </div>
 
 <section id="profileFeedScreen" class="screen hidden">
