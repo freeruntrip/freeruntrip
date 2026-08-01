@@ -2802,7 +2802,678 @@ let runTripStartTime = null;
 let runTripActualRouteCoordinates = [];
 let runTripActualRouteSegments = [];
 let runTripActiveRouteSegment = null;
+const RUNTRIP_ACTIVE_STATE_KEY =
+  'freeRunTripActiveRunTripV1';
 
+function cloneRunTripRouteSegments(
+  segments
+) {
+  if (!Array.isArray(segments)) {
+    return [];
+  }
+
+  return segments
+    .filter(function (segment) {
+      return Array.isArray(segment);
+    })
+    .map(function (segment) {
+      return segment
+        .filter(function (point) {
+          return (
+            Array.isArray(point) &&
+            point.length >= 2 &&
+            Number.isFinite(
+              Number(point[0])
+            ) &&
+            Number.isFinite(
+              Number(point[1])
+            )
+          );
+        })
+        .map(function (point) {
+          return [
+            Number(point[0]),
+            Number(point[1])
+          ];
+        });
+    });
+}
+
+function createRunTripRecoveryState() {
+  if (
+    !isRunTripFollowing ||
+    !runTripStartTime ||
+    !latestRunTripRouteSummary
+  ) {
+    return null;
+  }
+
+  const draft = getRunTripDraft();
+
+  return {
+    version: 1,
+
+    savedAt:
+      new Date().toISOString(),
+
+    startTime:
+      runTripStartTime.toISOString(),
+
+    elapsedSeconds:
+      Math.max(
+        0,
+        Number(
+          runTripElapsedSeconds
+        ) || 0
+      ),
+
+    actualDistanceMeters:
+      Math.max(
+        0,
+        Number(
+          runTripActualDistanceMeters
+        ) || 0
+      ),
+
+    isPaused:
+      Boolean(
+        isRunTripPaused
+      ),
+
+    actualRouteCoordinates:
+      runTripActualRouteCoordinates
+        .filter(function (point) {
+          return (
+            Array.isArray(point) &&
+            point.length >= 2
+          );
+        })
+        .map(function (point) {
+          return [
+            Number(point[0]),
+            Number(point[1])
+          ];
+        }),
+
+    actualRouteSegments:
+      cloneRunTripRouteSegments(
+        runTripActualRouteSegments
+      ),
+
+    plannedRouteSummary: {
+      distanceKm:
+        Number(
+          latestRunTripRouteSummary
+            .distanceKm
+        ) || 0,
+
+      durationMinutes:
+        Number(
+          latestRunTripRouteSummary
+            .durationMinutes
+        ) || 0,
+
+      coordinates:
+        Array.isArray(
+          latestRunTripRouteSummary
+            .coordinates
+        )
+          ? latestRunTripRouteSummary
+              .coordinates
+              .map(function (point) {
+                return [
+                  Number(point[0]),
+                  Number(point[1])
+                ];
+              })
+          : []
+    },
+
+    draft: {
+      origin:
+        createRunTripPlaceRecord(
+          draft.origin
+        ),
+
+      destination:
+        createRunTripPlaceRecord(
+          draft.destination
+        ),
+
+      waypoints:
+        draft.waypoints
+          .map(function (
+            waypoint
+          ) {
+            return (
+              createRunTripPlaceRecord(
+                waypoint
+              )
+            );
+          })
+          .filter(Boolean),
+
+      returnToStart:
+        Boolean(
+          draft.returnToStart
+        )
+    }
+  };
+}
+
+function saveActiveRunTripState() {
+  const recoveryState =
+    createRunTripRecoveryState();
+
+  if (!recoveryState) {
+    return;
+  }
+
+  try {
+    localStorage.setItem(
+      RUNTRIP_ACTIVE_STATE_KEY,
+      JSON.stringify(
+        recoveryState
+      )
+    );
+
+    console.log(
+      'RunTrip 실행 상태 저장:',
+      recoveryState.savedAt
+    );
+  } catch (error) {
+    console.error(
+      'RunTrip 실행 상태 저장 실패:',
+      error
+    );
+  }
+}
+
+function loadActiveRunTripState() {
+  const savedState =
+    localStorage.getItem(
+      RUNTRIP_ACTIVE_STATE_KEY
+    );
+
+  if (!savedState) {
+    return null;
+  }
+
+  try {
+    const parsedState =
+      JSON.parse(savedState);
+
+    if (
+      !parsedState ||
+      parsedState.version !== 1 ||
+      !parsedState.startTime ||
+      !parsedState.draft ||
+      !parsedState
+        .plannedRouteSummary
+    ) {
+      throw new Error(
+        '저장 데이터 형식이 올바르지 않습니다.'
+      );
+    }
+
+    return parsedState;
+  } catch (error) {
+    console.error(
+      'RunTrip 복구 데이터 읽기 실패:',
+      error
+    );
+
+    localStorage.removeItem(
+      RUNTRIP_ACTIVE_STATE_KEY
+    );
+
+    return null;
+  }
+}
+
+function clearActiveRunTripState() {
+  localStorage.removeItem(
+    RUNTRIP_ACTIVE_STATE_KEY
+  );
+
+  console.log(
+    'RunTrip 실행 상태 삭제'
+  );
+}
+function restoreActiveRunTripState(
+  savedState
+) {
+  if (
+    !savedState ||
+    !savedState.draft ||
+    !savedState
+      .plannedRouteSummary
+  ) {
+    return false;
+  }
+
+  const savedDraft =
+    savedState.draft;
+
+  const plannedSummary =
+    savedState
+      .plannedRouteSummary;
+
+  const plannedCoordinates =
+    Array.isArray(
+      plannedSummary.coordinates
+    )
+      ? plannedSummary.coordinates
+          .filter(function (point) {
+            return (
+              Array.isArray(point) &&
+              point.length >= 2 &&
+              Number.isFinite(
+                Number(point[0])
+              ) &&
+              Number.isFinite(
+                Number(point[1])
+              )
+            );
+          })
+          .map(function (point) {
+            return [
+              Number(point[0]),
+              Number(point[1])
+            ];
+          })
+      : [];
+
+  const restoredStartTime =
+    new Date(
+      savedState.startTime
+    );
+
+  if (
+    Number.isNaN(
+      restoredStartTime.getTime()
+    ) ||
+    plannedCoordinates.length < 2 ||
+    !savedDraft.origin ||
+    !savedDraft.destination
+  ) {
+    return false;
+  }
+
+  selectedRunTripOrigin =
+    savedDraft.origin;
+
+  selectedRunTripDestination =
+    savedDraft.destination;
+
+  runTripOriginInput.value =
+    getRunTripPlaceDisplayName(
+      selectedRunTripOrigin
+    );
+
+  runTripDestinationInput.value =
+    getRunTripPlaceDisplayName(
+      selectedRunTripDestination
+    );
+
+  runTripWaypoints
+    .querySelectorAll(
+      '.runtrip-waypoint-row'
+    )
+    .forEach(function (row) {
+      row.remove();
+    });
+
+  runTripWaypointCount = 0;
+
+  const recoveredWaypoints =
+    Array.isArray(
+      savedDraft.waypoints
+    )
+      ? savedDraft.waypoints
+      : [];
+
+  recoveredWaypoints
+    .slice(
+      0,
+      MAX_RUNTRIP_WAYPOINTS
+    )
+    .forEach(function (waypoint) {
+      addRunTripWaypoint(
+        waypoint,
+        false
+      );
+    });
+
+  runTripReturnToggle.checked =
+    Boolean(
+      savedDraft.returnToStart
+    );
+
+  const restoredBounds =
+    L.latLngBounds(
+      plannedCoordinates
+    );
+
+  latestRunTripRouteSummary = {
+    distanceKm:
+      Math.max(
+        0,
+        Number(
+          plannedSummary.distanceKm
+        ) || 0
+      ),
+
+    durationMinutes:
+      Math.max(
+        0,
+        Number(
+          plannedSummary
+            .durationMinutes
+        ) || 0
+      ),
+
+    coordinates:
+      plannedCoordinates,
+
+    bounds:
+      restoredBounds
+  };
+
+  runTripStartTime =
+    restoredStartTime;
+
+  runTripElapsedSeconds =
+    Math.max(
+      0,
+      Math.floor(
+        Number(
+          savedState
+            .elapsedSeconds
+        ) || 0
+      )
+    );
+
+  runTripActualDistanceMeters =
+    Math.max(
+      0,
+      Number(
+        savedState
+          .actualDistanceMeters
+      ) || 0
+    );
+
+  runTripActualRouteCoordinates =
+    Array.isArray(
+      savedState
+        .actualRouteCoordinates
+    )
+      ? savedState
+          .actualRouteCoordinates
+          .filter(function (
+            point
+          ) {
+            return (
+              Array.isArray(point) &&
+              point.length >= 2 &&
+              Number.isFinite(
+                Number(point[0])
+              ) &&
+              Number.isFinite(
+                Number(point[1])
+              )
+            );
+          })
+          .map(function (point) {
+            return [
+              Number(point[0]),
+              Number(point[1])
+            ];
+          })
+      : [];
+
+  runTripActualRouteSegments =
+    cloneRunTripRouteSegments(
+      savedState
+        .actualRouteSegments
+    );
+
+  runTripActiveRouteSegment =
+    null;
+
+  isRunTripFollowing = true;
+
+  /*
+    안전을 위해 복구 직후에는
+    자동 측정을 시작하지 않고
+    일시정지 상태로 연다.
+  */
+  isRunTripPaused = true;
+
+  runTripLastValidPosition =
+    null;
+
+  clearRunTripMapPreview();
+
+  L.polyline(
+    plannedCoordinates,
+    {
+      color: '#facc15',
+      weight: 6,
+      opacity: 0.95,
+      lineCap: 'round',
+      lineJoin: 'round'
+    }
+  ).addTo(
+    runTripPreviewLayer
+  );
+
+  const restoredDraft =
+    getRunTripDraft();
+
+  const restoredMarkers = [];
+
+  const originPoint =
+    getRunTripPlaceLatLng(
+      restoredDraft.origin
+    );
+
+  if (originPoint) {
+    restoredMarkers.push({
+      label: 'S',
+      type: 'start',
+      latLng: originPoint
+    });
+  }
+
+  restoredDraft.waypoints
+    .forEach(function (
+      waypoint,
+      index
+    ) {
+      const waypointPoint =
+        getRunTripPlaceLatLng(
+          waypoint
+        );
+
+      if (!waypointPoint) {
+        return;
+      }
+
+      restoredMarkers.push({
+        label:
+          String(index + 1),
+
+        type:
+          'waypoint',
+
+        latLng:
+          waypointPoint
+      });
+    });
+
+  const destinationPoint =
+    getRunTripPlaceLatLng(
+      restoredDraft.destination
+    );
+
+  if (destinationPoint) {
+    restoredMarkers.push({
+      label: 'D',
+      type: 'destination',
+      latLng:
+        destinationPoint
+    });
+  }
+
+  restoredMarkers.forEach(
+    function (marker) {
+      L.marker(
+        marker.latLng,
+        {
+          icon:
+            createRunTripPreviewMarkerIcon(
+              marker.label,
+              marker.type
+            ),
+
+          interactive: false
+        }
+      ).addTo(
+        runTripPreviewLayer
+      );
+    }
+  );
+
+  const restoredActualSegments =
+  runTripActualRouteSegments
+    .filter(function (segment) {
+      return (
+        Array.isArray(segment) &&
+        segment.length >= 2
+      );
+    });
+
+if (
+  restoredActualSegments.length === 0 &&
+  runTripActualRouteCoordinates.length >= 2
+) {
+  restoredActualSegments.push(
+    runTripActualRouteCoordinates
+  );
+}
+
+restoredActualSegments.forEach(
+  function (segment) {
+    L.polyline(
+      segment,
+      {
+        color: '#2563eb',
+        weight: 5,
+        opacity: 0.9,
+        lineCap: 'round',
+        lineJoin: 'round'
+      }
+    ).addTo(
+      runTripPreviewLayer
+    );
+  }
+);
+
+  isRunTripConfirmed = true;
+
+currentAppPage = 'runtrip';
+
+updateBottomNavigationActiveState(
+  'runtrip'
+);
+
+runTripPanel.classList.add(
+  'runtrip-confirmed',
+  'runtrip-following'
+);
+
+  runTripConfirmedSummary.classList.add(
+    'hidden'
+  );
+
+  runTripDashboard.classList.remove(
+    'hidden'
+  );
+
+  runTripPanel.classList.remove(
+    'hidden'
+  );
+
+  map.getContainer().style.display =
+    'block';
+
+  controlsSection.style.display =
+    'none';
+
+  recordsSection.classList.add(
+    'hidden'
+  );
+
+  recordDetail.classList.add(
+    'hidden'
+  );
+
+  profileFeedScreen.classList.add(
+    'hidden'
+  );
+
+  monthlyReportScreen.classList.add(
+    'hidden'
+  );
+
+  if (appBottomNavigation) {
+    appBottomNavigation.classList.add(
+      'hidden'
+    );
+  }
+
+  updateRunTripFollowButton();
+  updateRunTripDashboard();
+  updateRunTripCreateButton();
+
+  requestAnimationFrame(
+    function () {
+      map.invalidateSize({
+        pan: false
+      });
+
+      fitRunTripMapBounds(
+        restoredBounds
+      );
+    }
+  );
+
+  saveActiveRunTripState();
+
+  return true;
+}
+window.addEventListener(
+  'pagehide',
+  function () {
+    if (isRunTripFollowing) {
+      saveActiveRunTripState();
+    }
+  }
+);
+
+document.addEventListener(
+  'visibilitychange',
+  function () {
+    if (
+      document.visibilityState ===
+        'hidden' &&
+      isRunTripFollowing
+    ) {
+      saveActiveRunTripState();
+    }
+  }
+);
 function beginNewRunTripRouteSegment() {
   runTripActiveRouteSegment = [];
 
@@ -3052,6 +3723,12 @@ function startRunTripTimer() {
       runTripElapsedSeconds++;
 
       updateRunTripDashboard();
+
+      if (
+       runTripElapsedSeconds % 5 === 0
+      ) {
+        saveActiveRunTripState();
+     }
     }, 1000);
 }
 function showRunTripEditMode() {
@@ -3367,6 +4044,7 @@ function startRunTripLocationWatch() {
         );
 
         updateRunTripDashboard();
+        saveActiveRunTripState();
       },
 
       function (error) {
@@ -3440,6 +4118,8 @@ function startRunTripFollowing() {
 
   startRunTripTimer();
   startRunTripLocationWatch();
+
+  saveActiveRunTripState();
 }
 function saveRunTripRecord() {
   if (!runTripStartTime) {
@@ -4289,8 +4969,14 @@ function connectExistingRunTripRouteOrderButtons() {
     runTripDestinationInput
   );
 }
-function addRunTripWaypoint() {
-  if (runTripWaypointCount >= MAX_RUNTRIP_WAYPOINTS) {
+function addRunTripWaypoint(
+  recoveredPlace = null,
+  shouldOpenSearch = true
+) {
+  if (
+    runTripWaypointCount >=
+    MAX_RUNTRIP_WAYPOINTS
+  ) {
     return;
   }
 
@@ -4387,8 +5073,22 @@ function addRunTripWaypoint() {
   waypointInput
 );
 
+if (recoveredPlace) {
+  waypointInput.runTripPlace =
+    recoveredPlace;
+
+  waypointInput.value =
+    getRunTripPlaceDisplayName(
+      recoveredPlace
+    );
+}
+
 refreshRunTripWaypointLabels();
-waypointInput.click();
+updateRunTripCreateButton();
+
+if (shouldOpenSearch) {
+  waypointInput.click();
+}
 }
 function getRunTripDraft() {
   const waypointInputs = runTripWaypoints.querySelectorAll(
@@ -5725,6 +6425,7 @@ pauseRunTripBtn.addEventListener(
   startRunTripLocationWatch();
 
   updateRunTripDashboard();
+  saveActiveRunTripState();
 
   return;
 }
@@ -5752,6 +6453,7 @@ pauseRunTripBtn.addEventListener(
     runTripActiveRouteSegment = null;
 
     updateRunTripDashboard();
+    saveActiveRunTripState();
   }
 );
 
@@ -5767,6 +6469,8 @@ endRunTripBtn.addEventListener(
     }
 
     saveRunTripRecord();
+
+    clearActiveRunTripState();
 
     stopRunTripFollowing();
 
@@ -6020,5 +6724,76 @@ backFromProfileFeedBtn.addEventListener(
 /* 기록 상세에서 목록으로 돌아가면
    기록 탭과 하단 메뉴를 유지한다. */
 
-/* 첫 앱 화면 */
-openAppPage('home');
+/* 첫 앱 화면 및 RunTrip 복구 감지 */
+function initializeAppWithRunTripRecovery() {
+  const savedRunTripState =
+    loadActiveRunTripState();
+
+  if (!savedRunTripState) {
+    openAppPage('home');
+    return;
+  }
+
+  const shouldResume =
+    window.confirm(
+      [
+        '진행 중이던 RUNTRIP 기록이 있습니다.',
+        '',
+        `저장된 경과 시간: ${
+          formatRunTripTimer(
+            savedRunTripState
+              .elapsedSeconds
+          )
+        }`,
+        '',
+        '확인을 누르면 이어서 진행합니다.',
+        '취소를 누르면 기록 삭제 여부를 확인합니다.'
+      ].join('\n')
+    );
+
+  if (shouldResume) {
+    const restored =
+      restoreActiveRunTripState(
+        savedRunTripState
+      );
+
+    if (restored) {
+      return;
+    }
+
+    clearActiveRunTripState();
+
+    alert(
+      '저장된 RUNTRIP 정보를 복구하지 못해 임시 기록을 삭제했어요.'
+    );
+
+    openAppPage('home');
+    return;
+  }
+
+  const shouldDelete =
+    window.confirm(
+      [
+        '진행 중이던 RUNTRIP 기록을 삭제할까요?',
+        '',
+        '삭제하면 저장된 시간, 거리, 실제 이동 경로를 복구할 수 없습니다.'
+      ].join('\n')
+    );
+
+  if (shouldDelete) {
+    clearActiveRunTripState();
+
+    openAppPage('home');
+
+    return;
+  }
+
+  /*
+    삭제를 취소한 경우에는
+    복구 데이터를 유지한 채 홈 화면을 연다.
+    다음 새로고침 때 다시 복구 여부를 선택할 수 있다.
+  */
+  openAppPage('home');
+}
+
+initializeAppWithRunTripRecovery();
