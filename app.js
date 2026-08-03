@@ -923,7 +923,7 @@ detailActualRouteLegend.classList.toggle(
   /*
     RunTrip 예정 경로:
     실제 이동 경로 아래에 보이도록
-    먼저 회색 점선으로 그린다.
+    흰색 원형 점으로 그린다.
   */
   routeData.plannedSegments.forEach(
     function (segment) {
@@ -939,10 +939,10 @@ detailActualRouteLegend.classList.toggle(
 
       const plannedLine =
         L.polyline(segment, {
-          color: '#64748b',
-          weight: 5,
-          opacity: 0.85,
-          dashArray: '10 10',
+          color: '#ffffff',
+          weight: 6,
+          opacity: 0.95,
+          dashArray: '1 12',
           lineCap: 'round',
           lineJoin: 'round'
         }).addTo(detailMap);
@@ -955,7 +955,7 @@ detailActualRouteLegend.classList.toggle(
 
   /*
     실제 이동 경로:
-    노란색 실선으로 표시하고
+    밝은 민트색 실선으로 표시하고
     실제 이동 방향 화살표를 추가한다.
   */
   routeData.actualSegments.forEach(
@@ -969,7 +969,7 @@ detailActualRouteLegend.classList.toggle(
       if (segment.length >= 2) {
         const actualLine =
           L.polyline(segment, {
-            color: '#facc15',
+            color: '#76e4d2',
             weight: 6,
             opacity: 0.95,
             lineCap: 'round',
@@ -2791,6 +2791,10 @@ let isRunTripFollowing = false;
 let runTripFollowWatchId = null;
 let runTripFollowMarker = null;
 let isRunTripPaused = false;
+let isRunTripCountdownActive = false;
+let hasRunTripArrivalNotified = false;
+
+const RUNTRIP_ARRIVAL_DISTANCE_METERS = 35;
 
 let runTripElapsedSeconds = 0;
 let runTripTimerInterval = null;
@@ -2802,6 +2806,8 @@ let runTripStartTime = null;
 let runTripActualRouteCoordinates = [];
 let runTripActualRouteSegments = [];
 let runTripActiveRouteSegment = null;
+let runTripActualRouteLine = null;
+let runTripActualRouteLines = [];
 const RUNTRIP_ACTIVE_STATE_KEY =
   'freeRunTripActiveRunTripV1';
 
@@ -2878,6 +2884,11 @@ function createRunTripRecoveryState() {
     isPaused:
       Boolean(
         isRunTripPaused
+     ),
+
+    arrivalNotified:
+       Boolean(
+        hasRunTripArrivalNotified
       ),
 
     actualRouteCoordinates:
@@ -3250,17 +3261,23 @@ function restoreActiveRunTripState(
   */
   isRunTripPaused = true;
 
-  runTripLastValidPosition =
-    null;
+  hasRunTripArrivalNotified =
+   Boolean(
+     savedState.arrivalNotified
+  );
+
+ runTripLastValidPosition =
+   null;
 
   clearRunTripMapPreview();
 
   L.polyline(
     plannedCoordinates,
     {
-      color: '#facc15',
+      color: '#ffffff',
       weight: 6,
       opacity: 0.95,
+      dashArray: '1 12',
       lineCap: 'round',
       lineJoin: 'round'
     }
@@ -3368,9 +3385,9 @@ restoredActualSegments.forEach(
     L.polyline(
       segment,
       {
-        color: '#2563eb',
-        weight: 5,
-        opacity: 0.9,
+        color: '#76e4d2',
+        weight: 6,
+        opacity: 0.95,
         lineCap: 'round',
         lineJoin: 'round'
       }
@@ -3476,6 +3493,7 @@ document.addEventListener(
 );
 function beginNewRunTripRouteSegment() {
   runTripActiveRouteSegment = [];
+  runTripActualRouteLine = null;
 
   runTripActualRouteSegments.push(
     runTripActiveRouteSegment
@@ -3494,6 +3512,233 @@ function appendRunTripRoutePoint(point) {
   runTripActiveRouteSegment.push(
     point
   );
+
+  if (!runTripActualRouteLine) {
+    runTripActualRouteLine =
+      L.polyline(
+        runTripActiveRouteSegment,
+        {
+          color: '#76e4d2',
+          weight: 6,
+          opacity: 0.95,
+          lineCap: 'round',
+          lineJoin: 'round'
+        }
+      ).addTo(
+        runTripPreviewLayer
+      );
+
+    runTripActualRouteLines.push(
+      runTripActualRouteLine
+    );
+  } else {
+    runTripActualRouteLine.setLatLngs(
+      runTripActiveRouteSegment
+    );
+  }
+}
+function showRunTripCountdown() {
+  if (isRunTripCountdownActive) {
+    return Promise.resolve(false);
+  }
+
+  isRunTripCountdownActive = true;
+
+  return new Promise(function (resolve) {
+    const overlay =
+      document.createElement('div');
+
+    overlay.className =
+      'runtrip-countdown-overlay';
+
+    overlay.setAttribute(
+      'role',
+      'status'
+    );
+
+    overlay.setAttribute(
+      'aria-live',
+      'assertive'
+    );
+
+    overlay.innerHTML = `
+      <div class="runtrip-countdown-card">
+        <span>RUNTRIP</span>
+
+        <strong>3</strong>
+
+        <small>출발 준비</small>
+      </div>
+    `;
+
+    document.body.appendChild(
+      overlay
+    );
+
+    const numberElement =
+      overlay.querySelector('strong');
+
+    const guideElement =
+      overlay.querySelector('small');
+
+    let count = 3;
+
+    const intervalId =
+      setInterval(function () {
+        count--;
+
+        if (count > 0) {
+          numberElement.textContent =
+            String(count);
+
+          numberElement.classList.remove(
+            'is-popping'
+          );
+
+          void numberElement.offsetWidth;
+
+          numberElement.classList.add(
+            'is-popping'
+          );
+
+          return;
+        }
+
+        clearInterval(intervalId);
+
+        numberElement.textContent =
+          'GO';
+
+        guideElement.textContent =
+          '출발!';
+
+        overlay.classList.add(
+          'is-start'
+        );
+
+        setTimeout(function () {
+          overlay.remove();
+
+          isRunTripCountdownActive =
+            false;
+
+          resolve(true);
+        }, 650);
+      }, 1000);
+  });
+}
+function getRunTripArrivalTargetLatLng() {
+  const draft = getRunTripDraft();
+
+  if (draft.returnToStart) {
+    return getRunTripPlaceLatLng(
+      draft.origin
+    );
+  }
+
+  return getRunTripPlaceLatLng(
+    draft.destination
+  );
+}
+
+function showRunTripArrivalNotice() {
+  const existingNotice =
+    document.querySelector(
+      '.runtrip-arrival-notice'
+    );
+
+  if (existingNotice) {
+    existingNotice.remove();
+  }
+
+  const notice =
+    document.createElement('div');
+
+  notice.className =
+    'runtrip-arrival-notice';
+
+  notice.setAttribute(
+    'role',
+    'alert'
+  );
+
+  notice.innerHTML = `
+    <div class="runtrip-arrival-notice-icon">
+      ✓
+    </div>
+
+    <div>
+      <strong>
+        도착지에 도착했어요
+      </strong>
+
+      <span>
+        RUNTRIP을 종료하면 기록이 저장됩니다.
+      </span>
+    </div>
+  `;
+
+  document.body.appendChild(
+    notice
+  );
+
+  if (navigator.vibrate) {
+    navigator.vibrate(
+      [180, 80, 180]
+    );
+  }
+
+  setTimeout(function () {
+    notice.classList.add(
+      'is-hiding'
+    );
+
+    setTimeout(function () {
+      notice.remove();
+    }, 300);
+  }, 4200);
+}
+
+function checkRunTripArrival(
+  latitude,
+  longitude,
+  accuracy
+) {
+  if (
+    hasRunTripArrivalNotified ||
+    !isRunTripFollowing ||
+    isRunTripPaused ||
+    accuracy > 60
+  ) {
+    return;
+  }
+
+  const target =
+    getRunTripArrivalTargetLatLng();
+
+  if (!target) {
+    return;
+  }
+
+  const distanceToTarget =
+    calculateDistance(
+      latitude,
+      longitude,
+      target[0],
+      target[1]
+    );
+
+  if (
+    distanceToTarget >
+    RUNTRIP_ARRIVAL_DISTANCE_METERS
+  ) {
+    return;
+  }
+
+  hasRunTripArrivalNotified = true;
+
+  showRunTripArrivalNotice();
+  saveActiveRunTripState();
 }
 function formatRunTripPlannedDuration(totalMinutes) {
   const safeMinutes = Math.max(
@@ -4033,18 +4278,24 @@ function startRunTripLocationWatch() {
         }
 
         map.setView(
-          currentLatLng,
-          Math.max(
-            map.getZoom(),
-            17
-          ),
-          {
-            animate: false
-          }
-        );
+  currentLatLng,
+  Math.max(
+    map.getZoom(),
+    17
+  ),
+  {
+    animate: false
+  }
+);
 
-        updateRunTripDashboard();
-        saveActiveRunTripState();
+checkRunTripArrival(
+  latitude,
+  longitude,
+  accuracy
+);
+
+updateRunTripDashboard();
+saveActiveRunTripState();
       },
 
       function (error) {
@@ -4070,7 +4321,7 @@ function startRunTripLocationWatch() {
       }
     );
 }
-function startRunTripFollowing() {
+async function startRunTripFollowing() {
   if (!latestRunTripRouteSummary) {
     alert(
       '먼저 실제 보행 경로를 확인해 주세요.'
@@ -4087,6 +4338,13 @@ function startRunTripFollowing() {
     return;
   }
 
+  const countdownCompleted =
+    await showRunTripCountdown();
+
+  if (!countdownCompleted) {
+    return;
+  }
+
   resetRunTripDashboard();
 
   runTripStartTime = new Date();
@@ -4094,16 +4352,19 @@ function startRunTripFollowing() {
   runTripActualRouteCoordinates = [];
   runTripActualRouteSegments = [];
   runTripActiveRouteSegment = null;
-
+  runTripActualRouteLine = null;
+  runTripActualRouteLines = [];
+  hasRunTripArrivalNotified = false;
   beginNewRunTripRouteSegment();
 
   isRunTripFollowing = true;
   isRunTripPaused = false;
+
   if (appBottomNavigation) {
-  appBottomNavigation.classList.add(
-    'hidden'
-  );
-}
+    appBottomNavigation.classList.add(
+      'hidden'
+    );
+  }
 
   runTripPanel.classList.add(
     'runtrip-following'
@@ -5474,9 +5735,10 @@ async function renderRunTripMapPreview() {
     clearRunTripMapPreview();
 
     L.polyline(routeCoordinates, {
-      color: '#facc15',
+      color: '#ffffff',
       weight: 6,
       opacity: 0.95,
+      dashArray: '1 12',
       lineCap: 'round',
       lineJoin: 'round'
     }).addTo(runTripPreviewLayer);
@@ -5528,10 +5790,10 @@ latestRunTripRouteSummary = null;
 
     if (fallbackPath.length >= 2) {
       L.polyline(fallbackPath, {
-        color: '#facc15',
+        color: '#ffffff',
         weight: 6,
-        opacity: 0.65,
-        dashArray: '8 10',
+        opacity: 0.8,
+        dashArray: '1 12',
         lineCap: 'round',
         lineJoin: 'round'
       }).addTo(runTripPreviewLayer);
@@ -6451,7 +6713,8 @@ pauseRunTripBtn.addEventListener(
 
     runTripLastValidPosition = null;
     runTripActiveRouteSegment = null;
-
+    runTripActualRouteLine = null;
+    
     updateRunTripDashboard();
     saveActiveRunTripState();
   }
@@ -6478,7 +6741,10 @@ endRunTripBtn.addEventListener(
     runTripActualRouteCoordinates = [];
     runTripActualRouteSegments = [];
     runTripActiveRouteSegment = null;
-
+    runTripActualRouteLine = null;
+    
+    runTripActualRouteLines = [];
+    hasRunTripArrivalNotified = false;
     setTimeout(function () {
       openAppPage('records');
     }, 0);

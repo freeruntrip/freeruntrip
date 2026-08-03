@@ -5900,10 +5900,217 @@ body {
 }
 
 .detail-map-legend-line.planned {
-  border-top: 4px dashed #64748b;
+  height: 6px;
+  border: none;
+
+  background:
+    radial-gradient(
+      circle,
+      #ffffff 0 3px,
+      transparent 3.2px
+    )
+    left center / 12px 6px repeat-x;
 }
 
 .detail-map-legend-line.actual {
-  border-top: 5px solid #facc15;
+  border-top: 5px solid #76e4d2;
   border-radius: 999px;
+}
+/* RunTrip 시작 카운트다운 */
+.runtrip-countdown-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+
+  display: grid;
+  place-items: center;
+
+  background: rgba(15, 23, 42, 0.84);
+
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.runtrip-countdown-card {
+  width: min(76vw, 300px);
+  min-height: 280px;
+
+  box-sizing: border-box;
+  padding: 30px 20px;
+
+  border: 1px solid rgba(118, 228, 210, 0.42);
+  border-radius: 30px;
+
+  background:
+    radial-gradient(
+      circle at top,
+      rgba(118, 228, 210, 0.22),
+      transparent 50%
+    ),
+    #0f172a;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  color: #ffffff;
+
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.42);
+}
+
+.runtrip-countdown-card > span {
+  color: #76e4d2;
+
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+}
+
+.runtrip-countdown-card > strong {
+  margin: 18px 0 12px;
+
+  color: #ffffff;
+
+  font-size: 116px;
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: -0.08em;
+}
+
+.runtrip-countdown-card > strong.is-popping {
+  animation:
+    runtrip-countdown-pop
+    260ms
+    ease-out;
+}
+
+.runtrip-countdown-card > small {
+  color: #cbd5e1;
+
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.runtrip-countdown-overlay.is-start
+.runtrip-countdown-card > strong {
+  color: #76e4d2;
+  font-size: 92px;
+}
+
+@keyframes runtrip-countdown-pop {
+  from {
+    opacity: 0.35;
+    transform: scale(1.24);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+#runTripDashboardAveragePace {
+  color: #f8fafc;
+}
+/* RunTrip 도착 알림 */
+.runtrip-arrival-notice {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 18px);
+  left: 50%;
+  z-index: 10001;
+
+  width: min(calc(100% - 28px), 402px);
+  box-sizing: border-box;
+  padding: 16px;
+
+  transform: translateX(-50%);
+
+  border: 1px solid rgba(118, 228, 210, 0.5);
+  border-radius: 20px;
+
+  background: rgba(15, 23, 42, 0.96);
+
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  align-items: center;
+  gap: 13px;
+
+  color: #ffffff;
+
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.34);
+
+  animation:
+    runtrip-arrival-in
+    320ms
+    ease-out;
+
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.runtrip-arrival-notice.is-hiding {
+  opacity: 0;
+
+  transform:
+    translateX(-50%)
+    translateY(-12px);
+
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+
+.runtrip-arrival-notice-icon {
+  width: 46px;
+  height: 46px;
+
+  border-radius: 50%;
+
+  background: #76e4d2;
+  color: #0f172a;
+
+  display: grid;
+  place-items: center;
+
+  font-size: 24px;
+  font-weight: 900;
+}
+
+.runtrip-arrival-notice strong,
+.runtrip-arrival-notice span {
+  display: block;
+}
+
+.runtrip-arrival-notice strong {
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.runtrip-arrival-notice span {
+  margin-top: 4px;
+
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@keyframes runtrip-arrival-in {
+  from {
+    opacity: 0;
+
+    transform:
+      translateX(-50%)
+      translateY(-18px);
+  }
+
+  to {
+    opacity: 1;
+
+    transform:
+      translateX(-50%)
+      translateY(0);
+  }
 }
