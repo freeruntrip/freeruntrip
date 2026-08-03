@@ -58,6 +58,19 @@ const runningMapCadence = document.getElementById(
   'runningMapCadence'
 );
 
+const runningMapCalories = document.getElementById(
+  'runningMapCalories'
+);
+const runningMapElevationGain = document.getElementById(
+  'runningMapElevationGain'
+);
+const runningMapHeartRate = document.getElementById(
+  'runningMapHeartRate'
+);
+const runningMapGpsAccuracy = document.getElementById(
+  'runningMapGpsAccuracy'
+);
+
 const runningMapPauseBtn = document.getElementById(
   'runningMapPauseBtn'
 );
@@ -77,6 +90,18 @@ function syncRunningMapStats() {
 
   runningMapCadence.textContent =
     runningCadence.textContent;
+
+  runningMapCalories.textContent =
+    runningCalories.textContent;
+
+  runningMapElevationGain.textContent =
+    runningElevationGain.textContent;
+
+  runningMapHeartRate.textContent =
+    runningHeartRate.textContent;
+
+  runningMapGpsAccuracy.textContent =
+    runningGpsAccuracy.textContent;
 
   runningMapPauseBtn.textContent =
     pauseBtn.textContent;
@@ -170,6 +195,7 @@ let totalDistance = 0; // meters
 let totalElevationGain = 0;
 let lastValidAltitude = null;
 let recentPositions = [];
+let lastRunningGpsAccuracy = null;
 
 const SMOOTHING_COUNT = 3;
 const DEFAULT_RUNNER_WEIGHT_KG = 70;
@@ -251,6 +277,22 @@ const detailDistance = document.getElementById(
 const detailDuration = document.getElementById('detailDuration');
 const detailCalories = document.getElementById(
   'detailCalories'
+);
+
+const detailAveragePace = document.getElementById(
+  'detailAveragePace'
+);
+const detailElevationGain = document.getElementById(
+  'detailElevationGain'
+);
+const detailHeartRate = document.getElementById(
+  'detailHeartRate'
+);
+const detailCadence = document.getElementById(
+  'detailCadence'
+);
+const detailGpsAccuracy = document.getElementById(
+  'detailGpsAccuracy'
 );
 
 const detailPlannedDistanceCard = document.getElementById(
@@ -686,33 +728,163 @@ function getSavedRunTripPlaceLatLng(
     longitude
   ];
 }
-function addDirectionArrowsToDetailMap(points) {
-  if (!points || points.length < 2) {
-    return;
+function getDirectionArrowSegments(points) {
+  if (!Array.isArray(points) || points.length < 2) {
+    return [];
   }
 
-  const interval = Math.max(1, Math.floor(points.length / 6));
+  const validPoints = points.filter(function (point) {
+    return (
+      Array.isArray(point) &&
+      point.length >= 2 &&
+      Number.isFinite(Number(point[0])) &&
+      Number.isFinite(Number(point[1]))
+    );
+  });
 
-  for (let i = interval; i < points.length - 1; i += interval) {
-    const prev = points[i - 1];
-    const next = points[i];
+  if (validPoints.length < 2) {
+    return [];
+  }
 
-    const angle =
-      Math.atan2(next[0] - prev[0], next[1] - prev[1]) * (180 / Math.PI);
+  /*
+    TMAP 좌표에는 도로의 미세한 굴곡이 매우 많이 포함된다.
+    화살표를 모든 작은 굴곡에 만들지 않도록 먼저 좌표를
+    Douglas-Peucker 방식으로 단순화한다.
+  */
+  const simplifyToleranceMeters = 42;
+  const minimumArrowSegmentMeters = 140;
 
+  function getPointToLineDistanceMeters(point, startPoint, endPoint) {
+    const referenceLatitude =
+      (startPoint[0] + endPoint[0] + point[0]) / 3;
+
+    const metersPerLatitudeDegree = 111320;
+    const metersPerLongitudeDegree =
+      111320 * Math.cos(referenceLatitude * Math.PI / 180);
+
+    const startX = startPoint[1] * metersPerLongitudeDegree;
+    const startY = startPoint[0] * metersPerLatitudeDegree;
+    const endX = endPoint[1] * metersPerLongitudeDegree;
+    const endY = endPoint[0] * metersPerLatitudeDegree;
+    const pointX = point[1] * metersPerLongitudeDegree;
+    const pointY = point[0] * metersPerLatitudeDegree;
+
+    const lineX = endX - startX;
+    const lineY = endY - startY;
+    const lineLengthSquared = lineX * lineX + lineY * lineY;
+
+    if (lineLengthSquared === 0) {
+      return Math.hypot(pointX - startX, pointY - startY);
+    }
+
+    const projection = Math.max(
+      0,
+      Math.min(
+        1,
+        ((pointX - startX) * lineX + (pointY - startY) * lineY) /
+          lineLengthSquared
+      )
+    );
+
+    const nearestX = startX + projection * lineX;
+    const nearestY = startY + projection * lineY;
+
+    return Math.hypot(pointX - nearestX, pointY - nearestY);
+  }
+
+  function simplifyRoute(routePoints) {
+    if (routePoints.length <= 2) {
+      return routePoints.slice();
+    }
+
+    let maximumDistance = 0;
+    let maximumIndex = 0;
+    const firstPoint = routePoints[0];
+    const lastPoint = routePoints[routePoints.length - 1];
+
+    for (let index = 1; index < routePoints.length - 1; index++) {
+      const distance = getPointToLineDistanceMeters(
+        routePoints[index],
+        firstPoint,
+        lastPoint
+      );
+
+      if (distance > maximumDistance) {
+        maximumDistance = distance;
+        maximumIndex = index;
+      }
+    }
+
+    if (maximumDistance <= simplifyToleranceMeters) {
+      return [firstPoint, lastPoint];
+    }
+
+    const left = simplifyRoute(routePoints.slice(0, maximumIndex + 1));
+    const right = simplifyRoute(routePoints.slice(maximumIndex));
+
+    return left.slice(0, -1).concat(right);
+  }
+
+  /*
+    CSS의 ➤ 문자는 0도에서 오른쪽을 가리킨다.
+    지도 화면에서는 북쪽이 위쪽이므로 위도 증가는 음의 Y축이다.
+    이 좌표계를 기준으로 회전각을 계산해야 실제 진행 방향과 일치한다.
+  */
+  function getScreenAngle(startPoint, endPoint) {
+    const middleLatitude = (startPoint[0] + endPoint[0]) / 2;
+    const deltaX =
+      (endPoint[1] - startPoint[1]) *
+      Math.cos(middleLatitude * Math.PI / 180);
+    const deltaY = -(endPoint[0] - startPoint[0]);
+
+    return Math.atan2(deltaY, deltaX) * (180 / Math.PI);
+  }
+
+  const simplifiedPoints = simplifyRoute(validPoints);
+  const arrowSegments = [];
+
+  for (let index = 1; index < simplifiedPoints.length; index++) {
+    const startPoint = simplifiedPoints[index - 1];
+    const endPoint = simplifiedPoints[index];
+    const segmentLength = calculateDistance(
+      startPoint[0],
+      startPoint[1],
+      endPoint[0],
+      endPoint[1]
+    );
+
+    if (segmentLength < minimumArrowSegmentMeters) {
+      continue;
+    }
+
+    arrowSegments.push({
+      point: [
+        (startPoint[0] + endPoint[0]) / 2,
+        (startPoint[1] + endPoint[1]) / 2
+      ],
+      angle: getScreenAngle(startPoint, endPoint)
+    });
+  }
+
+  return arrowSegments;
+}
+
+function addDirectionArrowsToDetailMap(points) {
+  getDirectionArrowSegments(points).forEach(function (segment) {
     const arrowIcon = L.divIcon({
       className: 'direction-arrow',
-      html: `<div style="transform: rotate(${angle}deg)">➤</div>`,
-      iconSize: [24, 24],
-      iconAnchor: [12, 12]
+      html: `<div style="transform: rotate(${segment.angle}deg)">➤</div>`,
+      iconSize: [22, 22],
+      iconAnchor: [11, 11]
     });
 
-    const marker = L.marker(next, {
-      icon: arrowIcon
+    const marker = L.marker(segment.point, {
+      icon: arrowIcon,
+      interactive: false
     }).addTo(detailMap);
 
     detailDirectionMarkers.push(marker);
-  }
+  });
 }
 function saveRunRecord() {
   const runEndTime = new Date();
@@ -743,6 +915,17 @@ function saveRunRecord() {
     ),
 
     pace: paceDisplay.textContent,
+
+    elevationGain: Math.round(totalElevationGain),
+
+    heartRate: null,
+
+    cadence: null,
+
+    gpsAccuracy:
+      Number.isFinite(lastRunningGpsAccuracy)
+        ? Math.round(lastRunningGpsAccuracy)
+        : null,
 
     emotionalPace: getEmotionalPaceLabel(),
 
@@ -777,6 +960,8 @@ renderRecordProfileFeed();
 renderMonthlyReport();
 
   console.log('저장된 러닝 기록:', record);
+
+  return record;
 }
 function getDetailRouteData(record) {
   const isRunTrip =
@@ -1194,6 +1379,26 @@ function normalizeActivityRecord(record) {
       record.pace ||
       `--'--"`,
 
+    elevationGain:
+      Number.isFinite(Number(record.elevationGain))
+        ? Math.round(Number(record.elevationGain))
+        : null,
+
+    heartRate:
+      Number.isFinite(Number(record.heartRate))
+        ? Math.round(Number(record.heartRate))
+        : null,
+
+    cadence:
+      Number.isFinite(Number(record.cadence))
+        ? Math.round(Number(record.cadence))
+        : null,
+
+    gpsAccuracy:
+      Number.isFinite(Number(record.gpsAccuracy))
+        ? Math.round(Number(record.gpsAccuracy))
+        : null,
+
     emotionalPace:
       record.emotionalPace ||
       (
@@ -1445,6 +1650,9 @@ function renderRunRecords() {
   recordCard.className =
     `record-card ${activityType}-record-card`;
 
+  recordCard.dataset.recordId =
+    String(record.id);
+
   recordCard.setAttribute(
     'tabindex',
     '0'
@@ -1595,6 +1803,29 @@ if (isRunTrip) {
 
     detailCalories.textContent =
   `${record.calories} kcal`;
+
+    detailAveragePace.textContent =
+      record.pace || `--'--"`;
+
+    detailElevationGain.textContent =
+      record.elevationGain === null
+        ? '측정되지 않음'
+        : `${record.elevationGain} m`;
+
+    detailHeartRate.textContent =
+      record.heartRate === null
+        ? '측정되지 않음'
+        : `${record.heartRate} bpm`;
+
+    detailCadence.textContent =
+      record.cadence === null
+        ? '측정되지 않음'
+        : `${record.cadence} spm`;
+
+    detailGpsAccuracy.textContent =
+      record.gpsAccuracy === null
+        ? '측정되지 않음'
+        : `${record.gpsAccuracy} m`;
 
 if (isRunTrip) {
   const rawPlannedDistance =
@@ -2060,8 +2291,17 @@ profileRecentRuns.innerHTML =
 renderRunRecords();
 renderRecordProfileFeed();
 
-startBtn.addEventListener('click', function () {
+startBtn.addEventListener('click', async function () {
   console.log('러닝 시작 버튼 클릭됨');
+
+  if (!isRunning && seconds === 0 && !paused) {
+    const countdownCompleted =
+      await showActivityCountdown('RUNNING');
+
+    if (!countdownCompleted) {
+      return;
+    }
+  }
 if (!isRunning) {
   runningIdlePanel.classList.add('hidden');
   runningDashboard.classList.remove('hidden');
@@ -2072,6 +2312,7 @@ if (!isRunning) {
     runStartTime = new Date();
     totalElevationGain = 0;
 lastValidAltitude = null;
+lastRunningGpsAccuracy = null;
 
 runningCalories.textContent = '0 kcal';
 runningElevationGain.textContent = '0 m';
@@ -2135,6 +2376,7 @@ function (position) {
    const latitude = position.coords.latitude;
 const longitude = position.coords.longitude;
 const accuracy = position.coords.accuracy;
+lastRunningGpsAccuracy = Number.isFinite(accuracy) ? accuracy : null;
 
 console.log(latitude, longitude, accuracy);
 
@@ -2336,7 +2578,8 @@ saveRunWithMoodBtn.addEventListener('click', function () {
     );
   }
 
-saveRunRecord();
+const savedRunRecord =
+  saveRunRecord();
 
 resetRunMemoryInputs();
 
@@ -2347,6 +2590,7 @@ paceMoodModal.classList.add('hidden');
   totalDistance = 0;
 totalElevationGain = 0;
 lastValidAltitude = null;
+lastRunningGpsAccuracy = null;
 
 distanceDisplay.textContent = '0.00 km';
 paceDisplay.textContent = `--'--"`;
@@ -2391,6 +2635,40 @@ lastGpsElapsedSeconds = 0;
   syncRunningMapStats();
   runningDashboard.classList.add('hidden');
   runningIdlePanel.classList.remove('hidden');
+
+  if (savedRunRecord) {
+    setTimeout(function () {
+      selectedRecordFilter = 'all';
+
+      recordsFilterTabs.forEach(
+        function (tab) {
+          const isActive =
+            tab.dataset.recordFilter === 'all';
+
+          tab.classList.toggle(
+            'active',
+            isActive
+          );
+
+          tab.setAttribute(
+            'aria-selected',
+            String(isActive)
+          );
+        }
+      );
+
+      openAppPage('records');
+
+      const savedRecordCard =
+        recordsList.querySelector(
+          `[data-record-id="${savedRunRecord.id}"]`
+        );
+
+      if (savedRecordCard) {
+        savedRecordCard.click();
+      }
+    }, 0);
+  }
 });
 detailNumericPace.addEventListener('click', function () {
   if (detailNumericPace.dataset.showing === 'number') {
@@ -2618,12 +2896,14 @@ runTripDashboard.innerHTML = `
       </strong>
     </div>
 
-    <span
+    <button
       id="runTripDashboardFollowState"
       class="runtrip-dashboard-follow-state"
+      type="button"
+      aria-pressed="true"
     >
       따라가기 ON
-    </span>
+    </button>
   </div>
 
   <div class="runtrip-dashboard-timer-card">
@@ -2792,9 +3072,15 @@ let runTripFollowWatchId = null;
 let runTripFollowMarker = null;
 let isRunTripPaused = false;
 let isRunTripCountdownActive = false;
+let isRunTripMapFollowing = true;
 let hasRunTripArrivalNotified = false;
+let isRunTripCompletionInProgress = false;
 
 const RUNTRIP_ARRIVAL_DISTANCE_METERS = 35;
+const RUNTRIP_ARRIVAL_MAX_ACCURACY_METERS = 60;
+const RUNTRIP_ARRIVAL_MIN_DISTANCE_METERS = 50;
+const RUNTRIP_ARRIVAL_MIN_ELAPSED_SECONDS = 120;
+const RUNTRIP_DIRECTION_ARROW_INTERVAL_METERS = 250;
 
 let runTripElapsedSeconds = 0;
 let runTripTimerInterval = null;
@@ -3261,10 +3547,14 @@ function restoreActiveRunTripState(
   */
   isRunTripPaused = true;
 
-  hasRunTripArrivalNotified =
-   Boolean(
-     savedState.arrivalNotified
-  );
+  /*
+    복구 직후에는 도착 감지를 다시 활성화한다.
+    도착 직전 페이지가 닫힌 경우에도 다음 GPS에서
+    자동 종료를 다시 시도할 수 있도록 한다.
+  */
+  hasRunTripArrivalNotified = false;
+  isRunTripCompletionInProgress = false;
+  isRunTripMapFollowing = true;
 
  runTripLastValidPosition =
    null;
@@ -3283,6 +3573,10 @@ function restoreActiveRunTripState(
     }
   ).addTo(
     runTripPreviewLayer
+  );
+
+  addRunTripRouteDirectionArrows(
+    plannedCoordinates
   );
 
   const restoredDraft =
@@ -3537,7 +3831,75 @@ function appendRunTripRoutePoint(point) {
     );
   }
 }
+
+function addRunTripRouteDirectionArrows(points) {
+  getDirectionArrowSegments(points).forEach(function (segment) {
+    L.marker(segment.point, {
+      icon: L.divIcon({
+        className: 'runtrip-route-direction-arrow',
+        html: `<div style="transform: rotate(${segment.angle}deg)">➤</div>`,
+        iconSize: [22, 22],
+        iconAnchor: [11, 11]
+      }),
+      interactive: false
+    }).addTo(runTripPreviewLayer);
+  });
+}
+
+function showActivityCountdown(activityLabel) {
+  if (isRunTripCountdownActive) {
+    return Promise.resolve(false);
+  }
+
+  isRunTripCountdownActive = true;
+
+  return new Promise(function (resolve) {
+    const overlay = document.createElement('div');
+    overlay.className = 'runtrip-countdown-overlay';
+    overlay.setAttribute('role', 'status');
+    overlay.setAttribute('aria-live', 'assertive');
+    overlay.innerHTML = `
+      <div class="runtrip-countdown-card">
+        <span>${escapePlaceSearchText(activityLabel)}</span>
+        <strong>3</strong>
+        <small>출발 준비</small>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+    const numberElement = overlay.querySelector('strong');
+    const guideElement = overlay.querySelector('small');
+    let count = 3;
+
+    const intervalId = setInterval(function () {
+      count--;
+      if (count > 0) {
+        numberElement.textContent = String(count);
+        numberElement.classList.remove('is-popping');
+        void numberElement.offsetWidth;
+        numberElement.classList.add('is-popping');
+        return;
+      }
+
+      clearInterval(intervalId);
+      numberElement.textContent = 'GO';
+      guideElement.textContent = '출발!';
+      overlay.classList.add('is-start');
+
+      setTimeout(function () {
+        overlay.remove();
+        isRunTripCountdownActive = false;
+        resolve(true);
+      }, 650);
+    }, 1000);
+  });
+}
+
 function showRunTripCountdown() {
+  return showActivityCountdown('RUNTRIP');
+}
+
+function showLegacyRunTripCountdown() {
   if (isRunTripCountdownActive) {
     return Promise.resolve(false);
   }
@@ -3673,7 +4035,7 @@ function showRunTripArrivalNotice() {
       </strong>
 
       <span>
-        RUNTRIP을 종료하면 기록이 저장됩니다.
+        RUNTRIP을 자동 종료하고 기록을 저장하고 있어요.
       </span>
     </div>
   `;
@@ -3706,9 +4068,30 @@ function checkRunTripArrival(
 ) {
   if (
     hasRunTripArrivalNotified ||
+    isRunTripCompletionInProgress ||
     !isRunTripFollowing ||
     isRunTripPaused ||
-    accuracy > 60
+    accuracy >
+      RUNTRIP_ARRIVAL_MAX_ACCURACY_METERS
+  ) {
+    return;
+  }
+
+  const hasEnoughMovement =
+    runTripActualDistanceMeters >=
+    RUNTRIP_ARRIVAL_MIN_DISTANCE_METERS;
+
+  const hasEnoughElapsedTime =
+    runTripElapsedSeconds >=
+    RUNTRIP_ARRIVAL_MIN_ELAPSED_SECONDS;
+
+  /*
+    출발지와 도착지가 가깝거나 GPS가 흔들리는 경우
+    출발 직후 자동 종료되는 것을 막는다.
+  */
+  if (
+    !hasEnoughMovement &&
+    !hasEnoughElapsedTime
   ) {
     return;
   }
@@ -3739,6 +4122,12 @@ function checkRunTripArrival(
 
   showRunTripArrivalNotice();
   saveActiveRunTripState();
+
+  setTimeout(function () {
+    completeRunTrip({
+      arrived: true
+    });
+  }, 900);
 }
 function formatRunTripPlannedDuration(totalMinutes) {
   const safeMinutes = Math.max(
@@ -3917,11 +4306,30 @@ runTripDashboardCadence.textContent =
   runTripDashboardFollowState.textContent =
     isRunTripPaused
       ? '따라가기 멈춤'
-      : '따라가기 ON';
+      : isRunTripMapFollowing
+        ? '따라가기 ON'
+        : '따라가기 OFF';
+
+  runTripDashboardFollowState.setAttribute(
+    'aria-pressed',
+    String(
+      isRunTripMapFollowing &&
+      !isRunTripPaused
+    )
+  );
+
+  runTripDashboardFollowState.disabled =
+    isRunTripPaused;
 
   runTripDashboardFollowState.classList.toggle(
     'is-paused',
     isRunTripPaused
+  );
+
+  runTripDashboardFollowState.classList.toggle(
+    'is-off',
+    !isRunTripPaused &&
+    !isRunTripMapFollowing
   );
 
   pauseRunTripBtn.textContent =
@@ -3943,6 +4351,7 @@ function resetRunTripDashboard() {
   runTripLastValidPosition = null;
 
   isRunTripPaused = false;
+  isRunTripMapFollowing = true;
 
   runTripDashboard.classList.add(
     'hidden'
@@ -4277,16 +4686,20 @@ function startRunTripLocationWatch() {
           );
         }
 
-        map.setView(
-  currentLatLng,
-  Math.max(
-    map.getZoom(),
-    17
-  ),
-  {
-    animate: false
-  }
-);
+        if (isRunTripMapFollowing) {
+          map.panTo(
+            currentLatLng,
+            {
+              animate: false
+            }
+          );
+
+          if (map.getZoom() < 17) {
+            map.setZoom(17, {
+              animate: false
+            });
+          }
+        }
 
 checkRunTripArrival(
   latitude,
@@ -4355,6 +4768,8 @@ async function startRunTripFollowing() {
   runTripActualRouteLine = null;
   runTripActualRouteLines = [];
   hasRunTripArrivalNotified = false;
+  isRunTripCompletionInProgress = false;
+  isRunTripMapFollowing = true;
   beginNewRunTripRouteSegment();
 
   isRunTripFollowing = true;
@@ -4491,6 +4906,11 @@ const actualDistanceKm =
         runTripActualDistanceMeters
       ),
 
+    elevationGain: null,
+    heartRate: null,
+    cadence: null,
+    gpsAccuracy: null,
+
 pace:
       formatPaceFromSeconds(
         runTripElapsedSeconds,
@@ -4585,6 +5005,64 @@ plannedRouteCoordinates:
 
   return record;
 }
+
+function completeRunTrip(
+  options = {}
+) {
+  if (
+    isRunTripCompletionInProgress ||
+    !isRunTripFollowing ||
+    !runTripStartTime
+  ) {
+    return null;
+  }
+
+  isRunTripCompletionInProgress = true;
+
+  const savedRecord =
+    saveRunTripRecord();
+
+  clearActiveRunTripState();
+
+  stopRunTripFollowing({
+    restoreRoute: false
+  });
+
+  clearRunTripMapPreview();
+  runTripRouteRequestId++;
+  latestRunTripRouteSummary = null;
+  isRunTripConfirmed = false;
+  runTripPanel.classList.remove(
+    'runtrip-confirmed',
+    'runtrip-following'
+  );
+
+  runTripStartTime = null;
+  runTripActualRouteCoordinates = [];
+  runTripActualRouteSegments = [];
+  runTripActiveRouteSegment = null;
+  runTripActualRouteLine = null;
+  runTripActualRouteLines = [];
+  hasRunTripArrivalNotified = false;
+  isRunTripMapFollowing = true;
+
+  setTimeout(function () {
+    openAppPage('records');
+
+    if (options.arrived) {
+      window.scrollTo({
+        top: 0,
+        behavior: 'auto'
+      });
+    }
+
+    isRunTripCompletionInProgress =
+      false;
+  }, 0);
+
+  return savedRecord;
+}
+
 function getPlaceSearchUrl(query) {
   const baseUrl =
     window.location.hostname === 'localhost' ||
@@ -5743,6 +6221,10 @@ async function renderRunTripMapPreview() {
       lineJoin: 'round'
     }).addTo(runTripPreviewLayer);
 
+    addRunTripRouteDirectionArrows(
+      routeCoordinates
+    );
+
     previewMarkers.forEach(function (marker) {
       L.marker(marker.latLng, {
         icon: createRunTripPreviewMarkerIcon(
@@ -5797,6 +6279,10 @@ latestRunTripRouteSummary = null;
         lineCap: 'round',
         lineJoin: 'round'
       }).addTo(runTripPreviewLayer);
+
+      addRunTripRouteDirectionArrows(
+        fallbackPath
+      );
     }
 
     const fallbackBounds = L.latLngBounds(fallbackPath);
@@ -6474,7 +6960,7 @@ nextPeriodBtn.addEventListener('click', function () {
   moveAnalysisPeriod(1);
 });
 
-profileFeedBtn.addEventListener('click', function () {
+if (profileFeedBtn) profileFeedBtn.addEventListener('click', function () {
   map.getContainer().style.display = 'none';
   controlsSection.style.display = 'none';
   recordsSection.classList.add('hidden');
@@ -6491,7 +6977,7 @@ backFromProfileFeedBtn.addEventListener('click', function () {
   recordsSection.classList.remove('hidden');
 });
 
-monthlyReportBtn.addEventListener('click', function () {
+if (monthlyReportBtn) monthlyReportBtn.addEventListener('click', function () {
   selectedAnalysisMode = 'week';
   selectedAnalysisDate = new Date();
 
@@ -6548,7 +7034,7 @@ button.classList.add('active');
     console.log('선택된 Pace Mood:', selectedPaceMood);
   });
 });
-runTripBtn.addEventListener('click', function () {
+if (runTripBtn) runTripBtn.addEventListener('click', function () {
   openRunTripPanel();
 });
 
@@ -6678,6 +7164,7 @@ pauseRunTripBtn.addEventListener(
 
     if (isRunTripPaused) {
   isRunTripPaused = false;
+  isRunTripMapFollowing = true;
 
   runTripLastValidPosition = null;
 
@@ -6720,6 +7207,60 @@ pauseRunTripBtn.addEventListener(
   }
 );
 
+runTripDashboardFollowState.addEventListener(
+  'click',
+  function () {
+    if (
+      !isRunTripFollowing ||
+      isRunTripPaused
+    ) {
+      return;
+    }
+
+    isRunTripMapFollowing =
+      !isRunTripMapFollowing;
+
+    if (
+      isRunTripMapFollowing &&
+      runTripLastValidPosition
+    ) {
+      const currentLatLng = [
+        runTripLastValidPosition.latitude,
+        runTripLastValidPosition.longitude
+      ];
+
+      map.setView(
+        currentLatLng,
+        Math.max(
+          map.getZoom(),
+          17
+        ),
+        {
+          animate: true
+        }
+      );
+    }
+
+    updateRunTripDashboard();
+  }
+);
+
+map.on(
+  'dragstart',
+  function () {
+    if (
+      !isRunTripFollowing ||
+      isRunTripPaused ||
+      !isRunTripMapFollowing
+    ) {
+      return;
+    }
+
+    isRunTripMapFollowing = false;
+    updateRunTripDashboard();
+  }
+);
+
 endRunTripBtn.addEventListener(
   'click',
   function () {
@@ -6731,23 +7272,9 @@ endRunTripBtn.addEventListener(
       return;
     }
 
-    saveRunTripRecord();
-
-    clearActiveRunTripState();
-
-    stopRunTripFollowing();
-
-    runTripStartTime = null;
-    runTripActualRouteCoordinates = [];
-    runTripActualRouteSegments = [];
-    runTripActiveRouteSegment = null;
-    runTripActualRouteLine = null;
-    
-    runTripActualRouteLines = [];
-    hasRunTripArrivalNotified = false;
-    setTimeout(function () {
-      openAppPage('records');
-    }, 0);
+    completeRunTrip({
+      arrived: false
+    });
   }
 );
 updateRunTripCreateButton();
@@ -6950,22 +7477,9 @@ startBtn.addEventListener(
   }
 );
 
-/* 일반 러닝 저장이 완료되면
-   러닝 준비 화면과 하단 메뉴를 복원한다. */
-saveRunWithMoodBtn.addEventListener(
-  'click',
-  function () {
-    setTimeout(function () {
-      currentAppPage = 'running';
-
-      updateBottomNavigationActiveState(
-        'running'
-      );
-
-      showBottomNavigation();
-    }, 0);
-  }
-);
+/* 일반 러닝 저장 완료 후에는
+   방금 저장한 기록 상세 화면을 바로 연다.
+   화면 전환은 주 저장 처리에서 담당한다. */
 
 /* RunTrip 취소 시 홈으로 이동 */
 backFromRunTripBtn.addEventListener(

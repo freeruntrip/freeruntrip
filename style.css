@@ -6114,3 +6114,604 @@ body {
       translateY(0);
   }
 }
+
+
+/* ========================================
+   2026-08-03 실행 화면 1~3차 개선
+======================================== */
+
+/* RunTrip 실행 패널을 지도 시야 중심의 컴팩트 구조로 통일 */
+.runtrip-following .runtrip-editor-card {
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 8px)
+    10px
+    calc(env(safe-area-inset-bottom, 0px) + 8px);
+}
+
+.runtrip-dashboard {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-radius: 17px;
+}
+
+.runtrip-dashboard-top,
+.runtrip-dashboard-stats,
+.runtrip-dashboard-actions {
+  grid-column: 1 / -1;
+}
+
+.runtrip-dashboard-top {
+  padding: 9px 11px 7px;
+}
+
+.runtrip-dashboard-badge {
+  margin-bottom: 2px;
+  font-size: 8px;
+}
+
+#runTripDashboardGps {
+  font-size: 11px;
+}
+
+.runtrip-dashboard-follow-state {
+  appearance: none;
+  -webkit-appearance: none;
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid rgba(134, 239, 172, 0.32);
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.13);
+  color: #86efac;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.runtrip-dashboard-follow-state.is-off {
+  border-color: rgba(148, 163, 184, 0.38);
+  background: rgba(148, 163, 184, 0.13);
+  color: #cbd5e1;
+}
+
+.runtrip-dashboard-follow-state:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.runtrip-dashboard-timer-card,
+.runtrip-dashboard-distance-card {
+  min-width: 0;
+  padding: 9px 8px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  text-align: center;
+}
+
+.runtrip-dashboard-distance-card {
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.runtrip-dashboard-timer-card span,
+.runtrip-dashboard-distance-card span {
+  margin-bottom: 4px;
+  font-size: 8px;
+}
+
+.runtrip-dashboard-timer-card strong {
+  font-size: clamp(28px, 8vw, 38px);
+  line-height: 1;
+}
+
+.runtrip-dashboard-distance-card strong {
+  display: block;
+  overflow: hidden;
+  color: #facc15;
+  font-size: 20px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtrip-dashboard-stats > div {
+  padding: 8px 4px;
+}
+
+.runtrip-dashboard-stats span {
+  margin-bottom: 3px;
+  font-size: 8px;
+}
+
+.runtrip-dashboard-stats strong {
+  font-size: 12px;
+}
+
+.runtrip-dashboard-actions {
+  gap: 8px;
+  padding: 8px 9px 0;
+}
+
+.runtrip-dashboard-actions button {
+  height: 40px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+/* 예정 경로 방향은 긴 간격의 작은 흰색 화살표로 표시 */
+.runtrip-route-direction-arrow {
+  border: none;
+  background: transparent;
+}
+
+.runtrip-route-direction-arrow div {
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.92;
+  text-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.9),
+    0 0 5px rgba(15, 23, 42, 0.65);
+}
+
+/* 일반 러닝 정보 화면도 같은 카드 밀도로 축소 */
+.running-info-main {
+  flex: 0 1 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: initial;
+  gap: 10px;
+  padding: 34px 0 18px;
+}
+
+.running-primary-stat {
+  min-width: 0;
+  padding: 18px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.running-primary-stat span {
+  margin-bottom: 7px;
+  font-size: 10px;
+}
+
+.running-primary-stat strong {
+  overflow: hidden;
+  font-size: clamp(30px, 9vw, 42px);
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#runningInfoView #timer {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.running-info-stats > div {
+  padding: 13px 8px;
+}
+
+.running-info-stats strong {
+  font-size: 15px;
+}
+
+/* 지도 하단 패널 높이 축소 */
+.running-map-bottom-panel {
+  border-radius: 17px;
+}
+
+.running-map-stats > div {
+  padding: 9px 4px;
+}
+
+.running-map-stats span {
+  margin-bottom: 3px;
+}
+
+.running-map-actions {
+  padding: 7px;
+}
+
+.running-map-actions button {
+  height: 39px;
+  border-radius: 11px;
+}
+
+@media (max-width: 390px) {
+  .running-info-main {
+    gap: 8px;
+    padding: 28px 0 14px;
+  }
+
+  .running-primary-stat {
+    padding: 15px 5px;
+  }
+
+  .running-primary-stat strong {
+    font-size: 30px;
+  }
+
+  .runtrip-dashboard-timer-card strong {
+    font-size: 28px;
+  }
+
+  .runtrip-dashboard-distance-card strong {
+    font-size: 18px;
+  }
+}
+
+
+/* ========================================
+   2026-08-03 일괄 수정 V2
+======================================== */
+
+/* 러닝 시작 전 화면은 시작 버튼 하나만 표시 */
+.running-idle-panel {
+  width: 100%;
+}
+
+.running-idle-panel #startBtn {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #0f172a;
+  font-weight: 900;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12);
+}
+
+/* 일반 러닝 전체 정보 패널: RunTrip과 같은 3열 2행 */
+.running-info-view {
+  justify-content: flex-start;
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 10px)
+    12px
+    calc(env(safe-area-inset-bottom, 0px) + 10px);
+}
+
+.running-info-header {
+  gap: 2px;
+}
+
+.running-info-main {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  padding: 8px 0 0;
+}
+
+.running-primary-stat {
+  padding: 8px 5px;
+  border-radius: 0;
+}
+
+.running-primary-stat:first-child {
+  border-radius: 14px 0 0 0;
+}
+
+.running-primary-stat:last-child {
+  border-left: 0;
+  border-radius: 0 14px 0 0;
+}
+
+.running-primary-stat span {
+  margin-bottom: 3px;
+  font-size: 8px;
+}
+
+.running-primary-stat strong {
+  font-size: clamp(27px, 8vw, 36px);
+}
+
+.running-info-stats-expanded {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0 0 7px;
+  border-top: 0;
+  border-radius: 0 0 14px 14px;
+}
+
+.running-info-stats-expanded > div {
+  padding: 7px 3px;
+}
+
+.running-info-stats-expanded > div:nth-child(3n + 2),
+.running-info-stats-expanded > div:nth-child(3n + 3) {
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.running-info-stats-expanded > div:nth-child(n + 4) {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.running-info-stats-expanded span {
+  margin-bottom: 3px;
+  font-size: 8px;
+}
+
+.running-info-stats-expanded strong {
+  font-size: 11px;
+}
+
+#runningCalories {
+  color: #facc15;
+}
+
+.running-view-switch-btn {
+  height: 38px;
+  margin-bottom: 7px;
+  border-radius: 11px;
+  font-size: 12px;
+}
+
+.running-dashboard-actions {
+  gap: 7px;
+}
+
+.running-dashboard-actions button {
+  height: 39px;
+  border-radius: 11px;
+  font-size: 12px;
+}
+
+/* 지도 화면 하단 8개 정보는 4열 2행 */
+.running-map-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.running-map-stats > div {
+  padding: 6px 2px;
+}
+
+.running-map-stats > div:nth-child(4n + 2),
+.running-map-stats > div:nth-child(4n + 3),
+.running-map-stats > div:nth-child(4n + 4) {
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.running-map-stats > div:nth-child(n + 5) {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.running-map-stats span {
+  margin-bottom: 2px;
+  font-size: 7px;
+}
+
+.running-map-stats strong {
+  font-size: 9px;
+}
+
+/* RunTrip 패널도 내부 여백 추가 축소 */
+.runtrip-dashboard-top {
+  padding: 6px 8px 5px;
+}
+
+.runtrip-dashboard-follow-state {
+  min-height: 26px;
+  padding: 4px 7px;
+  font-size: 8px;
+}
+
+.runtrip-dashboard-timer-card,
+.runtrip-dashboard-distance-card {
+  padding: 6px 5px 7px;
+}
+
+.runtrip-dashboard-timer-card strong {
+  font-size: clamp(25px, 7vw, 34px);
+}
+
+.runtrip-dashboard-distance-card strong {
+  font-size: 17px;
+}
+
+.runtrip-dashboard-stats > div {
+  padding: 6px 3px;
+}
+
+.runtrip-dashboard-stats span {
+  margin-bottom: 2px;
+  font-size: 7px;
+}
+
+.runtrip-dashboard-stats strong {
+  font-size: 10px;
+}
+
+.runtrip-dashboard-actions {
+  padding: 6px 8px 0;
+}
+
+.runtrip-dashboard-actions button {
+  height: 36px;
+  font-size: 11px;
+}
+
+/* 방향 화살표: 직선 구간당 하나, 선 위에서만 구분 */
+.direction-arrow div,
+.runtrip-route-direction-arrow div {
+  color: #ffffff;
+  font-size: 16px;
+  opacity: 0.96;
+  -webkit-text-stroke: 1px rgba(15, 23, 42, 0.78);
+  text-shadow:
+    0 1px 2px rgba(15, 23, 42, 1),
+    0 0 5px rgba(15, 23, 42, 0.85);
+}
+
+/* Pace Mood 모달을 앱 프레임 내부로 제한 */
+#paceMoodModal {
+  left: 50%;
+  right: auto;
+  width: min(100%, var(--app-mobile-width));
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  padding: 0 12px;
+  overflow-y: auto;
+}
+
+.pace-mood-modal-card {
+  width: 100%;
+  max-width: 406px;
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 20px);
+}
+
+/* 기록 상세 정보 2열, 모든 데이터 항상 노출 */
+#detailStats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+#detailStats > div {
+  min-height: 72px;
+  padding: 11px;
+}
+
+#detailStats span {
+  font-size: 10px;
+}
+
+#detailStats strong {
+  font-size: 16px;
+  white-space: normal;
+  word-break: keep-all;
+}
+
+#detailAveragePace,
+#detailCalories {
+  color: #facc15;
+}
+
+@media (max-width: 390px) {
+  .running-info-view {
+    padding-left: 9px;
+    padding-right: 9px;
+  }
+
+  .running-primary-stat strong {
+    font-size: 26px;
+  }
+
+  .running-info-stats-expanded strong {
+    font-size: 10px;
+  }
+
+  #paceMoodModal {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
+
+
+/* ========================================
+   2026-08-03 최종 정보 색상 디자인 시스템
+======================================== */
+:root {
+  --freeruntrip-time-color: #81dad8;
+  --freeruntrip-distance-color: #facc15;
+  --freeruntrip-metric-color: #ffffff;
+  --freeruntrip-status-color: #86efac;
+  --freeruntrip-danger-color: #ef4444;
+}
+
+/* 시간: 경과 시간 · 운동 시간 · 예상 시간 */
+#timer,
+#runningMapTimer,
+#runTripDashboardTimer,
+#detailDuration,
+#detailPlannedDuration {
+  color: var(--freeruntrip-time-color) !important;
+}
+
+/* 거리: 실제 · 전체 · 예정 · 거리 차이 */
+#distance,
+#runningMapDistance,
+#runTripDashboardDistance,
+#runTripDashboardPlannedDistance,
+#detailDistance,
+#detailPlannedDistance,
+#detailDistanceDifference,
+#confirmedRunTripDistance {
+  color: var(--freeruntrip-distance-color) !important;
+}
+
+/* 운동 정보: 평균 Pace · 칼로리 · 고도 · 심박 · 케이던스 */
+#pace,
+#runningCalories,
+#runningElevationGain,
+#runningHeartRate,
+#runningCadence,
+#runningMapPace,
+#runningMapCalories,
+#runningMapElevationGain,
+#runningMapHeartRate,
+#runningMapCadence,
+#runTripDashboardAveragePace,
+#runTripDashboardCalories,
+#runTripDashboardElevationGain,
+#runTripDashboardHeartRate,
+#runTripDashboardCadence,
+#detailAveragePace,
+#detailCalories,
+#detailElevationGain,
+#detailHeartRate,
+#detailCadence {
+  color: var(--freeruntrip-metric-color) !important;
+}
+
+/* GPS 연결 및 시작 상태 */
+#runningGpsStatus,
+#runTripDashboardGps,
+.runtrip-dashboard-follow-state:not(.is-paused) {
+  color: var(--freeruntrip-status-color) !important;
+}
+
+/* GPS 정확도는 상태 정보이므로 연결 상태와 동일한 초록색 */
+#runningGpsAccuracy,
+#runningMapGpsAccuracy,
+#detailGpsAccuracy {
+  color: var(--freeruntrip-status-color) !important;
+}
+
+/* 예상 시간 확인 화면 */
+#confirmedRunTripDuration {
+  color: var(--freeruntrip-time-color) !important;
+}
+
+/* 경고 및 종료 */
+#stopBtn,
+#runningMapStopBtn,
+#endRunTripBtn,
+.runtrip-dashboard-end-btn {
+  background: var(--freeruntrip-danger-color) !important;
+  color: #ffffff !important;
+}
+
+/* 방향 화살표는 경로보다 과하게 튀지 않되 방향은 명확하게 */
+.direction-arrow div,
+.runtrip-route-direction-arrow div {
+  color: #ffffff;
+  font-size: 15px;
+  opacity: 0.9;
+  transform-origin: center center;
+  -webkit-text-stroke: 0.8px rgba(15, 23, 42, 0.82);
+  text-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.95),
+    0 0 4px rgba(15, 23, 42, 0.72);
+}
+
+
+/* ========================================
+   2026-08-03 평균 Pace 시간 계열 색상 통일
+======================================== */
+#pace,
+#runningMapPace,
+#runTripDashboardAveragePace,
+#detailAveragePace {
+  color: var(--freeruntrip-time-color) !important;
+}
