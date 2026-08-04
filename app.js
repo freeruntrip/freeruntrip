@@ -67,10 +67,6 @@ const runningMapElevationGain = document.getElementById(
 const runningMapHeartRate = document.getElementById(
   'runningMapHeartRate'
 );
-const runningMapGpsAccuracy = document.getElementById(
-  'runningMapGpsAccuracy'
-);
-
 const runningMapPauseBtn = document.getElementById(
   'runningMapPauseBtn'
 );
@@ -99,9 +95,6 @@ function syncRunningMapStats() {
 
   runningMapHeartRate.textContent =
     runningHeartRate.textContent;
-
-  runningMapGpsAccuracy.textContent =
-    runningGpsAccuracy.textContent;
 
   runningMapPauseBtn.textContent =
     pauseBtn.textContent;
@@ -222,9 +215,6 @@ const runningCadence = document.getElementById(
   'runningCadence'
 );
 
-const runningGpsAccuracy = document.getElementById(
-  'runningGpsAccuracy'
-);
 const recordsList = document.getElementById('recordsList');
 const recordsSection = document.getElementById('records');
 const recordsTotalDistance = document.getElementById(
@@ -873,7 +863,7 @@ function addDirectionArrowsToDetailMap(points) {
   getDirectionArrowSegments(points).forEach(function (segment) {
     const arrowIcon = L.divIcon({
       className: 'direction-arrow',
-      html: `<div style="transform: rotate(${segment.angle}deg)">➤</div>`,
+      html: `<div style="transform: rotate(${segment.angle}deg)">›</div>`,
       iconSize: [22, 22],
       iconAnchor: [11, 11]
     });
@@ -2319,7 +2309,6 @@ runningElevationGain.textContent = '0 m';
 runningHeartRate.textContent = '-- bpm';
 runningCadence.textContent = '-- spm';
 runningGpsStatus.textContent = 'GPS 위치 확인 중';
-runningGpsAccuracy.textContent = '확인 중';
   routeCoordinates = [];
   routeSegments = [];
   activeRouteSegment = [];
@@ -2389,17 +2378,11 @@ if (accuracy > MAX_ACCURACY) {
   runningGpsStatus.textContent =
     'GPS 정확도 확인 중';
 
-  runningGpsAccuracy.textContent =
-    `${Math.round(accuracy)} m`;
-
   return;
 }
 
 runningGpsStatus.textContent =
   'GPS 연결됨';
-
-runningGpsAccuracy.textContent =
-  `${Math.round(accuracy)} m`;
 
 const smoothedPosition = getSmoothedPosition(latitude, longitude);
 if (lastValidPosition) {
@@ -2603,8 +2586,6 @@ runningCadence.textContent = '-- spm';
 runningGpsStatus.textContent =
   'GPS 연결 준비';
 
-runningGpsAccuracy.textContent =
-  '대기 중';
  routeCoordinates = [];
 routeSegments = [];
 activeRouteSegment = [];
@@ -3837,7 +3818,7 @@ function addRunTripRouteDirectionArrows(points) {
     L.marker(segment.point, {
       icon: L.divIcon({
         className: 'runtrip-route-direction-arrow',
-        html: `<div style="transform: rotate(${segment.angle}deg)">➤</div>`,
+        html: `<div style="transform: rotate(${segment.angle}deg)">›</div>`,
         iconSize: [22, 22],
         iconAnchor: [11, 11]
       }),
@@ -5047,9 +5028,37 @@ function completeRunTrip(
   isRunTripMapFollowing = true;
 
   setTimeout(function () {
+    selectedRecordFilter = 'all';
+
+    recordsFilterTabs.forEach(
+      function (tab) {
+        const isActive =
+          tab.dataset.recordFilter === 'all';
+
+        tab.classList.toggle(
+          'active',
+          isActive
+        );
+
+        tab.setAttribute(
+          'aria-selected',
+          String(isActive)
+        );
+      }
+    );
+
     openAppPage('records');
 
-    if (options.arrived) {
+    const savedRecordCard =
+      savedRecord
+        ? recordsList.querySelector(
+            `[data-record-id="${savedRecord.id}"]`
+          )
+        : null;
+
+    if (savedRecordCard) {
+      savedRecordCard.click();
+    } else {
       window.scrollTo({
         top: 0,
         behavior: 'auto'

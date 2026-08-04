@@ -6715,3 +6715,53 @@ body {
 #detailAveragePace {
   color: var(--freeruntrip-time-color) !important;
 }
+
+
+/* ========================================
+   2026-08-04 일반 러닝 정보 패널 최종 구조
+   1행: 시간 · 거리
+   2행: 평균 Pace · 칼로리
+   3행: 고도 상승 · 심박수 · 케이던스
+======================================== */
+.running-info-stats-expanded {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.running-info-stats-expanded > div {
+  border: none !important;
+}
+
+.running-info-stats-expanded > div:nth-child(1),
+.running-info-stats-expanded > div:nth-child(2) {
+  grid-column: span 3;
+}
+
+.running-info-stats-expanded > div:nth-child(3),
+.running-info-stats-expanded > div:nth-child(4),
+.running-info-stats-expanded > div:nth-child(5) {
+  grid-column: span 2;
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.running-info-stats-expanded > div:nth-child(2),
+.running-info-stats-expanded > div:nth-child(4),
+.running-info-stats-expanded > div:nth-child(5) {
+  border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* 경로 진행 방향은 채워진 화살표 대신 가벼운 꺾쇠로 표시 */
+.direction-arrow div,
+.runtrip-route-direction-arrow div {
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Noto Sans KR",
+    Arial,
+    sans-serif !important;
+  font-size: 23px;
+  font-weight: 900;
+  line-height: 1;
+  -webkit-text-stroke: 0;
+}
