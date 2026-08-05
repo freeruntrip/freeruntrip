@@ -267,151 +267,83 @@
   id="runningDashboard"
   class="running-dashboard hidden"
 >
-  <!-- 일반 러닝 기본 정보 화면 -->
-  <div
-    id="runningInfoView"
-    class="running-info-view"
-  >
-    <header class="running-info-header">
-      <span class="running-dashboard-badge">
-        RUNNING ACTIVE
-      </span>
-
-      <strong id="runningGpsStatus">
-        GPS 연결 준비
-      </strong>
-    </header>
-
-    <div class="running-info-main">
-      <div class="running-primary-stat">
-        <span>시간</span>
-        <strong id="timer">00:00</strong>
-      </div>
-
-      <div class="running-primary-stat">
-        <span>거리</span>
-        <strong id="distance">0.00 km</strong>
-      </div>
-    </div>
-
-    <div class="running-info-stats running-info-stats-expanded">
-      <div>
-        <span>평균 Pace</span>
-        <strong id="pace">--'--"</strong>
-      </div>
-
-      <div>
-        <span>칼로리</span>
-        <strong id="runningCalories">0 kcal</strong>
-      </div>
-
-      <div>
-        <span>고도 상승</span>
-        <strong id="runningElevationGain">0 m</strong>
-      </div>
-
-      <div>
-        <span>심박수</span>
-        <strong id="runningHeartRate">-- bpm</strong>
-      </div>
-
-      <div>
-        <span>케이던스</span>
-        <strong id="runningCadence">-- spm</strong>
-      </div>
-    </div>
-
-    <button
-      id="showRunningMapBtn"
-      class="running-view-switch-btn"
-      type="button"
-    >
-      지도 보기
-    </button>
-
-    <div class="running-dashboard-actions">
-      <button
-        id="pauseBtn"
-        type="button"
-      >
-        일시정지
-      </button>
-
-      <button
-        id="stopBtn"
-        type="button"
-      >
-        러닝 종료
-      </button>
-    </div>
-  </div>
-
-  <!-- 일반 러닝 지도 화면 위에 표시되는 UI -->
   <div
     id="runningMapView"
-    class="running-map-view hidden"
+    class="running-map-view"
   >
-    <button
-      id="showRunningInfoBtn"
-      class="running-info-return-btn"
-      type="button"
-    >
-      정보 보기
-    </button>
+    <div class="running-map-status-row">
+      <div>
+        <span class="running-dashboard-badge">
+          RUNNING ACTIVE
+        </span>
 
-    <div class="running-map-bottom-panel">
-      <div class="running-map-stats">
-        <div>
-          <span>시간</span>
-          <strong id="runningMapTimer">00:00</strong>
+        <strong id="runningGpsStatus">
+          GPS 연결 준비
+        </strong>
+      </div>
+
+      <button
+        id="runningFollowStateBtn"
+        class="running-follow-state"
+        type="button"
+        aria-pressed="true"
+      >
+        따라가기 ON
+      </button>
+    </div>
+
+    <div class="running-execution-stack">
+      <div class="running-map-bottom-panel">
+        <div class="running-map-primary-stats">
+          <div>
+            <span>시간</span>
+            <strong id="timer">00:00</strong>
+          </div>
+
+          <div>
+            <span>거리</span>
+            <strong id="distance">0.00 km</strong>
+          </div>
         </div>
 
-        <div>
-          <span>거리</span>
-          <strong id="runningMapDistance">0.00 km</strong>
-        </div>
+        <div class="running-map-stats">
+          <div>
+            <span>평균 Pace</span>
+            <strong id="pace">--'--"</strong>
+          </div>
 
-        <div>
-          <span>평균 Pace</span>
-          <strong id="runningMapPace">--'--"</strong>
-        </div>
+          <div>
+            <span>칼로리</span>
+            <strong id="runningCalories">0 kcal</strong>
+          </div>
 
-        <div>
-          <span>케이던스</span>
-          <strong id="runningMapCadence">-- spm</strong>
-        </div>
+          <div>
+            <span>고도 상승</span>
+            <strong id="runningElevationGain">0 m</strong>
+          </div>
 
-        <div>
-          <span>칼로리</span>
-          <strong id="runningMapCalories">0 kcal</strong>
-        </div>
+          <div>
+            <span>심박수</span>
+            <strong id="runningHeartRate">-- bpm</strong>
+          </div>
 
-        <div>
-          <span>고도</span>
-          <strong id="runningMapElevationGain">0 m</strong>
-        </div>
-
-        <div>
-          <span>심박</span>
-          <strong id="runningMapHeartRate">-- bpm</strong>
-        </div>
-
-        <div>
-          <span>GPS</span>
-          <strong id="runningMapGpsAccuracy">-- m</strong>
+          <div>
+            <span>케이던스</span>
+            <strong id="runningCadence">-- spm</strong>
+          </div>
         </div>
       </div>
 
       <div class="running-map-actions">
         <button
-          id="runningMapPauseBtn"
+          id="pauseBtn"
           type="button"
         >
           일시정지
         </button>
 
         <button
-          id="runningMapStopBtn"
+          id="stopBtn"
           type="button"
         >
           러닝 종료

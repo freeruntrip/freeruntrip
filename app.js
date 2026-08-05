@@ -22,128 +22,16 @@ const timer = document.getElementById('timer');
 const runningIdlePanel = document.getElementById(
   'runningIdlePanel'
 );
-
 const runningDashboard = document.getElementById(
   'runningDashboard'
 );
-const runningInfoView = document.getElementById(
-  'runningInfoView'
-);
-
 const runningMapView = document.getElementById(
   'runningMapView'
 );
-
-const showRunningMapBtn = document.getElementById(
-  'showRunningMapBtn'
+const runningFollowStateBtn = document.getElementById(
+  'runningFollowStateBtn'
 );
 
-const showRunningInfoBtn = document.getElementById(
-  'showRunningInfoBtn'
-);
-
-const runningMapTimer = document.getElementById(
-  'runningMapTimer'
-);
-
-const runningMapDistance = document.getElementById(
-  'runningMapDistance'
-);
-
-const runningMapPace = document.getElementById(
-  'runningMapPace'
-);
-
-const runningMapCadence = document.getElementById(
-  'runningMapCadence'
-);
-
-const runningMapCalories = document.getElementById(
-  'runningMapCalories'
-);
-const runningMapElevationGain = document.getElementById(
-  'runningMapElevationGain'
-);
-const runningMapHeartRate = document.getElementById(
-  'runningMapHeartRate'
-);
-const runningMapPauseBtn = document.getElementById(
-  'runningMapPauseBtn'
-);
-
-const runningMapStopBtn = document.getElementById(
-  'runningMapStopBtn'
-);
-function syncRunningMapStats() {
-  runningMapTimer.textContent =
-    timer.textContent;
-
-  runningMapDistance.textContent =
-    distanceDisplay.textContent;
-
-  runningMapPace.textContent =
-    paceDisplay.textContent;
-
-  runningMapCadence.textContent =
-    runningCadence.textContent;
-
-  runningMapCalories.textContent =
-    runningCalories.textContent;
-
-  runningMapElevationGain.textContent =
-    runningElevationGain.textContent;
-
-  runningMapHeartRate.textContent =
-    runningHeartRate.textContent;
-
-  runningMapPauseBtn.textContent =
-    pauseBtn.textContent;
-}
-
-function showRunningInfoView() {
-  runningMapView.classList.add('hidden');
-  runningInfoView.classList.remove('hidden');
-}
-
-function showRunningMapView() {
-  syncRunningMapStats();
-
-  runningInfoView.classList.add('hidden');
-  runningMapView.classList.remove('hidden');
-
-  requestAnimationFrame(function () {
-    map.invalidateSize({
-      pan: false
-    });
-  });
-}
-showRunningMapBtn.addEventListener(
-  'click',
-  function () {
-    showRunningMapView();
-  }
-);
-
-showRunningInfoBtn.addEventListener(
-  'click',
-  function () {
-    showRunningInfoView();
-  }
-);
-
-runningMapPauseBtn.addEventListener(
-  'click',
-  function () {
-    pauseBtn.click();
-  }
-);
-
-runningMapStopBtn.addEventListener(
-  'click',
-  function () {
-    stopBtn.click();
-  }
-);
 let seconds = 0;
 let timerInterval;
 let isRunning = false;
@@ -189,6 +77,69 @@ let totalElevationGain = 0;
 let lastValidAltitude = null;
 let recentPositions = [];
 let lastRunningGpsAccuracy = null;
+let isRunningMapFollowing = true;
+
+function updateRunningFollowState() {
+  if (!runningFollowStateBtn) {
+    return;
+  }
+
+  runningFollowStateBtn.textContent = paused
+    ? '따라가기 멈춤'
+    : isRunningMapFollowing
+      ? '따라가기 ON'
+      : '따라가기 OFF';
+
+  runningFollowStateBtn.setAttribute(
+    'aria-pressed',
+    String(isRunningMapFollowing && !paused)
+  );
+
+  runningFollowStateBtn.disabled = paused;
+  runningFollowStateBtn.classList.toggle('is-paused', paused);
+  runningFollowStateBtn.classList.toggle(
+    'is-off',
+    !paused && !isRunningMapFollowing
+  );
+}
+
+function getRunningMapVerticalOffset() {
+  const statusRow = document.querySelector(
+    '.running-map-status-row'
+  );
+  const executionStack = document.querySelector(
+    '.running-execution-stack'
+  );
+
+  const topCovered = statusRow
+    ? statusRow.getBoundingClientRect().height + 20
+    : 64;
+
+  const bottomCovered = executionStack
+    ? executionStack.getBoundingClientRect().height + 20
+    : 220;
+
+  return Math.max(0, Math.round((bottomCovered - topCovered) / 2));
+}
+
+function centerRunningMapOnPosition(latLng, options = {}) {
+  if (!Array.isArray(latLng) || latLng.length < 2) {
+    return;
+  }
+
+  const targetZoom = Math.max(map.getZoom(), 17);
+
+  map.setView(latLng, targetZoom, {
+    animate: options.animate === true
+  });
+
+  requestAnimationFrame(function () {
+    map.panBy(
+      [0, getRunningMapVerticalOffset()],
+      { animate: options.animate === true }
+    );
+  });
+}
 
 const SMOOTHING_COUNT = 3;
 const DEFAULT_RUNNER_WEIGHT_KG = 70;
@@ -2295,10 +2246,11 @@ startBtn.addEventListener('click', async function () {
 if (!isRunning) {
   runningIdlePanel.classList.add('hidden');
   runningDashboard.classList.remove('hidden');
+  map.getContainer().style.display = 'block';
+  isRunningMapFollowing = true;
+  updateRunningFollowState();
 
   if (seconds === 0) {
-    showRunningInfoView();
-    syncRunningMapStats();
     runStartTime = new Date();
     totalElevationGain = 0;
 lastValidAltitude = null;
@@ -2333,9 +2285,10 @@ runningGpsStatus.textContent = 'GPS 위치 확인 중';
 }
 
 pauseBtn.textContent = '일시정지';
-runningMapPauseBtn.textContent = '일시정지';
 
 isRunning = true;
+hideBottomNavigation();
+updateRunningFollowState();
 
   setTimeout(function () {
   map.invalidateSize();
@@ -2348,7 +2301,6 @@ isRunning = true;
     const remainingSeconds = String(seconds % 60).padStart(2, '0');
 
     timer.textContent = `${minutes}:${remainingSeconds}`;
-    syncRunningMapStats();
     console.log('타이머 실행 중:', timer.textContent);
   }, 1000);
 watchId = navigator.geolocation.watchPosition(
@@ -2424,7 +2376,6 @@ if (totalDistance > 0 && seconds > 0) {
     );
 }
 
-syncRunningMapStats();
 
 console.log('총 이동거리:', totalDistance);
 }
@@ -2454,9 +2405,11 @@ if (!currentMarker) {
   currentMarker.setLatLng(currentLatLng);
 }
 
-map.setView(currentLatLng, Math.max(map.getZoom(), 17), {
-  animate: false
-});
+if (isRunningMapFollowing) {
+  centerRunningMapOnPosition(currentLatLng, {
+    animate: false
+  });
+}
 },
 
 function (error) {
@@ -2514,13 +2467,52 @@ pauseBtn.addEventListener('click', function () {
   recentPositions = [];
 
   pauseBtn.textContent = '다시 시작';
-  runningMapPauseBtn.textContent = '다시 시작';
 
   runningGpsStatus.textContent =
     'GPS 일시정지';
 
-  syncRunningMapStats();
+  updateRunningFollowState();
 });
+runningFollowStateBtn.addEventListener(
+  'click',
+  function () {
+    if (!isRunning || paused) {
+      return;
+    }
+
+    isRunningMapFollowing =
+      !isRunningMapFollowing;
+
+    if (
+      isRunningMapFollowing &&
+      lastValidPosition
+    ) {
+      centerRunningMapOnPosition(
+        [
+          lastValidPosition.latitude,
+          lastValidPosition.longitude
+        ],
+        { animate: true }
+      );
+    }
+
+    updateRunningFollowState();
+  }
+);
+
+map.on('dragstart', function () {
+  if (
+    !isRunning ||
+    paused ||
+    !isRunningMapFollowing
+  ) {
+    return;
+  }
+
+  isRunningMapFollowing = false;
+  updateRunningFollowState();
+});
+
 stopBtn.addEventListener('click', function () {
   console.log('러닝 종료 버튼 클릭됨');
 
@@ -2612,8 +2604,8 @@ lastGpsElapsedSeconds = 0;
   isRunning = false;
   runStartTime = null;
   paused = false;
-  showRunningInfoView();
-  syncRunningMapStats();
+  isRunningMapFollowing = true;
+  updateRunningFollowState();
   runningDashboard.classList.add('hidden');
   runningIdlePanel.classList.remove('hidden');
 
