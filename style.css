@@ -7086,3 +7086,21 @@ body {
     font-size: 11px;
   }
 }
+
+
+/* ========================================
+   2026-08-05 러닝 기록 상세 하단 안전 여백
+   Safari 주소창과 고정 내비게이션이 마지막 콘텐츠를 덮지 않도록 함
+======================================== */
+#recordDetail {
+  padding-bottom:
+    calc(
+      env(safe-area-inset-bottom, 0px)
+      + 190px
+    ) !important;
+  scroll-padding-bottom:
+    calc(
+      env(safe-area-inset-bottom, 0px)
+      + 190px
+    );
+}

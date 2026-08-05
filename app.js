@@ -315,8 +315,14 @@ let detailFinishMarker = null;
 let detailWaypointMarkers = [];
 let detailDirectionMarkers = [];
 let selectedDetailRecord = null;
-const MAX_ACCURACY = 100; // meters
-const MIN_DISTANCE = 5; // meters
+/* 일반 러닝 GPS 안정화 기준
+   - 실외 러닝에서 정확도가 낮은 좌표는 거리·경로에서 제외
+   - GPS 흔들림과 순간 이동을 실제 거리로 더하지 않음
+*/
+const MAX_ACCURACY = 50; // meters
+const MIN_DISTANCE = 6; // meters
+const MAX_RUNNING_SPEED_METERS_PER_SECOND = 8.5;
+const GPS_ACCURACY_DISTANCE_RATIO = 0.18
 let runRecords = JSON.parse(localStorage.getItem('runRecords')) || [];
 
 let selectedPaceMood =
@@ -433,28 +439,84 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 
   return R * c;
 }
-function getSmoothedPosition(latitude, longitude) {
+function getSmoothedPosition(
+  latitude,
+  longitude,
+  accuracy
+) {
   recentPositions.push({
     latitude: latitude,
-    longitude: longitude
+    longitude: longitude,
+    accuracy: Math.max(1, Number(accuracy) || MAX_ACCURACY)
   });
 
   if (recentPositions.length > SMOOTHING_COUNT) {
     recentPositions.shift();
   }
 
-  let latitudeSum = 0;
-  let longitudeSum = 0;
+  let weightedLatitudeSum = 0;
+  let weightedLongitudeSum = 0;
+  let totalWeight = 0;
 
   recentPositions.forEach(function (position) {
-    latitudeSum += position.latitude;
-    longitudeSum += position.longitude;
+    /* 정확도가 좋은 좌표에 더 큰 비중을 주어
+       단순 평균보다 GPS 흔들림을 줄인다. */
+    const weight = 1 / position.accuracy;
+
+    weightedLatitudeSum +=
+      position.latitude * weight;
+
+    weightedLongitudeSum +=
+      position.longitude * weight;
+
+    totalWeight += weight;
   });
 
   return {
-    latitude: latitudeSum / recentPositions.length,
-    longitude: longitudeSum / recentPositions.length
+    latitude:
+      weightedLatitudeSum / totalWeight,
+
+    longitude:
+      weightedLongitudeSum / totalWeight
   };
+}
+
+function getMinimumAcceptedDistance(accuracy) {
+  return Math.min(
+    12,
+    Math.max(
+      MIN_DISTANCE,
+      Number(accuracy) *
+        GPS_ACCURACY_DISTANCE_RATIO
+    )
+  );
+}
+
+function isImplausibleRunningJump(
+  distanceMeters,
+  previousTimestamp,
+  currentTimestamp
+) {
+  if (
+    !Number.isFinite(previousTimestamp) ||
+    !Number.isFinite(currentTimestamp) ||
+    currentTimestamp <= previousTimestamp
+  ) {
+    return false;
+  }
+
+  const elapsedSeconds = Math.max(
+    1,
+    (currentTimestamp - previousTimestamp) / 1000
+  );
+
+  const speedMetersPerSecond =
+    distanceMeters / elapsedSeconds;
+
+  return (
+    speedMetersPerSecond >
+    MAX_RUNNING_SPEED_METERS_PER_SECOND
+  );
 }
 function getEmotionalPaceLabel() {
   return selectedPaceMood;
@@ -2336,7 +2398,13 @@ if (accuracy > MAX_ACCURACY) {
 runningGpsStatus.textContent =
   'GPS 연결됨';
 
-const smoothedPosition = getSmoothedPosition(latitude, longitude);
+const gpsTimestamp = Number(position.timestamp) || Date.now();
+
+const smoothedPosition = getSmoothedPosition(
+  latitude,
+  longitude,
+  accuracy
+);
 if (lastValidPosition) {
   const distanceFromLast = calculateDistance(
     lastValidPosition.latitude,
@@ -2345,8 +2413,43 @@ if (lastValidPosition) {
     smoothedPosition.longitude
   );
 
-  if (distanceFromLast < MIN_DISTANCE) {
-    console.log('이동 거리 너무 짧음, 좌표 무시:', distanceFromLast);
+  const minimumAcceptedDistance =
+    getMinimumAcceptedDistance(accuracy);
+
+  if (
+    distanceFromLast <
+    minimumAcceptedDistance
+  ) {
+    console.log(
+      'GPS 흔들림 또는 짧은 이동 좌표 무시:',
+      distanceFromLast,
+      '최소 기준:',
+      minimumAcceptedDistance
+    );
+
+    return;
+  }
+
+  if (
+    isImplausibleRunningJump(
+      distanceFromLast,
+      lastValidPosition.timestamp,
+      gpsTimestamp
+    )
+  ) {
+    console.log(
+      '비정상적인 GPS 순간 이동 무시:',
+      distanceFromLast
+    );
+
+    recentPositions = [
+      {
+        latitude: latitude,
+        longitude: longitude,
+        accuracy: Math.max(1, accuracy)
+      }
+    ];
+
     return;
   }
 
@@ -2382,7 +2485,9 @@ console.log('총 이동거리:', totalDistance);
 
 lastValidPosition = {
   latitude: smoothedPosition.latitude,
-  longitude: smoothedPosition.longitude
+  longitude: smoothedPosition.longitude,
+  timestamp: gpsTimestamp,
+  accuracy: accuracy
 };
 
 lastGpsElapsedSeconds = seconds;
@@ -2418,7 +2523,9 @@ function (error) {
   },
 
   {
-    enableHighAccuracy: true
+    enableHighAccuracy: true,
+    timeout: 15000,
+    maximumAge: 0
   }
 );
 }
