@@ -3155,11 +3155,20 @@ let isRunTripCountdownActive = false;
 let isRunTripMapFollowing = true;
 let hasRunTripArrivalNotified = false;
 let isRunTripCompletionInProgress = false;
+let runTripRecentPositions = [];
+let runTripLastGpsTimestamp = null;
+let runTripNextWaypointIndex = 0;
+let runTripWaypointArrivalHits = 0;
+let runTripDestinationArrivalHits = 0;
+let runTripClosestDestinationDistance = Infinity;
 
-const RUNTRIP_ARRIVAL_DISTANCE_METERS = 35;
-const RUNTRIP_ARRIVAL_MAX_ACCURACY_METERS = 60;
+const RUNTRIP_ARRIVAL_DISTANCE_METERS = 40;
+const RUNTRIP_ARRIVAL_MAX_ACCURACY_METERS = 40;
 const RUNTRIP_ARRIVAL_MIN_DISTANCE_METERS = 50;
 const RUNTRIP_ARRIVAL_MIN_ELAPSED_SECONDS = 120;
+const RUNTRIP_WAYPOINT_ARRIVAL_DISTANCE_METERS = 35;
+const RUNTRIP_WAYPOINT_REQUIRED_HITS = 2;
+const RUNTRIP_DESTINATION_REQUIRED_HITS = 3;
 const RUNTRIP_DIRECTION_ARROW_INTERVAL_METERS = 250;
 
 let runTripElapsedSeconds = 0;
@@ -3176,6 +3185,193 @@ let runTripActualRouteLine = null;
 let runTripActualRouteLines = [];
 const RUNTRIP_ACTIVE_STATE_KEY =
   'freeRunTripActiveRunTripV1';
+
+
+function getWeightedSmoothedRunTripPosition(
+  latitude,
+  longitude,
+  accuracy
+) {
+  runTripRecentPositions.push({
+    latitude: Number(latitude),
+    longitude: Number(longitude),
+    accuracy: Math.max(1, Number(accuracy) || MAX_ACCURACY)
+  });
+
+  if (runTripRecentPositions.length > SMOOTHING_COUNT) {
+    runTripRecentPositions.shift();
+  }
+
+  let latitudeSum = 0;
+  let longitudeSum = 0;
+  let totalWeight = 0;
+
+  runTripRecentPositions.forEach(function (position) {
+    const weight = 1 / position.accuracy;
+
+    latitudeSum += position.latitude * weight;
+    longitudeSum += position.longitude * weight;
+    totalWeight += weight;
+  });
+
+  return {
+    latitude: latitudeSum / totalWeight,
+    longitude: longitudeSum / totalWeight
+  };
+}
+
+function resetRunTripArrivalTracking() {
+  runTripNextWaypointIndex = 0;
+  runTripWaypointArrivalHits = 0;
+  runTripDestinationArrivalHits = 0;
+  runTripClosestDestinationDistance = Infinity;
+}
+
+function getRunTripWaypointTargets() {
+  const draft = getRunTripDraft();
+
+  return Array.isArray(draft.waypoints)
+    ? draft.waypoints
+        .map(function (waypoint, index) {
+          return {
+            index: index,
+            name:
+              getRunTripPlaceDisplayName(waypoint) ||
+              `경유지 ${index + 1}`,
+            latLng:
+              getRunTripPlaceLatLng(waypoint)
+          };
+        })
+        .filter(function (target) {
+          return Array.isArray(target.latLng);
+        })
+    : [];
+}
+
+function showRunTripCheckpointNotice(options = {}) {
+  const existingNotice =
+    document.querySelector('.runtrip-arrival-notice');
+
+  if (existingNotice) {
+    existingNotice.remove();
+  }
+
+  const isWaypoint =
+    options.type === 'waypoint';
+
+  const notice =
+    document.createElement('div');
+
+  notice.className =
+    isWaypoint
+      ? 'runtrip-arrival-notice is-waypoint'
+      : 'runtrip-arrival-notice';
+
+  notice.setAttribute('role', 'alert');
+
+  notice.innerHTML = `
+    <div class="runtrip-arrival-notice-icon">
+      ${isWaypoint ? String(options.number || '✓') : '✓'}
+    </div>
+
+    <div>
+      <strong>
+        ${
+          isWaypoint
+            ? `${escapePlaceSearchText(options.name || '경유지')}에 도착했어요`
+            : '도착지에 도착했어요'
+        }
+      </strong>
+
+      <span>
+        ${
+          isWaypoint
+            ? '다음 경유지 또는 도착지로 계속 이동해 주세요.'
+            : 'RUNTRIP을 자동 종료하고 기록을 저장하고 있어요.'
+        }
+      </span>
+    </div>
+  `;
+
+  document.body.appendChild(notice);
+
+  if (navigator.vibrate) {
+    navigator.vibrate(
+      isWaypoint
+        ? [120, 70, 120]
+        : [180, 80, 180]
+    );
+  }
+
+  setTimeout(function () {
+    notice.classList.add('is-hiding');
+
+    setTimeout(function () {
+      notice.remove();
+    }, 300);
+  }, isWaypoint ? 3400 : 4200);
+}
+
+function checkRunTripWaypointArrival(
+  latitude,
+  longitude,
+  accuracy
+) {
+  if (
+    !isRunTripFollowing ||
+    isRunTripPaused ||
+    accuracy > RUNTRIP_ARRIVAL_MAX_ACCURACY_METERS
+  ) {
+    return;
+  }
+
+  const targets =
+    getRunTripWaypointTargets();
+
+  if (
+    runTripNextWaypointIndex >=
+    targets.length
+  ) {
+    return;
+  }
+
+  const target =
+    targets[runTripNextWaypointIndex];
+
+  const distanceToWaypoint =
+    calculateDistance(
+      latitude,
+      longitude,
+      target.latLng[0],
+      target.latLng[1]
+    );
+
+  if (
+    distanceToWaypoint <=
+    RUNTRIP_WAYPOINT_ARRIVAL_DISTANCE_METERS
+  ) {
+    runTripWaypointArrivalHits++;
+  } else {
+    runTripWaypointArrivalHits = 0;
+  }
+
+  if (
+    runTripWaypointArrivalHits <
+    RUNTRIP_WAYPOINT_REQUIRED_HITS
+  ) {
+    return;
+  }
+
+  showRunTripCheckpointNotice({
+    type: 'waypoint',
+    number: runTripNextWaypointIndex + 1,
+    name: target.name
+  });
+
+  runTripNextWaypointIndex++;
+  runTripWaypointArrivalHits = 0;
+  saveActiveRunTripState();
+}
 
 function cloneRunTripRouteSegments(
   segments
@@ -3255,6 +3451,14 @@ function createRunTripRecoveryState() {
     arrivalNotified:
        Boolean(
         hasRunTripArrivalNotified
+      ),
+
+    nextWaypointIndex:
+      Math.max(
+        0,
+        Number(
+          runTripNextWaypointIndex
+        ) || 0
       ),
 
     actualRouteCoordinates:
@@ -3635,6 +3839,15 @@ function restoreActiveRunTripState(
   hasRunTripArrivalNotified = false;
   isRunTripCompletionInProgress = false;
   isRunTripMapFollowing = true;
+  runTripNextWaypointIndex = Math.max(
+    0,
+    Number(savedState.nextWaypointIndex) || 0
+  );
+  runTripWaypointArrivalHits = 0;
+  runTripDestinationArrivalHits = 0;
+  runTripClosestDestinationDistance = Infinity;
+  runTripRecentPositions = [];
+  runTripLastGpsTimestamp = null;
 
  runTripLastValidPosition =
    null;
@@ -4084,61 +4297,9 @@ function getRunTripArrivalTargetLatLng() {
 }
 
 function showRunTripArrivalNotice() {
-  const existingNotice =
-    document.querySelector(
-      '.runtrip-arrival-notice'
-    );
-
-  if (existingNotice) {
-    existingNotice.remove();
-  }
-
-  const notice =
-    document.createElement('div');
-
-  notice.className =
-    'runtrip-arrival-notice';
-
-  notice.setAttribute(
-    'role',
-    'alert'
-  );
-
-  notice.innerHTML = `
-    <div class="runtrip-arrival-notice-icon">
-      ✓
-    </div>
-
-    <div>
-      <strong>
-        도착지에 도착했어요
-      </strong>
-
-      <span>
-        RUNTRIP을 자동 종료하고 기록을 저장하고 있어요.
-      </span>
-    </div>
-  `;
-
-  document.body.appendChild(
-    notice
-  );
-
-  if (navigator.vibrate) {
-    navigator.vibrate(
-      [180, 80, 180]
-    );
-  }
-
-  setTimeout(function () {
-    notice.classList.add(
-      'is-hiding'
-    );
-
-    setTimeout(function () {
-      notice.remove();
-    }, 300);
-  }, 4200);
+  showRunTripCheckpointNotice({
+    type: 'destination'
+  });
 }
 
 function checkRunTripArrival(
@@ -4165,13 +4326,19 @@ function checkRunTripArrival(
     runTripElapsedSeconds >=
     RUNTRIP_ARRIVAL_MIN_ELAPSED_SECONDS;
 
-  /*
-    출발지와 도착지가 가깝거나 GPS가 흔들리는 경우
-    출발 직후 자동 종료되는 것을 막는다.
-  */
   if (
     !hasEnoughMovement &&
     !hasEnoughElapsedTime
+  ) {
+    return;
+  }
+
+  const waypointTargets =
+    getRunTripWaypointTargets();
+
+  if (
+    runTripNextWaypointIndex <
+    waypointTargets.length
   ) {
     return;
   }
@@ -4191,9 +4358,40 @@ function checkRunTripArrival(
       target[1]
     );
 
+  runTripClosestDestinationDistance =
+    Math.min(
+      runTripClosestDestinationDistance,
+      distanceToTarget
+    );
+
   if (
-    distanceToTarget >
+    distanceToTarget <=
     RUNTRIP_ARRIVAL_DISTANCE_METERS
+  ) {
+    runTripDestinationArrivalHits++;
+  } else {
+    /*
+      목적지 반경에 잠깐 들어온 좌표 하나만으로 종료하지 않는다.
+      다만 25m 이내까지 접근한 뒤 GPS가 조금 벗어난 경우에는
+      연속 감지값을 완전히 초기화하지 않아 지나침을 보완한다.
+    */
+    if (
+      runTripClosestDestinationDistance <= 25 &&
+      distanceToTarget <= 55
+    ) {
+      runTripDestinationArrivalHits =
+        Math.max(
+          1,
+          runTripDestinationArrivalHits
+        );
+    } else {
+      runTripDestinationArrivalHits = 0;
+    }
+  }
+
+  if (
+    runTripDestinationArrivalHits <
+    RUNTRIP_DESTINATION_REQUIRED_HITS
   ) {
     return;
   }
@@ -4209,6 +4407,7 @@ function checkRunTripArrival(
     });
   }, 900);
 }
+
 function formatRunTripPlannedDuration(totalMinutes) {
   const safeMinutes = Math.max(
     0,
@@ -4429,6 +4628,8 @@ function resetRunTripDashboard() {
   runTripActualDistanceMeters = 0;
 
   runTripLastValidPosition = null;
+  runTripRecentPositions = [];
+  runTripLastGpsTimestamp = null;
 
   isRunTripPaused = false;
   isRunTripMapFollowing = true;
@@ -4700,6 +4901,10 @@ function startRunTripLocationWatch() {
         const accuracy =
           position.coords.accuracy;
 
+        const gpsTimestamp =
+          Number(position.timestamp) ||
+          Date.now();
+
         if (accuracy > MAX_ACCURACY) {
           runTripDashboardGps.textContent =
             `GPS 정확도 확인 중 · ${Math.round(
@@ -4709,86 +4914,139 @@ function startRunTripLocationWatch() {
           return;
         }
 
+        const smoothedPosition =
+          getWeightedSmoothedRunTripPosition(
+            latitude,
+            longitude,
+            accuracy
+          );
+
         const currentPosition = {
-          latitude: latitude,
-          longitude: longitude
+          latitude:
+            smoothedPosition.latitude,
+          longitude:
+            smoothedPosition.longitude,
+          timestamp:
+            gpsTimestamp,
+          accuracy:
+            accuracy
         };
+
+        let shouldAcceptPoint = true;
 
         if (runTripLastValidPosition) {
           const distanceFromLast =
             calculateDistance(
               runTripLastValidPosition.latitude,
               runTripLastValidPosition.longitude,
-              latitude,
-              longitude
+              currentPosition.latitude,
+              currentPosition.longitude
+            );
+
+          const minimumAcceptedDistance =
+            getMinimumAcceptedDistance(
+              accuracy
             );
 
           if (
-            distanceFromLast >= MIN_DISTANCE
+            distanceFromLast <
+            minimumAcceptedDistance
           ) {
+            shouldAcceptPoint = false;
+          }
+
+          if (
+            shouldAcceptPoint &&
+            isImplausibleRunningJump(
+              distanceFromLast,
+              runTripLastValidPosition.timestamp,
+              gpsTimestamp
+            )
+          ) {
+            shouldAcceptPoint = false;
+
+            runTripRecentPositions = [
+              {
+                latitude: latitude,
+                longitude: longitude,
+                accuracy:
+                  Math.max(1, accuracy)
+              }
+            ];
+          }
+
+          if (shouldAcceptPoint) {
             runTripActualDistanceMeters +=
               distanceFromLast;
-
-            runTripLastValidPosition =
-              currentPosition;
-
           }
-        } else {
+        }
+
+        if (
+          !runTripLastValidPosition ||
+          shouldAcceptPoint
+        ) {
           runTripLastValidPosition =
             currentPosition;
 
-        }
+          runTripLastGpsTimestamp =
+            gpsTimestamp;
 
-        const currentLatLng = [
-          latitude,
-          longitude
-        ];
+          const acceptedLatLng = [
+            currentPosition.latitude,
+            currentPosition.longitude
+          ];
 
-        appendRunTripRoutePoint([
-          latitude,
-          longitude
-        ]);
-
-        if (!runTripFollowMarker) {
-          runTripFollowMarker =
-            L.marker(
-              currentLatLng,
-              {
-                icon:
-                  createRunTripFollowMarkerIcon(),
-
-                zIndexOffset: 1000
-              }
-            ).addTo(map);
-        } else {
-          runTripFollowMarker.setLatLng(
-            currentLatLng
-          );
-        }
-
-        if (isRunTripMapFollowing) {
-          map.panTo(
-            currentLatLng,
-            {
-              animate: false
-            }
+          appendRunTripRoutePoint(
+            acceptedLatLng
           );
 
-          if (map.getZoom() < 17) {
-            map.setZoom(17, {
-              animate: false
-            });
+          if (!runTripFollowMarker) {
+            runTripFollowMarker =
+              L.marker(
+                acceptedLatLng,
+                {
+                  icon:
+                    createRunTripFollowMarkerIcon(),
+
+                  zIndexOffset: 1000
+                }
+              ).addTo(map);
+          } else {
+            runTripFollowMarker.setLatLng(
+              acceptedLatLng
+            );
           }
+
+          if (isRunTripMapFollowing) {
+            map.panTo(
+              acceptedLatLng,
+              {
+                animate: false
+              }
+            );
+
+            if (map.getZoom() < 17) {
+              map.setZoom(17, {
+                animate: false
+              });
+            }
+          }
+
+          checkRunTripWaypointArrival(
+            currentPosition.latitude,
+            currentPosition.longitude,
+            accuracy
+          );
+
+          checkRunTripArrival(
+            currentPosition.latitude,
+            currentPosition.longitude,
+            accuracy
+          );
         }
 
-checkRunTripArrival(
-  latitude,
-  longitude,
-  accuracy
-);
-
-updateRunTripDashboard();
-saveActiveRunTripState();
+        updateRunTripDashboard();
+        saveActiveRunTripState();
       },
 
       function (error) {
@@ -4810,10 +5068,11 @@ saveActiveRunTripState();
       {
         enableHighAccuracy: true,
         timeout: 15000,
-        maximumAge: 1000
+        maximumAge: 0
       }
     );
 }
+
 async function startRunTripFollowing() {
   if (!latestRunTripRouteSummary) {
     alert(
@@ -4850,6 +5109,9 @@ async function startRunTripFollowing() {
   hasRunTripArrivalNotified = false;
   isRunTripCompletionInProgress = false;
   isRunTripMapFollowing = true;
+  runTripRecentPositions = [];
+  runTripLastGpsTimestamp = null;
+  resetRunTripArrivalTracking();
   beginNewRunTripRouteSegment();
 
   isRunTripFollowing = true;
@@ -5125,6 +5387,9 @@ function completeRunTrip(
   runTripActualRouteLines = [];
   hasRunTripArrivalNotified = false;
   isRunTripMapFollowing = true;
+  runTripRecentPositions = [];
+  runTripLastGpsTimestamp = null;
+  resetRunTripArrivalTracking();
 
   setTimeout(function () {
     selectedRecordFilter = 'all';
@@ -5179,6 +5444,55 @@ function getPlaceSearchUrl(query) {
       : '/api/place-search';
 
   return `${baseUrl}?q=${encodeURIComponent(query)}`;
+}
+
+
+function getReverseGeocodeUrl(
+  latitude,
+  longitude
+) {
+  const baseUrl =
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1'
+      ? 'https://freeruntrip.vercel.app/api/place-search'
+      : '/api/place-search';
+
+  return (
+    `${baseUrl}?lat=${encodeURIComponent(latitude)}` +
+    `&lng=${encodeURIComponent(longitude)}`
+  );
+}
+
+async function reverseGeocodeRunTripOrigin(
+  latitude,
+  longitude
+) {
+  try {
+    const response = await fetch(
+      getReverseGeocodeUrl(
+        latitude,
+        longitude
+      )
+    );
+
+    const data = await response.json();
+
+    if (
+      !response.ok ||
+      !data.place
+    ) {
+      return null;
+    }
+
+    return data.place;
+  } catch (error) {
+    console.error(
+      '현재 위치 주소 조회 실패:',
+      error
+    );
+
+    return null;
+  }
 }
 
 function escapePlaceSearchText(value) {
@@ -7176,15 +7490,34 @@ useCurrentLocationBtn.addEventListener('click', function () {
   updateRunTripCreateButton();
 
   navigator.geolocation.getCurrentPosition(
-    function (position) {
-      selectedRunTripOrigin = {
-        type: 'current-location',
-        name: '현재 위치',
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude
-      };
+    async function (position) {
+      const latitude =
+        position.coords.latitude;
 
-      runTripOriginInput.value = '현재 위치';
+      const longitude =
+        position.coords.longitude;
+
+      const reverseGeocodedPlace =
+        await reverseGeocodeRunTripOrigin(
+          latitude,
+          longitude
+        );
+
+      selectedRunTripOrigin =
+        reverseGeocodedPlace || {
+          type: 'current-location',
+          name: '현재 위치',
+          displayName: '현재 위치',
+          primaryText: '현재 위치',
+          secondaryText: '',
+          latitude: latitude,
+          longitude: longitude
+        };
+
+      runTripOriginInput.value =
+        getRunTripPlaceDisplayName(
+          selectedRunTripOrigin
+        ) || '현재 위치';
 
       isGettingRunTripCurrentLocation = false;
 
@@ -7192,7 +7525,9 @@ useCurrentLocationBtn.addEventListener('click', function () {
       renderRunTripMapPreview();
 
       runTripStatus.textContent =
-        '현재 위치를 출발지로 설정했어요.';
+        reverseGeocodedPlace
+          ? `${getRunTripPlaceDisplayName(reverseGeocodedPlace)}을(를) 출발지로 설정했어요.`
+          : '현재 위치를 출발지로 설정했어요.';
     },
 
     function () {
@@ -7275,6 +7610,8 @@ pauseRunTripBtn.addEventListener(
   isRunTripMapFollowing = true;
 
   runTripLastValidPosition = null;
+  runTripRecentPositions = [];
+  runTripLastGpsTimestamp = null;
 
   beginNewRunTripRouteSegment();
 
@@ -7307,6 +7644,8 @@ pauseRunTripBtn.addEventListener(
     runTripFollowWatchId = null;
 
     runTripLastValidPosition = null;
+    runTripRecentPositions = [];
+    runTripLastGpsTimestamp = null;
     runTripActiveRouteSegment = null;
     runTripActualRouteLine = null;
     

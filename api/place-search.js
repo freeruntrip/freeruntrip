@@ -125,6 +125,124 @@ function normalizeAddressPlaces(documents = []) {
   });
 }
 
+
+function normalizeReverseGeocodeDocument(document) {
+  if (!document) {
+    return null;
+  }
+
+  const roadAddress =
+    document.road_address?.address_name || '';
+
+  const lotAddress =
+    document.address?.address_name || '';
+
+  const buildingName =
+    document.road_address?.building_name || '';
+
+  const mainAddress =
+    roadAddress || lotAddress;
+
+  if (!mainAddress) {
+    return null;
+  }
+
+  const shortAddress =
+    getShortAddress(mainAddress);
+
+  return {
+    id:
+      `reverse-${document.x || ''}-${document.y || ''}`,
+
+    name:
+      shortAddress || mainAddress,
+
+    displayName:
+      shortAddress || mainAddress,
+
+    primaryText:
+      mainAddress,
+
+    secondaryText:
+      [
+        buildingName,
+        roadAddress
+          ? '도로명 주소'
+          : '지번 주소',
+      ]
+        .filter(Boolean)
+        .join(' · '),
+
+    address:
+      mainAddress,
+
+    roadAddress,
+    lotAddress,
+    buildingName,
+
+    latitude:
+      Number(document.y),
+
+    longitude:
+      Number(document.x),
+
+    category:
+      '현재 위치 주소',
+
+    resultType:
+      'reverse-geocode',
+
+    source:
+      'reverse-geocode',
+  };
+}
+
+async function requestKakaoReverseGeocode({
+  latitude,
+  longitude,
+  kakaoRestApiKey,
+}) {
+  const kakaoUrl = new URL(
+    'https://dapi.kakao.com/v2/local/geo/coord2address.json'
+  );
+
+  kakaoUrl.searchParams.set(
+    'x',
+    String(longitude)
+  );
+
+  kakaoUrl.searchParams.set(
+    'y',
+    String(latitude)
+  );
+
+  kakaoUrl.searchParams.set(
+    'input_coord',
+    'WGS84'
+  );
+
+  const response = await fetch(kakaoUrl, {
+    headers:
+      createKakaoHeaders(
+        kakaoRestApiKey
+      ),
+  });
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    data,
+  };
+}
+
 function mergePlaces(addressPlaces, keywordPlaces, limit = 15) {
   const mergedPlaces = [];
   const placeKeys = new Set();
@@ -215,18 +333,27 @@ export default {
 
     const url = new URL(request.url);
     const query = url.searchParams.get('q')?.trim();
+    const latitude = Number(
+      url.searchParams.get('lat')
+    );
+    const longitude = Number(
+      url.searchParams.get('lng')
+    );
+    const isReverseGeocodeRequest =
+      Number.isFinite(latitude) &&
+      Number.isFinite(longitude);
 
-    if (!query) {
+    if (!query && !isReverseGeocodeRequest) {
       return jsonResponse(
         {
-          error: '검색어를 입력해 주세요.',
+          error: '검색어 또는 좌표를 입력해 주세요.',
           places: [],
         },
         400
       );
     }
 
-    if (query.length > 100) {
+    if (query && query.length > 100) {
       return jsonResponse(
         {
           error: '검색어는 100자 이하로 입력해 주세요.',
@@ -246,6 +373,72 @@ export default {
         },
         500
       );
+    }
+
+    if (isReverseGeocodeRequest) {
+      try {
+        const reverseResult =
+          await requestKakaoReverseGeocode({
+            latitude,
+            longitude,
+            kakaoRestApiKey,
+          });
+
+        if (!reverseResult.ok) {
+          return jsonResponse(
+            {
+              error:
+                '현재 위치 주소를 찾지 못했어요.',
+              place: null,
+              kakaoStatus:
+                reverseResult.status,
+            },
+            reverseResult.status || 500
+          );
+        }
+
+        const document =
+          Array.isArray(
+            reverseResult.data?.documents
+          )
+            ? reverseResult.data.documents[0]
+            : null;
+
+        const normalizedPlace =
+          normalizeReverseGeocodeDocument(
+            document
+          );
+
+        if (!normalizedPlace) {
+          return jsonResponse({
+            place: null,
+          });
+        }
+
+        normalizedPlace.latitude =
+          latitude;
+
+        normalizedPlace.longitude =
+          longitude;
+
+        return jsonResponse({
+          place: normalizedPlace,
+        });
+      } catch (error) {
+        console.error(
+          'Kakao reverse geocode error:',
+          error
+        );
+
+        return jsonResponse(
+          {
+            error:
+              '현재 위치 주소 조회 중 문제가 발생했어요.',
+            place: null,
+          },
+          500
+        );
+      }
     }
 
     try {

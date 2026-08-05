@@ -7104,3 +7104,8 @@ body {
       + 190px
     );
 }
+
+/* 2026-08-05 RunTrip 확인 화면 중복 시작 버튼 제거 */
+.runtrip-confirmed-summary .runtrip-follow-actions {
+  display: none !important;
+}
