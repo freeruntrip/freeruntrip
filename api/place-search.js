@@ -284,39 +284,125 @@ async function requestKakaoReverseGeocode({
   };
 }
 
-function mergePlaces(addressPlaces, keywordPlaces, limit = 15) {
-  const mergedPlaces = [];
-  const placeKeys = new Set();
+function calculateCoordinateDistanceMeters(firstPlace, secondPlace) {
+  const firstLatitude = Number(firstPlace?.latitude);
+  const firstLongitude = Number(firstPlace?.longitude);
+  const secondLatitude = Number(secondPlace?.latitude);
+  const secondLongitude = Number(secondPlace?.longitude);
 
-  [...addressPlaces, ...keywordPlaces].forEach((place) => {
-    if (
-      !Number.isFinite(place.latitude) ||
-      !Number.isFinite(place.longitude)
-    ) {
+  if (
+    !Number.isFinite(firstLatitude) ||
+    !Number.isFinite(firstLongitude) ||
+    !Number.isFinite(secondLatitude) ||
+    !Number.isFinite(secondLongitude)
+  ) {
+    return Infinity;
+  }
+
+  const earthRadiusMeters = 6371000;
+  const toRadians = (value) => value * Math.PI / 180;
+  const latitudeDifference =
+    toRadians(secondLatitude - firstLatitude);
+  const longitudeDifference =
+    toRadians(secondLongitude - firstLongitude);
+
+  const haversine =
+    Math.sin(latitudeDifference / 2) ** 2 +
+    Math.cos(toRadians(firstLatitude)) *
+      Math.cos(toRadians(secondLatitude)) *
+      Math.sin(longitudeDifference / 2) ** 2;
+
+  return 2 * earthRadiusMeters * Math.atan2(
+    Math.sqrt(haversine),
+    Math.sqrt(1 - haversine)
+  );
+}
+
+function findNearestKeywordPlace(addressPlace, keywordPlaces, usedIndexes) {
+  let nearestIndex = -1;
+  let nearestDistance = Infinity;
+
+  keywordPlaces.forEach((keywordPlace, index) => {
+    if (usedIndexes.has(index)) {
       return;
     }
 
-    const coordinateKey = [
-      place.latitude.toFixed(6),
-      place.longitude.toFixed(6),
-    ].join(',');
+    const distance = calculateCoordinateDistanceMeters(
+      addressPlace,
+      keywordPlace
+    );
 
-    const addressKey = (place.address || '')
-      .replace(/\s+/g, '')
-      .toLowerCase();
-
-    const duplicateKey =
-      addressKey || coordinateKey;
-
-    if (placeKeys.has(duplicateKey)) {
-      return;
+    /* 카카오의 주소 좌표와 장소 좌표는 같은 건물에서도
+       약간 다를 수 있으므로 45m 안쪽만 같은 위치로 본다. */
+    if (distance <= 45 && distance < nearestDistance) {
+      nearestIndex = index;
+      nearestDistance = distance;
     }
-
-    placeKeys.add(duplicateKey);
-    mergedPlaces.push(place);
   });
 
-  return mergedPlaces.slice(0, limit);
+  return nearestIndex;
+}
+
+function mergePlaces(
+  addressPlaces,
+  keywordPlaces,
+  query = '',
+  limit = 15
+) {
+  const isAddressSearch =
+    isRoadAddressQuery(query) ||
+    isLotAddressQuery(query);
+
+  if (isAddressSearch) {
+    const usedKeywordIndexes = new Set();
+
+    const mergedAddressPlaces = addressPlaces.map((addressPlace) => {
+      const nearestKeywordIndex = findNearestKeywordPlace(
+        addressPlace,
+        keywordPlaces,
+        usedKeywordIndexes
+      );
+
+      const nearestKeywordPlace =
+        nearestKeywordIndex >= 0
+          ? keywordPlaces[nearestKeywordIndex]
+          : null;
+
+      if (nearestKeywordIndex >= 0) {
+        usedKeywordIndexes.add(nearestKeywordIndex);
+      }
+
+      const placeName =
+        nearestKeywordPlace?.name ||
+        addressPlace.buildingName ||
+        '';
+
+      return {
+        ...addressPlace,
+        buildingName: placeName,
+        secondaryText: placeName,
+      };
+    });
+
+    /* 주소 검색에서는 같은 위치의 장소 결과를 별도 카드로
+       반복하지 않는다. 주소 API 결과가 없을 때만 장소 결과를 보여준다. */
+    if (mergedAddressPlaces.length > 0) {
+      return mergedAddressPlaces.slice(0, limit);
+    }
+
+    return keywordPlaces.slice(0, limit);
+  }
+
+  /* 장소명 검색에서는 장소명을 굵게, 도로명 주소를 얇게 표시한다.
+     도로명 주소가 없을 때만 지번 주소를 대신 사용한다. */
+  return keywordPlaces
+    .map((place) => ({
+      ...place,
+      primaryText: place.name,
+      secondaryText: place.roadAddress || place.lotAddress,
+      displayName: place.name,
+    }))
+    .slice(0, limit);
 }
 
 async function requestKakaoSearch({
@@ -543,6 +629,7 @@ async function handleFetchRequest(request) {
       const places = mergePlaces(
         addressPlaces,
         keywordPlaces,
+        query,
         15
       );
 
