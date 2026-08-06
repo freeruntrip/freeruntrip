@@ -5498,8 +5498,13 @@ function resetRunTripDraftState() {
     runTripDestinationSearchResults
   );
 
+  runTripSearchRequestId++;
+  clearTimeout(runTripSearchTimer);
   runTripSearchResults.innerHTML = '';
   runTripSearchInput.value = '';
+  runTripSearchGuide.textContent =
+    '장소명 또는 주소를 입력해 검색해 보세요.';
+  runTripSearchScreen.classList.add('hidden');
   activeRunTripSearchTarget = null;
 
   isRunTripConfirmed = false;
@@ -5516,7 +5521,7 @@ function resetRunTripDraftState() {
 
   createRunTripBtn.textContent = '확인';
 
-  clearRunTripMapPreview();
+  clearRunTripVisualState();
   updateRunTripCreateButton();
   updateRunTripWaypointControls();
 }
@@ -5543,7 +5548,7 @@ function completeRunTrip(
     restoreRoute: false
   });
 
-  clearRunTripMapPreview();
+  clearRunTripVisualState();
   runTripRouteRequestId++;
   resetRunTripDraftState();
 
@@ -6534,6 +6539,30 @@ function createRunTripFollowMarkerIcon() {
 function clearRunTripMapPreview() {
   runTripPreviewLayer.clearLayers();
 }
+
+function clearRunTripVisualState() {
+  /* RunTrip에서 만든 모든 지도 요소를 한 번에 정리한다.
+     취소·종료·다른 탭 이동 시 같은 함수를 사용해
+     일반 러닝 지도에 예정/실제 경로가 남는 것을 방지한다. */
+  clearRunTripMapPreview();
+
+  runTripActualRouteLines.forEach(function (line) {
+    if (line && map.hasLayer(line)) {
+      map.removeLayer(line);
+    }
+  });
+
+  runTripActualRouteLines = [];
+  runTripActualRouteLine = null;
+
+  if (runTripFollowMarker) {
+    if (map.hasLayer(runTripFollowMarker)) {
+      map.removeLayer(runTripFollowMarker);
+    }
+
+    runTripFollowMarker = null;
+  }
+}
 function getRunTripMapFitOptions() {
   const mapContainer = map.getContainer();
 
@@ -6912,16 +6941,12 @@ function closeRunTripPanel() {
 
   runTripRouteRequestId++;
 
-  isRunTripConfirmed = false;
-  latestRunTripRouteSummary = null;
-
-  runTripPanel.classList.remove('runtrip-confirmed');
-  runTripConfirmedSummary.classList.add('hidden');
-
-  createRunTripBtn.textContent = '확인';
+  /* RunTrip 준비 화면에서 취소한 경우에도
+     이전 출발지·경유지·도착지와 지도 경로를 모두 초기화한다. */
+  resetRunTripDraftState();
+  clearRunTripVisualState();
 
   runTripPanel.classList.add('hidden');
-  clearRunTripMapPreview();
   controlsSection.style.display = 'flex';
   recordsSection.classList.remove('hidden');
 
@@ -8002,6 +8027,7 @@ function openAppPage(pageName) {
   showBottomNavigation();
 
   if (pageName === 'home') {
+    clearRunTripVisualState();
     renderHomeScreen();
 
     homeScreen.classList.remove(
@@ -8019,12 +8045,7 @@ function openAppPage(pageName) {
   if (pageName === 'running') {
     /* RunTrip에서 사용한 예정 경로·마커가
        일반 러닝 지도에 남지 않도록 탭 진입 시 정리한다. */
-    clearRunTripMapPreview();
-
-    if (runTripFollowMarker) {
-      map.removeLayer(runTripFollowMarker);
-      runTripFollowMarker = null;
-    }
+    clearRunTripVisualState();
 
     map.getContainer().style.display =
       'block';
