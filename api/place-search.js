@@ -38,6 +38,9 @@ function normalizeKeywordPlaces(documents = []) {
       longitude: Number(place.x),
 
       category: place.category_name || '',
+      categoryGroupCode: place.category_group_code || '',
+      categoryGroupName: place.category_group_name || '',
+      distance: Number(place.distance) || null,
       resultType: 'place',
       source: 'keyword',
     };
@@ -318,29 +321,88 @@ function calculateCoordinateDistanceMeters(firstPlace, secondPlace) {
   );
 }
 
-function findNearestKeywordPlace(addressPlace, keywordPlaces, usedIndexes) {
-  let nearestIndex = -1;
-  let nearestDistance = Infinity;
+function getRepresentativePlaceScore(addressPlace, place) {
+  const distance = calculateCoordinateDistanceMeters(
+    addressPlace,
+    place
+  );
 
-  keywordPlaces.forEach((keywordPlace, index) => {
+  if (!Number.isFinite(distance) || distance > 180) {
+    return -Infinity;
+  }
+
+  const name = String(place?.name || '').trim();
+  const category = String(place?.category || '');
+  const categoryGroupCode = String(
+    place?.categoryGroupCode || ''
+  );
+
+  let score = 0;
+
+  /* 주소의 대표 지명으로 가장 중요한 교통시설을 우선한다. */
+  if (categoryGroupCode === 'SW8') {
+    score += 1400;
+  }
+
+  if (/(지하철|전철|철도|기차역|버스터미널|여객터미널|공항)/.test(category)) {
+    score += 1100;
+  }
+
+  if (/(공공기관|관공서|학교|대학교|병원|공원|문화시설)/.test(category)) {
+    score += 500;
+  }
+
+  /* 순수 역명이나 노선명이 붙은 역 결과를 높인다. */
+  if (/역(?:\s*\d+호선|\s*신분당선|\s*[가-힣]+선)?$/.test(name)) {
+    score += 650;
+  }
+
+  if (/터미널$|공항$|공원$|학교$|대학교$|병원$|구청$|시청$/.test(name)) {
+    score += 350;
+  }
+
+  /* 매장·지점은 같은 주소의 대표 시설보다 뒤로 보낸다. */
+  if (/(스타벅스|카페|커피|식당|음식점|편의점|마트|약국|부동산)/.test(name)) {
+    score -= 500;
+  }
+
+  if (/(점|지점|매장|센터)$/.test(name)) {
+    score -= 320;
+  }
+
+  /* 가까운 후보를 선호하되 대표성 점수가 거리를 이기도록 한다. */
+  score -= distance * 1.5;
+
+  return score;
+}
+
+function findBestRepresentativePlace(
+  addressPlace,
+  candidatePlaces,
+  usedIndexes
+) {
+  let bestIndex = -1;
+  let bestScore = -Infinity;
+
+  candidatePlaces.forEach((place, index) => {
     if (usedIndexes.has(index)) {
       return;
     }
 
-    const distance = calculateCoordinateDistanceMeters(
+    const score = getRepresentativePlaceScore(
       addressPlace,
-      keywordPlace
+      place
     );
 
-    /* 카카오의 주소 좌표와 장소 좌표는 같은 건물에서도
-       약간 다를 수 있으므로 45m 안쪽만 같은 위치로 본다. */
-    if (distance <= 45 && distance < nearestDistance) {
-      nearestIndex = index;
-      nearestDistance = distance;
+    if (score > bestScore) {
+      bestIndex = index;
+      bestScore = score;
     }
   });
 
-  return nearestIndex;
+  return bestScore > -Infinity
+    ? bestIndex
+    : -1;
 }
 
 function mergePlaces(
@@ -357,23 +419,23 @@ function mergePlaces(
     const usedKeywordIndexes = new Set();
 
     const mergedAddressPlaces = addressPlaces.map((addressPlace) => {
-      const nearestKeywordIndex = findNearestKeywordPlace(
+      const representativeIndex = findBestRepresentativePlace(
         addressPlace,
         keywordPlaces,
         usedKeywordIndexes
       );
 
-      const nearestKeywordPlace =
-        nearestKeywordIndex >= 0
-          ? keywordPlaces[nearestKeywordIndex]
+      const representativePlace =
+        representativeIndex >= 0
+          ? keywordPlaces[representativeIndex]
           : null;
 
-      if (nearestKeywordIndex >= 0) {
-        usedKeywordIndexes.add(nearestKeywordIndex);
+      if (representativeIndex >= 0) {
+        usedKeywordIndexes.add(representativeIndex);
       }
 
       const placeName =
-        nearestKeywordPlace?.name ||
+        representativePlace?.name ||
         addressPlace.buildingName ||
         '';
 
@@ -433,6 +495,78 @@ async function requestKakaoSearch({
     status: response.status,
     data,
   };
+}
+
+async function requestKakaoCategorySearch({
+  categoryGroupCode,
+  longitude,
+  latitude,
+  kakaoRestApiKey,
+  radius = 180,
+  size = 15,
+}) {
+  const kakaoUrl = new URL(
+    'https://dapi.kakao.com/v2/local/search/category.json'
+  );
+
+  kakaoUrl.searchParams.set(
+    'category_group_code',
+    categoryGroupCode
+  );
+  kakaoUrl.searchParams.set('x', String(longitude));
+  kakaoUrl.searchParams.set('y', String(latitude));
+  kakaoUrl.searchParams.set('radius', String(radius));
+  kakaoUrl.searchParams.set('sort', 'distance');
+  kakaoUrl.searchParams.set('size', String(size));
+
+  const response = await fetch(kakaoUrl, {
+    headers: createKakaoHeaders(kakaoRestApiKey),
+  });
+
+  let data;
+
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
+  }
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    data,
+  };
+}
+
+async function getNearbyRepresentativePlaces(
+  addressPlaces,
+  kakaoRestApiKey
+) {
+  if (!Array.isArray(addressPlaces) || addressPlaces.length === 0) {
+    return [];
+  }
+
+  const searches = addressPlaces
+    .slice(0, 5)
+    .map((addressPlace) =>
+      requestKakaoCategorySearch({
+        categoryGroupCode: 'SW8',
+        longitude: addressPlace.longitude,
+        latitude: addressPlace.latitude,
+        kakaoRestApiKey,
+        radius: 180,
+        size: 15,
+      })
+    );
+
+  const results = await Promise.all(searches);
+  const documents = results.flatMap((result) =>
+    result.ok && Array.isArray(result.data?.documents)
+      ? result.data.documents
+      : []
+  );
+
+  return normalizeKeywordPlaces(documents);
 }
 
 async function handleFetchRequest(request) {
@@ -626,9 +760,25 @@ async function handleFetchRequest(request) {
         ? normalizeKeywordPlaces(keywordResult.data.documents)
         : [];
 
+      const isAddressSearch =
+        isRoadAddressQuery(query) ||
+        isLotAddressQuery(query);
+
+      const nearbyRepresentativePlaces = isAddressSearch
+        ? await getNearbyRepresentativePlaces(
+            addressPlaces,
+            kakaoRestApiKey
+          )
+        : [];
+
+      const candidatePlaces = [
+        ...nearbyRepresentativePlaces,
+        ...keywordPlaces,
+      ];
+
       const places = mergePlaces(
         addressPlaces,
-        keywordPlaces,
+        candidatePlaces,
         query,
         15
       );
