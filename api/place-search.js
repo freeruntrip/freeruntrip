@@ -321,6 +321,106 @@ function calculateCoordinateDistanceMeters(firstPlace, secondPlace) {
   );
 }
 
+
+function normalizeAddressKey(value) {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/[()]/g, '')
+    .toLowerCase();
+}
+
+function isMeaningfulBuildingName(name) {
+  const normalizedName = String(name || '').trim();
+
+  if (!normalizedName) {
+    return false;
+  }
+
+  /* 주소 API가 제공한 실제 건물·공동주택 명칭은
+     주변 상호보다 먼저 보여준다. */
+  return /(아파트|오피스텔|빌딩|타워|센터|몰|백화점|시장|학교|대학교|병원|공원|역|터미널|공항|회관|관|호텔|리조트|주상복합|단지)$/u.test(
+    normalizedName
+  );
+}
+
+function isExactAddressMatch(addressPlace, place) {
+  const addressKeys = new Set(
+    [
+      addressPlace?.roadAddress,
+      addressPlace?.lotAddress,
+      addressPlace?.address,
+    ]
+      .map(normalizeAddressKey)
+      .filter(Boolean)
+  );
+
+  const placeKeys = [
+    place?.roadAddress,
+    place?.lotAddress,
+    place?.address,
+  ]
+    .map(normalizeAddressKey)
+    .filter(Boolean);
+
+  return placeKeys.some((key) => addressKeys.has(key));
+}
+
+function findBestExactAddressPlace(
+  addressPlace,
+  candidatePlaces,
+  usedIndexes
+) {
+  let bestIndex = -1;
+  let bestScore = -Infinity;
+
+  candidatePlaces.forEach((place, index) => {
+    if (usedIndexes.has(index)) {
+      return;
+    }
+
+    if (!isExactAddressMatch(addressPlace, place)) {
+      return;
+    }
+
+    const name = String(place?.name || '').trim();
+    const category = String(place?.category || '');
+    const distance = calculateCoordinateDistanceMeters(
+      addressPlace,
+      place
+    );
+
+    let score = 3000;
+
+    /* 정확히 같은 주소에 등록된 시설 중에서도
+       건물·주거단지·공공시설·상호명을 우선한다. */
+    if (/(아파트|오피스텔|빌딩|타워|센터|학교|병원|공원|역|터미널|공항)/u.test(name)) {
+      score += 500;
+    }
+
+    if (/(음식점|카페|교통|공공기관|학교|병원|문화시설)/u.test(category)) {
+      score += 250;
+    }
+
+    /* '점'으로 끝나는 정상 상호는 주소가 정확히 일치하면
+       감점하지 않는다. */
+    if (/(부동산|공인중개사|주차장)/u.test(name)) {
+      score -= 180;
+    }
+
+    if (Number.isFinite(distance)) {
+      score -= distance;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestIndex = index;
+    }
+  });
+
+  return bestIndex;
+}
+
 function getRepresentativePlaceScore(addressPlace, place) {
   const distance = calculateCoordinateDistanceMeters(
     addressPlace,
@@ -419,11 +519,20 @@ function mergePlaces(
     const usedKeywordIndexes = new Set();
 
     const mergedAddressPlaces = addressPlaces.map((addressPlace) => {
-      const representativeIndex = findBestRepresentativePlace(
+      const exactAddressIndex = findBestExactAddressPlace(
         addressPlace,
         keywordPlaces,
         usedKeywordIndexes
       );
+
+      const representativeIndex =
+        exactAddressIndex >= 0
+          ? exactAddressIndex
+          : findBestRepresentativePlace(
+              addressPlace,
+              keywordPlaces,
+              usedKeywordIndexes
+            );
 
       const representativePlace =
         representativeIndex >= 0
@@ -435,9 +544,11 @@ function mergePlaces(
       }
 
       const placeName =
-        representativePlace?.name ||
-        addressPlace.buildingName ||
-        '';
+        isMeaningfulBuildingName(addressPlace.buildingName)
+          ? addressPlace.buildingName
+          : representativePlace?.name ||
+            addressPlace.buildingName ||
+            '';
 
       return {
         ...addressPlace,
