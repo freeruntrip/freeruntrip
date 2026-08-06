@@ -320,9 +320,13 @@ let selectedDetailRecord = null;
    - GPS 흔들림과 순간 이동을 실제 거리로 더하지 않음
 */
 const MAX_ACCURACY = 50; // meters
-const MIN_DISTANCE = 6; // meters
-const MAX_RUNNING_SPEED_METERS_PER_SECOND = 8.5;
-const GPS_ACCURACY_DISTANCE_RATIO = 0.18
+const MIN_DISTANCE = 7; // meters
+const MAX_RUNNING_SPEED_METERS_PER_SECOND = 8.0;
+const GPS_ACCURACY_DISTANCE_RATIO = 0.24;
+const GPS_MIN_SAMPLE_INTERVAL_MS = 700;
+const GPS_DIAGNOSTIC_LOG_LIMIT = 250;
+let runningGpsDiagnosticLog = [];
+let runTripGpsDiagnosticLog = [];
 let runRecords = JSON.parse(localStorage.getItem('runRecords')) || [];
 
 let selectedPaceMood =
@@ -481,15 +485,47 @@ function getSmoothedPosition(
   };
 }
 
-function getMinimumAcceptedDistance(accuracy) {
+function getMinimumAcceptedDistance(accuracy, previousAccuracy) {
+  const currentAccuracy = Math.max(1, Number(accuracy) || MAX_ACCURACY);
+  const priorAccuracy = Math.max(1, Number(previousAccuracy) || currentAccuracy);
+  const combinedAccuracy = (currentAccuracy + priorAccuracy) / 2;
+
   return Math.min(
-    12,
+    14,
     Math.max(
       MIN_DISTANCE,
-      Number(accuracy) *
-        GPS_ACCURACY_DISTANCE_RATIO
+      combinedAccuracy * GPS_ACCURACY_DISTANCE_RATIO
     )
   );
+}
+
+function addGpsDiagnostic(targetLog, entry) {
+  targetLog.push({
+    time: new Date().toISOString(),
+    ...entry
+  });
+
+  if (targetLog.length > GPS_DIAGNOSTIC_LOG_LIMIT) {
+    targetLog.splice(0, targetLog.length - GPS_DIAGNOSTIC_LOG_LIMIT);
+  }
+}
+
+window.getFreeRunTripGpsDiagnostics = function () {
+  return {
+    running: runningGpsDiagnosticLog.slice(),
+    runTrip: runTripGpsDiagnosticLog.slice()
+  };
+};
+
+function isGpsSampleTooSoon(previousTimestamp, currentTimestamp) {
+  if (
+    !Number.isFinite(previousTimestamp) ||
+    !Number.isFinite(currentTimestamp)
+  ) {
+    return false;
+  }
+
+  return (currentTimestamp - previousTimestamp) < GPS_MIN_SAMPLE_INTERVAL_MS;
 }
 
 function isImplausibleRunningJump(
@@ -2317,6 +2353,7 @@ if (!isRunning) {
     totalElevationGain = 0;
 lastValidAltitude = null;
 lastRunningGpsAccuracy = null;
+runningGpsDiagnosticLog = [];
 
 runningCalories.textContent = '0 kcal';
 runningElevationGain.textContent = '0 m';
@@ -2414,7 +2451,25 @@ if (lastValidPosition) {
   );
 
   const minimumAcceptedDistance =
-    getMinimumAcceptedDistance(accuracy);
+    getMinimumAcceptedDistance(
+      accuracy,
+      lastValidPosition.accuracy
+    );
+
+  if (
+    isGpsSampleTooSoon(
+      lastValidPosition.timestamp,
+      gpsTimestamp
+    )
+  ) {
+    addGpsDiagnostic(runningGpsDiagnosticLog, {
+      accepted: false,
+      reason: 'sample-too-soon',
+      accuracy: Math.round(accuracy),
+      distanceMeters: Number(distanceFromLast.toFixed(2))
+    });
+    return;
+  }
 
   if (
     distanceFromLast <
@@ -2426,6 +2481,15 @@ if (lastValidPosition) {
       '최소 기준:',
       minimumAcceptedDistance
     );
+
+    addGpsDiagnostic(runningGpsDiagnosticLog, {
+      accepted: false,
+      reason: 'below-distance-threshold',
+      accuracy: Math.round(accuracy),
+      previousAccuracy: Math.round(lastValidPosition.accuracy || accuracy),
+      distanceMeters: Number(distanceFromLast.toFixed(2)),
+      minimumMeters: Number(minimumAcceptedDistance.toFixed(2))
+    });
 
     return;
   }
@@ -2450,6 +2514,13 @@ if (lastValidPosition) {
       }
     ];
 
+    addGpsDiagnostic(runningGpsDiagnosticLog, {
+      accepted: false,
+      reason: 'implausible-speed',
+      accuracy: Math.round(accuracy),
+      distanceMeters: Number(distanceFromLast.toFixed(2))
+    });
+
     return;
   }
 
@@ -2457,6 +2528,16 @@ if (lastValidPosition) {
   const previousElapsedSeconds = lastGpsElapsedSeconds;
 
   totalDistance += distanceFromLast;
+
+  addGpsDiagnostic(runningGpsDiagnosticLog, {
+    accepted: true,
+    reason: 'distance-added',
+    accuracy: Math.round(accuracy),
+    previousAccuracy: Math.round(lastValidPosition.accuracy || accuracy),
+    distanceMeters: Number(distanceFromLast.toFixed(2)),
+    totalDistanceMeters: Number(totalDistance.toFixed(2))
+  });
+
   updateRunningElevation(position);
   addCompletedSplits(
     previousDistance,
@@ -4945,14 +5026,41 @@ function startRunTripLocationWatch() {
 
           const minimumAcceptedDistance =
             getMinimumAcceptedDistance(
-              accuracy
+              accuracy,
+              runTripLastValidPosition.accuracy
             );
 
           if (
+            isGpsSampleTooSoon(
+              runTripLastValidPosition.timestamp,
+              gpsTimestamp
+            )
+          ) {
+            shouldAcceptPoint = false;
+
+            addGpsDiagnostic(runTripGpsDiagnosticLog, {
+              accepted: false,
+              reason: 'sample-too-soon',
+              accuracy: Math.round(accuracy),
+              distanceMeters: Number(distanceFromLast.toFixed(2))
+            });
+          }
+
+          if (
+            shouldAcceptPoint &&
             distanceFromLast <
             minimumAcceptedDistance
           ) {
             shouldAcceptPoint = false;
+
+            addGpsDiagnostic(runTripGpsDiagnosticLog, {
+              accepted: false,
+              reason: 'below-distance-threshold',
+              accuracy: Math.round(accuracy),
+              previousAccuracy: Math.round(runTripLastValidPosition.accuracy || accuracy),
+              distanceMeters: Number(distanceFromLast.toFixed(2)),
+              minimumMeters: Number(minimumAcceptedDistance.toFixed(2))
+            });
           }
 
           if (
@@ -4973,11 +5081,27 @@ function startRunTripLocationWatch() {
                   Math.max(1, accuracy)
               }
             ];
+
+            addGpsDiagnostic(runTripGpsDiagnosticLog, {
+              accepted: false,
+              reason: 'implausible-speed',
+              accuracy: Math.round(accuracy),
+              distanceMeters: Number(distanceFromLast.toFixed(2))
+            });
           }
 
           if (shouldAcceptPoint) {
             runTripActualDistanceMeters +=
               distanceFromLast;
+
+            addGpsDiagnostic(runTripGpsDiagnosticLog, {
+              accepted: true,
+              reason: 'distance-added',
+              accuracy: Math.round(accuracy),
+              previousAccuracy: Math.round(runTripLastValidPosition.accuracy || accuracy),
+              distanceMeters: Number(distanceFromLast.toFixed(2)),
+              totalDistanceMeters: Number(runTripActualDistanceMeters.toFixed(2))
+            });
           }
         }
 
@@ -5111,6 +5235,7 @@ async function startRunTripFollowing() {
   isRunTripMapFollowing = true;
   runTripRecentPositions = [];
   runTripLastGpsTimestamp = null;
+  runTripGpsDiagnosticLog = [];
   resetRunTripArrivalTracking();
   beginNewRunTripRouteSegment();
 

@@ -308,8 +308,7 @@ async function requestKakaoSearch({
   };
 }
 
-export default {
-  async fetch(request) {
+async function handleFetchRequest(request) {
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         status: 204,
@@ -509,5 +508,39 @@ export default {
         500
       );
     }
-  },
-};
+}
+
+export default async function handler(request, response) {
+  /* Vercel Node API와 Web Fetch 런타임을 모두 지원한다. */
+  if (!response && typeof Request !== 'undefined' && request instanceof Request) {
+    return handleFetchRequest(request);
+  }
+
+  const protocol =
+    request.headers?.['x-forwarded-proto'] ||
+    'https';
+
+  const host =
+    request.headers?.host ||
+    'freeruntrip.vercel.app';
+
+  const absoluteUrl = new URL(
+    request.url || '/api/place-search',
+    `${protocol}://${host}`
+  );
+
+  const webRequest = new Request(absoluteUrl, {
+    method: request.method || 'GET',
+    headers: request.headers || {}
+  });
+
+  const webResponse = await handleFetchRequest(webRequest);
+  const body = await webResponse.text();
+
+  webResponse.headers.forEach(function (value, key) {
+    response.setHeader(key, value);
+  });
+
+  response.status(webResponse.status);
+  response.send(body);
+}
