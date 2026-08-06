@@ -7217,3 +7217,9 @@ body {
     height: clamp(400px, 64dvh, 500px);
   }
 }
+
+
+/* 2026-08-07 RunTrip 기록 경로 제목 단순화 */
+.detail-runtrip-info-heading .card-label {
+  margin-bottom: 0;
+}
