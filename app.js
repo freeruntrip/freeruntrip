@@ -208,9 +208,6 @@ const detailTimeRange = document.getElementById(
   'detailTimeRange'
 );
 
-const detailRouteSummary = document.getElementById(
-  'detailRouteSummary'
-);
 
 const detailDistance = document.getElementById(
   'detailDistance'
@@ -1772,28 +1769,6 @@ detailActivityType.classList.toggle(
   !isRunTrip
 );
 
-if (isRunTrip) {
-  const waypointCount =
-    record.waypointNames.length;
-
-  const waypointText =
-    waypointCount > 0
-      ? ` · 경유지 ${waypointCount}개`
-      : '';
-
-  detailRouteSummary.textContent =
-    `${record.originName} → ${record.destinationName}${waypointText}`;
-
-  detailRouteSummary.classList.remove(
-    'hidden'
-  );
-} else {
-  detailRouteSummary.textContent = '';
-
-  detailRouteSummary.classList.add(
-    'hidden'
-  );
-}
     detailDate.textContent =
       record.date;
 

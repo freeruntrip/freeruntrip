@@ -7223,3 +7223,9 @@ body {
 .detail-runtrip-info-heading .card-label {
   margin-bottom: 0;
 }
+
+
+/* 2026-08-07 RunTrip 상단 경로 요약 제거 후 간격 정리 */
+#detailTimeRange {
+  margin-bottom: 18px;
+}
