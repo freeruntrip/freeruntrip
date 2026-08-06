@@ -332,13 +332,28 @@ async function handleFetchRequest(request) {
 
     const url = new URL(request.url);
     const query = url.searchParams.get('q')?.trim();
-    const latitude = Number(
-      url.searchParams.get('lat')
-    );
-    const longitude = Number(
-      url.searchParams.get('lng')
-    );
+    const latitudeParam =
+      url.searchParams.get('lat');
+
+    const longitudeParam =
+      url.searchParams.get('lng');
+
+    const hasReverseGeocodeParams =
+      latitudeParam !== null &&
+      longitudeParam !== null &&
+      latitudeParam.trim() !== '' &&
+      longitudeParam.trim() !== '';
+
+    const latitude = hasReverseGeocodeParams
+      ? Number(latitudeParam)
+      : NaN;
+
+    const longitude = hasReverseGeocodeParams
+      ? Number(longitudeParam)
+      : NaN;
+
     const isReverseGeocodeRequest =
+      hasReverseGeocodeParams &&
       Number.isFinite(latitude) &&
       Number.isFinite(longitude);
 
