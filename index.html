@@ -567,19 +567,6 @@
       <span>케이던스</span>
       <strong id="detailCadence">--</strong>
     </div>
-
-    <div>
-      <span>GPS 정확도</span>
-      <strong id="detailGpsAccuracy">--</strong>
-    </div>
-
-    <div
-      id="detailPlannedDistanceCard"
-      class="hidden"
-    >
-      <span>예상 거리</span>
-      <strong id="detailPlannedDistance">0.00 km</strong>
-    </div>
   </div>
 
 <section
@@ -629,22 +616,6 @@
       </div>
     </div>
   </div>
-
-  <div class="detail-runtrip-comparison">
-    <div>
-      <span>예상 시간</span>
-      <strong id="detailPlannedDuration">
-        0분
-      </strong>
-    </div>
-
-    <div>
-      <span>거리 차이</span>
-      <strong id="detailDistanceDifference">
-        0.00 km
-      </strong>
-    </div>
-  </div>
 </section>
 
 <div id="detailPaceCard">
@@ -652,6 +623,11 @@
   <strong id="detailNumericPace">마음 환기 Pace</strong>
   <small id="detailPaceHint">터치하면 숫자 Pace로 바뀝니다</small>
 </div>
+  <div id="detailMapSection">
+  <div id="detailMap"></div>
+</div>
+
+
   <section id="detailSplits" class="detail-splits hidden">
     <div class="detail-splits-header">
       <div>
@@ -672,43 +648,7 @@
     </div>
   </div>
 
-  <button id="toggleDetailMapBtn" class="detail-map-toggle" type="button">
-    지도 보기
-  </button>
 
-  <div id="detailMapSection" class="hidden">
-  <div
-    id="detailMapLegend"
-    class="detail-map-legend hidden"
-    aria-label="경로 표시 안내"
-  >
-    <div
-      id="detailPlannedRouteLegend"
-      class="detail-map-legend-item hidden"
-    >
-      <span
-        class="detail-map-legend-line planned"
-        aria-hidden="true"
-      ></span>
-
-      <strong>예정 경로</strong>
-    </div>
-
-    <div
-      id="detailActualRouteLegend"
-      class="detail-map-legend-item hidden"
-    >
-      <span
-        class="detail-map-legend-line actual"
-        aria-hidden="true"
-      ></span>
-
-      <strong>실제 이동 경로</strong>
-    </div>
-  </div>
-
-  <div id="detailMap"></div>
-</div>
 </div>
 
 <section id="profileFeedScreen" class="screen hidden">

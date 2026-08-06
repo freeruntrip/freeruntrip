@@ -232,18 +232,6 @@ const detailHeartRate = document.getElementById(
 const detailCadence = document.getElementById(
   'detailCadence'
 );
-const detailGpsAccuracy = document.getElementById(
-  'detailGpsAccuracy'
-);
-
-const detailPlannedDistanceCard = document.getElementById(
-  'detailPlannedDistanceCard'
-);
-
-const detailPlannedDistance = document.getElementById(
-  'detailPlannedDistance'
-);
-
 const detailRunTripInfo = document.getElementById(
   'detailRunTripInfo'
 );
@@ -264,33 +252,12 @@ const detailRunTripWaypoints = document.getElementById(
   'detailRunTripWaypoints'
 );
 
-const detailPlannedDuration = document.getElementById(
-  'detailPlannedDuration'
-);
-
-const detailDistanceDifference = document.getElementById(
-  'detailDistanceDifference'
-);
 const detailNumericPace = document.getElementById('detailNumericPace');
 const detailPaceTitle = document.getElementById('detailPaceTitle');
 const detailPaceHint = document.getElementById('detailPaceHint');
 const detailMapElement = document.getElementById('detailMap');
 const detailMemory = document.getElementById('detailMemory');
 const detailMapSection = document.getElementById('detailMapSection');
-const toggleDetailMapBtn = document.getElementById('toggleDetailMapBtn');
-const detailMapLegend = document.getElementById(
-  'detailMapLegend'
-);
-
-const detailPlannedRouteLegend =
-  document.getElementById(
-    'detailPlannedRouteLegend'
-  );
-
-const detailActualRouteLegend =
-  document.getElementById(
-    'detailActualRouteLegend'
-  );
 const detailRunPhoto = document.getElementById('detailRunPhoto');
 const detailRunMemoWrap = document.getElementById('detailRunMemoWrap');
 const detailRunMemo = document.getElementById('detailRunMemo');
@@ -324,6 +291,21 @@ const MIN_DISTANCE = 7; // meters
 const MAX_RUNNING_SPEED_METERS_PER_SECOND = 8.0;
 const GPS_ACCURACY_DISTANCE_RATIO = 0.24;
 const GPS_MIN_SAMPLE_INTERVAL_MS = 700;
+/*
+  2026-08-06 Nike Run 야외 비교에서 약 1% 크게 측정되는
+  일관된 경향이 확인되어, 허용된 각 GPS 구간에 보정값을 적용한다.
+  경로 좌표 자체는 그대로 보존하고 누적 거리와 스플릿에만 반영한다.
+*/
+const GPS_DISTANCE_CALIBRATION_FACTOR = 0.99;
+
+function getCalibratedGpsDistance(distanceMeters) {
+  const safeDistance = Math.max(
+    0,
+    Number(distanceMeters) || 0
+  );
+
+  return safeDistance * GPS_DISTANCE_CALIBRATION_FACTOR;
+}
 const GPS_DIAGNOSTIC_LOG_LIMIT = 250;
 let runningGpsDiagnosticLog = [];
 let runTripGpsDiagnosticLog = [];
@@ -1100,22 +1082,6 @@ function getDetailRouteData(record) {
 function showDetailMap(record) {
   const routeData =
     getDetailRouteData(record);
-  detailMapLegend.classList.toggle(
-    'hidden',
-    !routeData.hasActual &&
-    !routeData.hasPlanned
-  );
-
-detailPlannedRouteLegend.classList.toggle(
-  'hidden',
-  !routeData.hasPlanned
-);
-
-detailActualRouteLegend.classList.toggle(
-  'hidden',
-  !routeData.hasActual
-);
-
   if (
     !routeData.hasActual &&
     !routeData.hasPlanned
@@ -1861,47 +1827,7 @@ if (isRunTrip) {
         ? '측정되지 않음'
         : `${record.cadence} spm`;
 
-    detailGpsAccuracy.textContent =
-      record.gpsAccuracy === null
-        ? '측정되지 않음'
-        : `${record.gpsAccuracy} m`;
-
 if (isRunTrip) {
-  const rawPlannedDistance =
-    Number(record.plannedDistance);
-
-  const hasPlannedDistance =
-    Number.isFinite(rawPlannedDistance) &&
-    rawPlannedDistance > 0;
-
-  const plannedDistanceKm =
-    hasPlannedDistance
-     ? rawPlannedDistance
-     : 0;
-
-  const actualDistanceKm =
-    Number(record.distance) || 0;
-
-  const distanceDifferenceKm =
-    actualDistanceKm -
-    plannedDistanceKm;
-
-  if (hasPlannedDistance) {
-    detailPlannedDistance.textContent =
-    `${plannedDistanceKm.toFixed(2)} km`;
-
-    detailPlannedDistanceCard.classList.remove(
-      'hidden'
-    );
-  } else {
-    detailPlannedDistance.textContent =
-      '정보 없음';
-
-     detailPlannedDistanceCard.classList.add(
-      'hidden'
-    );
-  }
-
   detailRunTripInfo.classList.remove(
     'hidden'
   );
@@ -1911,52 +1837,6 @@ if (isRunTrip) {
 
   detailRunTripDestination.textContent =
     record.destinationName;
-
-  const rawPlannedDuration =
-  Number(
-    record.plannedDurationMinutes
-  );
-
-const hasPlannedDuration =
-  Number.isFinite(
-    rawPlannedDuration
-  ) &&
-  rawPlannedDuration > 0;
-
-detailPlannedDuration.textContent =
-  hasPlannedDuration
-    ? `약 ${formatRunTripPlannedDuration(
-        rawPlannedDuration
-      )}`
-    : '정보 없음';
-
-  if (hasPlannedDistance) {
-  const hasActualDistance =
-    Number.isFinite(actualDistanceKm) &&
-    actualDistanceKm >= 0.01;
-
-  if (!hasActualDistance) {
-    detailDistanceDifference.textContent =
-      '측정 전';
-  } else {
-    const absoluteDifferenceKm =
-      Math.abs(distanceDifferenceKm);
-
-    if (absoluteDifferenceKm < 0.01) {
-      detailDistanceDifference.textContent =
-        '예상 거리와 동일';
-    } else if (distanceDifferenceKm > 0) {
-      detailDistanceDifference.textContent =
-        `${absoluteDifferenceKm.toFixed(2)} km 더 김`;
-    } else {
-      detailDistanceDifference.textContent =
-        `${absoluteDifferenceKm.toFixed(2)} km 더 짧음`;
-    }
-  }
-} else {
-  detailDistanceDifference.textContent =
-    '정보 없음';
-}
 
   if (
     Array.isArray(
@@ -2002,10 +1882,6 @@ detailPlannedDuration.textContent =
       '';
   }
 } else {
-  detailPlannedDistanceCard.classList.add(
-    'hidden'
-  );
-
   detailRunTripInfo.classList.add(
     'hidden'
   );
@@ -2095,10 +1971,6 @@ detailPlannedDuration.textContent =
     selectedDetailRecord =
       record;
 
-    detailMapSection.classList.add(
-      'hidden'
-    );
-
     const detailRouteData =
       getDetailRouteData(record);
 
@@ -2106,27 +1978,10 @@ detailPlannedDuration.textContent =
       detailRouteData.hasActual ||
       detailRouteData.hasPlanned;
 
-    toggleDetailMapBtn.disabled =
-      !hasRoute;
-
-if (!hasRoute) {
-  toggleDetailMapBtn.textContent =
-    '경로 데이터가 없습니다';
-} else if (
-  detailRouteData.hasActual &&
-  detailRouteData.hasPlanned
-) {
-  toggleDetailMapBtn.textContent =
-    '예정·실제 경로 비교';
-} else if (
-  detailRouteData.hasPlanned
-) {
-  toggleDetailMapBtn.textContent =
-    '예정 경로 보기';
-} else {
-  toggleDetailMapBtn.textContent =
-    '실제 경로 보기';
-}
+    detailMapSection.classList.toggle(
+      'hidden',
+      !hasRoute
+    );
 
     map.getContainer().style.display =
       'none';
@@ -2141,6 +1996,12 @@ if (!hasRoute) {
     recordDetail.classList.remove(
       'hidden'
     );
+
+    if (hasRoute) {
+      requestAnimationFrame(function () {
+        showDetailMap(record);
+      });
+    }
   }
 
   recordCard.addEventListener(
@@ -2526,22 +2387,28 @@ if (lastValidPosition) {
 
   const previousDistance = totalDistance;
   const previousElapsedSeconds = lastGpsElapsedSeconds;
+  const calibratedDistance =
+    getCalibratedGpsDistance(
+      distanceFromLast
+    );
 
-  totalDistance += distanceFromLast;
+  totalDistance += calibratedDistance;
 
   addGpsDiagnostic(runningGpsDiagnosticLog, {
     accepted: true,
     reason: 'distance-added',
     accuracy: Math.round(accuracy),
     previousAccuracy: Math.round(lastValidPosition.accuracy || accuracy),
-    distanceMeters: Number(distanceFromLast.toFixed(2)),
+    rawDistanceMeters: Number(distanceFromLast.toFixed(2)),
+    calibratedDistanceMeters: Number(calibratedDistance.toFixed(2)),
+    calibrationFactor: GPS_DISTANCE_CALIBRATION_FACTOR,
     totalDistanceMeters: Number(totalDistance.toFixed(2))
   });
 
   updateRunningElevation(position);
   addCompletedSplits(
     previousDistance,
-    distanceFromLast,
+    calibratedDistance,
     previousElapsedSeconds,
     seconds
   );
@@ -2844,52 +2711,12 @@ detailNumericPace.addEventListener('click', function () {
     detailNumericPace.dataset.showing = 'number';
   }
 });
-toggleDetailMapBtn.addEventListener('click', function () {
-  if (!selectedDetailRecord) {
-    return;
-  }
-
-  const isHidden = detailMapSection.classList.contains('hidden');
-
-  if (isHidden) {
-    detailMapSection.classList.remove('hidden');
-    toggleDetailMapBtn.textContent = '지도 닫기';
-
-    showDetailMap(selectedDetailRecord);
-  } else {
-    detailMapSection.classList.add('hidden');
-
-const routeData =
-  getDetailRouteData(
-    selectedDetailRecord
-  );
-
-if (
-  routeData.hasActual &&
-  routeData.hasPlanned
-) {
-  toggleDetailMapBtn.textContent =
-    '예정·실제 경로 비교';
-} else if (
-  routeData.hasPlanned
-) {
-  toggleDetailMapBtn.textContent =
-    '예정 경로 보기';
-} else {
-  toggleDetailMapBtn.textContent =
-    '실제 경로 보기';
-}
-  }
-});
 backToRecordsBtn.addEventListener(
   'click',
   function () {
     detailMapSection.classList.add(
       'hidden'
     );
-
-    toggleDetailMapBtn.textContent =
-      '지도 보기';
 
     selectedDetailRecord = null;
 
@@ -5091,15 +4918,22 @@ function startRunTripLocationWatch() {
           }
 
           if (shouldAcceptPoint) {
+            const calibratedDistance =
+              getCalibratedGpsDistance(
+                distanceFromLast
+              );
+
             runTripActualDistanceMeters +=
-              distanceFromLast;
+              calibratedDistance;
 
             addGpsDiagnostic(runTripGpsDiagnosticLog, {
               accepted: true,
               reason: 'distance-added',
               accuracy: Math.round(accuracy),
               previousAccuracy: Math.round(runTripLastValidPosition.accuracy || accuracy),
-              distanceMeters: Number(distanceFromLast.toFixed(2)),
+              rawDistanceMeters: Number(distanceFromLast.toFixed(2)),
+              calibratedDistanceMeters: Number(calibratedDistance.toFixed(2)),
+              calibrationFactor: GPS_DISTANCE_CALIBRATION_FACTOR,
               totalDistanceMeters: Number(runTripActualDistanceMeters.toFixed(2))
             });
           }

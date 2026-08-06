@@ -7109,3 +7109,111 @@ body {
 .runtrip-confirmed-summary .runtrip-follow-actions {
   display: none !important;
 }
+
+
+/* ========================================
+   2026-08-06 RunTrip 기록 화면 단순화
+   지도 기본 표시 · Pace Mood 축소 · 지도 확대
+======================================== */
+
+/* 숨김 버튼을 제거한 기록 지도는 콘텐츠 흐름 안에서 바로 표시 */
+#detailMapSection {
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 22px;
+}
+
+/* 경로가 있는 기록에서 지도를 더 크고 넓게 표시 */
+#detailMap {
+  width: 100%;
+  height: clamp(400px, 62dvh, 520px);
+  border-radius: 22px;
+  overflow: hidden;
+}
+
+/* 범례는 지도와 가까이 붙여 시각적 연결을 강화 */
+.detail-map-legend {
+  margin-bottom: 8px;
+  padding: 10px 12px;
+}
+
+/* Pace Mood 카드는 기능은 유지하고 세로 공간만 축소 */
+#detailPaceCard {
+  margin-bottom: 12px;
+  padding: 13px 14px;
+  border-radius: 17px;
+}
+
+#detailPaceCard span {
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+
+#detailPaceCard strong {
+  font-size: 21px;
+  line-height: 1.2;
+}
+
+#detailPaceCard small {
+  margin-top: 5px;
+  font-size: 10px;
+}
+
+/* 여행 경로 카드는 출발지·경유지·도착지만 간결하게 유지 */
+.detail-runtrip-info {
+  margin-bottom: 12px;
+  padding: 15px;
+}
+
+.detail-runtrip-info-heading {
+  margin-bottom: 10px;
+}
+
+.detail-runtrip-route-item {
+  min-height: 56px;
+  padding: 9px 11px;
+}
+
+.detail-runtrip-waypoints {
+  padding: 10px 11px;
+}
+
+@media (max-width: 390px) {
+  #detailMap {
+    height: clamp(380px, 60dvh, 470px);
+  }
+
+  #detailPaceCard {
+    padding: 12px;
+  }
+
+  #detailPaceCard strong {
+    font-size: 19px;
+  }
+}
+
+
+/* ========================================
+   2026-08-07 RunTrip 기록 지도 범례 제거
+   지도만 바로 크게 표시
+======================================== */
+#detailMapSection {
+  margin-top: 8px;
+}
+
+#detailMap {
+  height: clamp(420px, 66dvh, 540px);
+}
+
+/* 이전 범례 스타일은 더 이상 사용하지 않음 */
+.detail-map-legend,
+.detail-map-legend-item,
+.detail-map-legend-line {
+  display: none !important;
+}
+
+@media (max-width: 390px) {
+  #detailMap {
+    height: clamp(400px, 64dvh, 500px);
+  }
+}
