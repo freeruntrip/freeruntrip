@@ -5473,6 +5473,54 @@ plannedRouteCoordinates:
   return record;
 }
 
+function resetRunTripDraftState() {
+  selectedRunTripOrigin = null;
+  selectedRunTripDestination = null;
+
+  runTripOriginInput.value = '현재 위치';
+  runTripDestinationInput.value = '';
+  runTripReturnToggle.checked = false;
+
+  runTripWaypoints
+    .querySelectorAll('.runtrip-waypoint-row')
+    .forEach(function (row) {
+      row.remove();
+    });
+
+  runTripWaypointCount = 0;
+  refreshRunTripWaypointLabels();
+
+  hidePlaceSearchResults(
+    runTripOriginSearchResults
+  );
+
+  hidePlaceSearchResults(
+    runTripDestinationSearchResults
+  );
+
+  runTripSearchResults.innerHTML = '';
+  runTripSearchInput.value = '';
+  activeRunTripSearchTarget = null;
+
+  isRunTripConfirmed = false;
+  latestRunTripRouteSummary = null;
+
+  runTripPanel.classList.remove(
+    'runtrip-confirmed',
+    'runtrip-following'
+  );
+
+  runTripConfirmedSummary.classList.add(
+    'hidden'
+  );
+
+  createRunTripBtn.textContent = '확인';
+
+  clearRunTripMapPreview();
+  updateRunTripCreateButton();
+  updateRunTripWaypointControls();
+}
+
 function completeRunTrip(
   options = {}
 ) {
@@ -5497,12 +5545,7 @@ function completeRunTrip(
 
   clearRunTripMapPreview();
   runTripRouteRequestId++;
-  latestRunTripRouteSummary = null;
-  isRunTripConfirmed = false;
-  runTripPanel.classList.remove(
-    'runtrip-confirmed',
-    'runtrip-following'
-  );
+  resetRunTripDraftState();
 
   runTripStartTime = null;
   runTripActualRouteCoordinates = [];
@@ -7974,6 +8017,15 @@ function openAppPage(pageName) {
   }
 
   if (pageName === 'running') {
+    /* RunTrip에서 사용한 예정 경로·마커가
+       일반 러닝 지도에 남지 않도록 탭 진입 시 정리한다. */
+    clearRunTripMapPreview();
+
+    if (runTripFollowMarker) {
+      map.removeLayer(runTripFollowMarker);
+      runTripFollowMarker = null;
+    }
+
     map.getContainer().style.display =
       'block';
 

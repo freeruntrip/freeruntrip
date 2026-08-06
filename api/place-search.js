@@ -73,7 +73,37 @@ function getShortAddress(address) {
   return parts.slice(-2).join(' ');
 }
 
-function normalizeAddressPlaces(documents = []) {
+function isRoadAddressQuery(query) {
+  const normalizedQuery = String(query || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+
+  return /(?:대로|로|길)(?:\s|\d|$)/.test(
+    normalizedQuery
+  );
+}
+
+function isLotAddressQuery(query) {
+  const normalizedQuery = String(query || '')
+    .trim()
+    .replace(/\s+/g, ' ');
+
+  if (isRoadAddressQuery(normalizedQuery)) {
+    return false;
+  }
+
+  return /(?:읍|면|동|리)\s+(?:산\s*)?\d+(?:-\d+)?(?:\s|$)/.test(
+    normalizedQuery
+  );
+}
+
+function normalizeAddressPlaces(documents = [], query = '') {
+  const preferLotAddress =
+    isLotAddressQuery(query);
+
+  const preferRoadAddress =
+    isRoadAddressQuery(query);
+
   return documents.map((place) => {
     const roadAddress =
       place.road_address?.address_name || '';
@@ -86,16 +116,27 @@ function normalizeAddressPlaces(documents = []) {
     const buildingName =
       place.road_address?.building_name || '';
 
-    const mainAddress =
+    let mainAddress =
       roadAddress || lotAddress;
 
-    const shortAddress =
-      getShortAddress(mainAddress);
-
-    const addressType =
+    let addressType =
       roadAddress
         ? '도로명 주소'
         : '지번 주소';
+
+    if (preferLotAddress && lotAddress) {
+      mainAddress = lotAddress;
+      addressType = '지번 주소';
+    } else if (
+      preferRoadAddress &&
+      roadAddress
+    ) {
+      mainAddress = roadAddress;
+      addressType = '도로명 주소';
+    }
+
+    const shortAddress =
+      getShortAddress(mainAddress);
 
     const secondaryParts = [
       buildingName,
@@ -492,7 +533,7 @@ async function handleFetchRequest(request) {
       }
 
       const addressPlaces = addressResult.ok
-        ? normalizeAddressPlaces(addressResult.data.documents)
+        ? normalizeAddressPlaces(addressResult.data.documents, query)
         : [];
 
       const keywordPlaces = keywordResult.ok
