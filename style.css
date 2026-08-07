@@ -7293,3 +7293,22 @@ body {
   border-color: rgba(129, 218, 216, 0.58);
   background: rgba(30, 41, 59, 0.98);
 }
+
+/* ========================================
+   2026-08-07 기록 상세 지도 높이 고정
+   iOS Safari 주소창/툴바 변화로 dvh가 바뀌어
+   스크롤 중 지도 높이가 늘었다 줄어드는 현상 방지
+======================================== */
+#detailMap {
+  height: 500px !important;
+  min-height: 500px !important;
+  max-height: 500px !important;
+}
+
+@media (max-width: 390px) {
+  #detailMap {
+    height: 500px !important;
+    min-height: 500px !important;
+    max-height: 500px !important;
+  }
+}
