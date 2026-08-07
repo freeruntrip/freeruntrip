@@ -1007,164 +1007,6 @@ function getSavedRunTripPlaceLatLng(
     longitude
   ];
 }
-function getDirectionArrowSegments(points) {
-  if (!Array.isArray(points) || points.length < 2) {
-    return [];
-  }
-
-  const validPoints = points.filter(function (point) {
-    return (
-      Array.isArray(point) &&
-      point.length >= 2 &&
-      Number.isFinite(Number(point[0])) &&
-      Number.isFinite(Number(point[1]))
-    );
-  });
-
-  if (validPoints.length < 2) {
-    return [];
-  }
-
-  /*
-    TMAP 좌표에는 도로의 미세한 굴곡이 매우 많이 포함된다.
-    화살표를 모든 작은 굴곡에 만들지 않도록 먼저 좌표를
-    Douglas-Peucker 방식으로 단순화한다.
-  */
-  const simplifyToleranceMeters = 42;
-  const minimumArrowSegmentMeters = 140;
-
-  function getPointToLineDistanceMeters(point, startPoint, endPoint) {
-    const referenceLatitude =
-      (startPoint[0] + endPoint[0] + point[0]) / 3;
-
-    const metersPerLatitudeDegree = 111320;
-    const metersPerLongitudeDegree =
-      111320 * Math.cos(referenceLatitude * Math.PI / 180);
-
-    const startX = startPoint[1] * metersPerLongitudeDegree;
-    const startY = startPoint[0] * metersPerLatitudeDegree;
-    const endX = endPoint[1] * metersPerLongitudeDegree;
-    const endY = endPoint[0] * metersPerLatitudeDegree;
-    const pointX = point[1] * metersPerLongitudeDegree;
-    const pointY = point[0] * metersPerLatitudeDegree;
-
-    const lineX = endX - startX;
-    const lineY = endY - startY;
-    const lineLengthSquared = lineX * lineX + lineY * lineY;
-
-    if (lineLengthSquared === 0) {
-      return Math.hypot(pointX - startX, pointY - startY);
-    }
-
-    const projection = Math.max(
-      0,
-      Math.min(
-        1,
-        ((pointX - startX) * lineX + (pointY - startY) * lineY) /
-          lineLengthSquared
-      )
-    );
-
-    const nearestX = startX + projection * lineX;
-    const nearestY = startY + projection * lineY;
-
-    return Math.hypot(pointX - nearestX, pointY - nearestY);
-  }
-
-  function simplifyRoute(routePoints) {
-    if (routePoints.length <= 2) {
-      return routePoints.slice();
-    }
-
-    let maximumDistance = 0;
-    let maximumIndex = 0;
-    const firstPoint = routePoints[0];
-    const lastPoint = routePoints[routePoints.length - 1];
-
-    for (let index = 1; index < routePoints.length - 1; index++) {
-      const distance = getPointToLineDistanceMeters(
-        routePoints[index],
-        firstPoint,
-        lastPoint
-      );
-
-      if (distance > maximumDistance) {
-        maximumDistance = distance;
-        maximumIndex = index;
-      }
-    }
-
-    if (maximumDistance <= simplifyToleranceMeters) {
-      return [firstPoint, lastPoint];
-    }
-
-    const left = simplifyRoute(routePoints.slice(0, maximumIndex + 1));
-    const right = simplifyRoute(routePoints.slice(maximumIndex));
-
-    return left.slice(0, -1).concat(right);
-  }
-
-  /*
-    CSS의 ➤ 문자는 0도에서 오른쪽을 가리킨다.
-    지도 화면에서는 북쪽이 위쪽이므로 위도 증가는 음의 Y축이다.
-    이 좌표계를 기준으로 회전각을 계산해야 실제 진행 방향과 일치한다.
-  */
-  function getScreenAngle(startPoint, endPoint) {
-    const middleLatitude = (startPoint[0] + endPoint[0]) / 2;
-    const deltaX =
-      (endPoint[1] - startPoint[1]) *
-      Math.cos(middleLatitude * Math.PI / 180);
-    const deltaY = -(endPoint[0] - startPoint[0]);
-
-    return Math.atan2(deltaY, deltaX) * (180 / Math.PI);
-  }
-
-  const simplifiedPoints = simplifyRoute(validPoints);
-  const arrowSegments = [];
-
-  for (let index = 1; index < simplifiedPoints.length; index++) {
-    const startPoint = simplifiedPoints[index - 1];
-    const endPoint = simplifiedPoints[index];
-    const segmentLength = calculateDistance(
-      startPoint[0],
-      startPoint[1],
-      endPoint[0],
-      endPoint[1]
-    );
-
-    if (segmentLength < minimumArrowSegmentMeters) {
-      continue;
-    }
-
-    arrowSegments.push({
-      point: [
-        (startPoint[0] + endPoint[0]) / 2,
-        (startPoint[1] + endPoint[1]) / 2
-      ],
-      angle: getScreenAngle(startPoint, endPoint)
-    });
-  }
-
-  return arrowSegments;
-}
-
-function addDirectionArrowsToDetailMap(points) {
-  getDirectionArrowSegments(points).forEach(function (segment) {
-    const arrowIcon = L.divIcon({
-      className: 'direction-arrow',
-      html: `<div style="transform: rotate(${segment.angle}deg)">›</div>`,
-      iconSize: [22, 22],
-      iconAnchor: [11, 11]
-    });
-
-    const marker = L.marker(segment.point, {
-      icon: arrowIcon,
-      interactive: false
-    }).addTo(detailMap);
-
-    detailDirectionMarkers.push(marker);
-  });
-}
 function saveRunRecord() {
   const runEndTime = new Date();
 
@@ -1453,10 +1295,6 @@ function showDetailMap(record) {
           actualLine
         );
       }
-
-      addDirectionArrowsToDetailMap(
-        segment
-      );
     }
   );
 
@@ -4150,10 +3988,6 @@ function restoreActiveRunTripState(
     runTripPreviewLayer
   );
 
-  addRunTripRouteDirectionArrows(
-    plannedCoordinates
-  );
-
   const restoredDraft =
     getRunTripDraft();
 
@@ -4407,19 +4241,6 @@ function appendRunTripRoutePoint(point) {
   }
 }
 
-function addRunTripRouteDirectionArrows(points) {
-  getDirectionArrowSegments(points).forEach(function (segment) {
-    L.marker(segment.point, {
-      icon: L.divIcon({
-        className: 'runtrip-route-direction-arrow',
-        html: `<div style="transform: rotate(${segment.angle}deg)">›</div>`,
-        iconSize: [22, 22],
-        iconAnchor: [11, 11]
-      }),
-      interactive: false
-    }).addTo(runTripPreviewLayer);
-  });
-}
 
 function showActivityCountdown(activityLabel) {
   if (isRunTripCountdownActive) {
@@ -7121,10 +6942,6 @@ async function renderRunTripMapPreview() {
       lineJoin: 'round'
     }).addTo(runTripPreviewLayer);
 
-    addRunTripRouteDirectionArrows(
-      routeCoordinates
-    );
-
     previewMarkers.forEach(function (marker) {
       L.marker(marker.latLng, {
         icon: createRunTripPreviewMarkerIcon(
@@ -7179,10 +6996,6 @@ latestRunTripRouteSummary = null;
         lineCap: 'round',
         lineJoin: 'round'
       }).addTo(runTripPreviewLayer);
-
-      addRunTripRouteDirectionArrows(
-        fallbackPath
-      );
     }
 
     const fallbackBounds = L.latLngBounds(fallbackPath);
