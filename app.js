@@ -5661,11 +5661,29 @@ plannedRouteCoordinates:
     memo: ''
   };
 
-  record.hasGpsDiagnostics = saveLatestGpsDiagnostics(
-    record.id,
-    'runtrip',
-    runTripGpsDiagnosticLog
-  );
+  record.gpsDiagnostics =
+  runTripGpsDiagnosticLog.map(function (entry) {
+    return { ...entry };
+  });
+
+record.gpsDiagnosticSummary = {
+  sampleCount:
+    runTripGpsDiagnosticLog.length,
+
+  acceptedCount:
+    runTripGpsDiagnosticLog.filter(
+      function (entry) {
+        return entry.accepted === true;
+      }
+    ).length,
+
+  rejectedCount:
+    runTripGpsDiagnosticLog.filter(
+      function (entry) {
+        return entry.accepted === false;
+      }
+    ).length
+};
 
   runRecords.unshift(record);
 
