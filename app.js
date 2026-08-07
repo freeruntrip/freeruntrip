@@ -108,23 +108,101 @@ function updateRunningFollowState() {
   );
 }
 
+function getVisibleMapVerticalOffset(
+  topOverlayElement,
+  bottomOverlayElement,
+  padding = 12
+) {
+  const mapElement = map.getContainer();
+  const mapRect = mapElement.getBoundingClientRect();
+
+  if (
+    !Number.isFinite(mapRect.height) ||
+    mapRect.height <= 0
+  ) {
+    return 0;
+  }
+
+  let visibleTop = mapRect.top;
+  let visibleBottom = mapRect.bottom;
+
+  if (
+    topOverlayElement &&
+    !topOverlayElement.classList.contains('hidden')
+  ) {
+    const topRect =
+      topOverlayElement.getBoundingClientRect();
+
+    if (
+      topRect.bottom > mapRect.top &&
+      topRect.top < mapRect.bottom
+    ) {
+      visibleTop = Math.min(
+        mapRect.bottom,
+        Math.max(
+          mapRect.top,
+          topRect.bottom + padding
+        )
+      );
+    }
+  }
+
+  if (
+    bottomOverlayElement &&
+    !bottomOverlayElement.classList.contains('hidden')
+  ) {
+    const bottomRect =
+      bottomOverlayElement.getBoundingClientRect();
+
+    if (
+      bottomRect.bottom > mapRect.top &&
+      bottomRect.top < mapRect.bottom
+    ) {
+      visibleBottom = Math.max(
+        mapRect.top,
+        Math.min(
+          mapRect.bottom,
+          bottomRect.top - padding
+        )
+      );
+    }
+  }
+
+  if (visibleBottom <= visibleTop) {
+    return 0;
+  }
+
+  const fullMapCenterY =
+    (mapRect.top + mapRect.bottom) / 2;
+
+  const visibleMapCenterY =
+    (visibleTop + visibleBottom) / 2;
+
+  /*
+    Leaflet panBy의 Y 오프셋은 마커가 화면에서 보이는 위치와
+    반대 방향으로 움직인다.
+    전체 지도 중심과 실제로 보이는 지도 영역 중심의 차이를
+    계산해 정보 패널을 제외한 지도 영역 한가운데에 현재 위치를 둔다.
+  */
+  return Math.round(
+    fullMapCenterY - visibleMapCenterY
+  );
+}
+
 function getRunningMapVerticalOffset() {
   const statusRow = document.querySelector(
     '.running-map-status-row'
   );
+
   const executionStack = document.querySelector(
     '.running-execution-stack'
   );
 
-  const topCovered = statusRow
-    ? statusRow.getBoundingClientRect().height + 20
-    : 64;
-
-  const bottomCovered = executionStack
-    ? executionStack.getBoundingClientRect().height + 20
-    : 220;
-
-  return Math.max(0, Math.round((bottomCovered - topCovered) / 2));
+  return getVisibleMapVerticalOffset(
+    statusRow,
+    executionStack,
+    12
+  );
 }
 
 function centerRunningMapOnPosition(latLng, options = {}) {
@@ -141,6 +219,45 @@ function centerRunningMapOnPosition(latLng, options = {}) {
   requestAnimationFrame(function () {
     map.panBy(
       [0, getRunningMapVerticalOffset()],
+      { animate: options.animate === true }
+    );
+  });
+}
+
+function getRunTripMapVerticalOffset() {
+  const runTripExecutionPanel =
+    document.querySelector(
+      '.runtrip-following .runtrip-editor-card'
+    );
+
+  return getVisibleMapVerticalOffset(
+    runTripExecutionPanel,
+    null,
+    12
+  );
+}
+
+function centerRunTripMapOnPosition(
+  latLng,
+  options = {}
+) {
+  if (!Array.isArray(latLng) || latLng.length < 2) {
+    return;
+  }
+
+  const targetZoom = Math.max(map.getZoom(), 17);
+
+  map.setView(
+    latLng,
+    targetZoom,
+    {
+      animate: options.animate === true
+    }
+  );
+
+  requestAnimationFrame(function () {
+    map.panBy(
+      [0, getRunTripMapVerticalOffset()],
       { animate: options.animate === true }
     );
   });
@@ -5222,18 +5339,12 @@ function startRunTripLocationWatch() {
           }
 
           if (isRunTripMapFollowing) {
-            map.panTo(
+            centerRunTripMapOnPosition(
               acceptedLatLng,
               {
                 animate: false
               }
             );
-
-            if (map.getZoom() < 17) {
-              map.setZoom(17, {
-                animate: false
-              });
-            }
           }
 
           checkRunTripWaypointArrival(
@@ -7971,12 +8082,8 @@ runTripDashboardFollowState.addEventListener(
         runTripLastValidPosition.longitude
       ];
 
-      map.setView(
+      centerRunTripMapOnPosition(
         currentLatLng,
-        Math.max(
-          map.getZoom(),
-          17
-        ),
         {
           animate: true
         }
