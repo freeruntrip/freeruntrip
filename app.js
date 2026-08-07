@@ -74,7 +74,12 @@ let watchId;
 let lastValidPosition = null;
 let totalDistance = 0; // meters
 let totalElevationGain = 0;
+let totalElevationLoss = 0;
 let lastValidAltitude = null;
+let elevationReferenceAltitude = null;
+let recentAltitudeSamples = [];
+let currentSmoothedAltitude = null;
+let splitStartAltitude = null;
 let recentPositions = [];
 let lastRunningGpsAccuracy = null;
 let isRunningMapFollowing = true;
@@ -303,7 +308,10 @@ function getCalibratedGpsDistance(distanceMeters) {
 
   return safeDistance * GPS_DISTANCE_CALIBRATION_FACTOR;
 }
-const GPS_DIAGNOSTIC_LOG_LIMIT = 250;
+const GPS_DIAGNOSTIC_LOG_LIMIT = 5000;
+const MAX_ALTITUDE_ACCURACY = 30; // meters
+const ELEVATION_SMOOTHING_COUNT = 5;
+const ELEVATION_CHANGE_THRESHOLD_METERS = 2.5;
 let runningGpsDiagnosticLog = [];
 let runTripGpsDiagnosticLog = [];
 let runRecords = JSON.parse(localStorage.getItem('runRecords')) || [];
@@ -496,6 +504,25 @@ window.getFreeRunTripGpsDiagnostics = function () {
   };
 };
 
+window.getFreeRunTripRecordDiagnostics = function (recordId) {
+  const targetId = Number(recordId);
+  const record = runRecords.find(function (item) {
+    return Number(item.id) === targetId;
+  });
+
+  if (!record) {
+    return null;
+  }
+
+  return {
+    recordId: Number(record.id),
+    activityType: getRecordActivityType(record),
+    gpsDiagnostics: Array.isArray(record.gpsDiagnostics)
+      ? record.gpsDiagnostics.slice()
+      : []
+  };
+};
+
 function isGpsSampleTooSoon(previousTimestamp, currentTimestamp) {
   if (
     !Number.isFinite(previousTimestamp) ||
@@ -533,6 +560,201 @@ function isImplausibleRunningJump(
     MAX_RUNNING_SPEED_METERS_PER_SECOND
   );
 }
+function getGpsSampleTiming(previousTimestamp, currentTimestamp) {
+  if (
+    !Number.isFinite(previousTimestamp) ||
+    !Number.isFinite(currentTimestamp) ||
+    currentTimestamp <= previousTimestamp
+  ) {
+    return {
+      elapsedMs: null,
+      elapsedSeconds: null
+    };
+  }
+
+  const elapsedMs = currentTimestamp - previousTimestamp;
+
+  return {
+    elapsedMs: elapsedMs,
+    elapsedSeconds: elapsedMs / 1000
+  };
+}
+
+function getGpsSpeedMetersPerSecond(
+  distanceMeters,
+  previousTimestamp,
+  currentTimestamp
+) {
+  const timing = getGpsSampleTiming(
+    previousTimestamp,
+    currentTimestamp
+  );
+
+  if (!timing.elapsedSeconds || timing.elapsedSeconds <= 0) {
+    return null;
+  }
+
+  return distanceMeters / timing.elapsedSeconds;
+}
+
+function getAltitudeData(position) {
+  const rawAltitude = position?.coords?.altitude;
+  const rawAltitudeAccuracy = position?.coords?.altitudeAccuracy;
+
+  const altitude =
+    rawAltitude === null || rawAltitude === undefined
+      ? null
+      : Number(rawAltitude);
+
+  const altitudeAccuracy =
+    rawAltitudeAccuracy === null || rawAltitudeAccuracy === undefined
+      ? null
+      : Number(rawAltitudeAccuracy);
+
+  return {
+    altitude:
+      Number.isFinite(altitude)
+        ? altitude
+        : null,
+    altitudeAccuracy:
+      Number.isFinite(altitudeAccuracy)
+        ? altitudeAccuracy
+        : null
+  };
+}
+
+function addAltitudeSample(targetSamples, altitude, altitudeAccuracy) {
+  if (!Number.isFinite(altitude)) {
+    return null;
+  }
+
+  if (
+    Number.isFinite(altitudeAccuracy) &&
+    altitudeAccuracy > MAX_ALTITUDE_ACCURACY
+  ) {
+    return null;
+  }
+
+  targetSamples.push({
+    altitude: altitude,
+    accuracy: Math.max(
+      1,
+      Number.isFinite(altitudeAccuracy)
+        ? altitudeAccuracy
+        : MAX_ALTITUDE_ACCURACY
+    )
+  });
+
+  if (targetSamples.length > ELEVATION_SMOOTHING_COUNT) {
+    targetSamples.shift();
+  }
+
+  let weightedAltitude = 0;
+  let totalWeight = 0;
+
+  targetSamples.forEach(function (sample) {
+    const weight = 1 / sample.accuracy;
+    weightedAltitude += sample.altitude * weight;
+    totalWeight += weight;
+  });
+
+  if (totalWeight <= 0) {
+    return null;
+  }
+
+  return weightedAltitude / totalWeight;
+}
+
+function updateElevationAccumulator(
+  smoothedAltitude,
+  state
+) {
+  if (!Number.isFinite(smoothedAltitude)) {
+    return state;
+  }
+
+  if (!Number.isFinite(state.referenceAltitude)) {
+    state.referenceAltitude = smoothedAltitude;
+    state.lastAltitude = smoothedAltitude;
+    return state;
+  }
+
+  const delta = smoothedAltitude - state.referenceAltitude;
+
+  if (delta >= ELEVATION_CHANGE_THRESHOLD_METERS) {
+    state.gain += delta;
+    state.referenceAltitude = smoothedAltitude;
+  } else if (delta <= -ELEVATION_CHANGE_THRESHOLD_METERS) {
+    state.loss += Math.abs(delta);
+    state.referenceAltitude = smoothedAltitude;
+  }
+
+  state.lastAltitude = smoothedAltitude;
+  return state;
+}
+
+function updateRunningElevation(position) {
+  const altitudeData = getAltitudeData(position);
+
+  const smoothedAltitude = addAltitudeSample(
+    recentAltitudeSamples,
+    altitudeData.altitude,
+    altitudeData.altitudeAccuracy
+  );
+
+  if (!Number.isFinite(smoothedAltitude)) {
+    runningElevationGain.textContent =
+      `${Math.round(totalElevationGain)} m`;
+
+    return null;
+  }
+
+  const state = updateElevationAccumulator(
+    smoothedAltitude,
+    {
+      referenceAltitude: elevationReferenceAltitude,
+      lastAltitude: lastValidAltitude,
+      gain: totalElevationGain,
+      loss: totalElevationLoss
+    }
+  );
+
+  elevationReferenceAltitude = state.referenceAltitude;
+  lastValidAltitude = state.lastAltitude;
+  totalElevationGain = state.gain;
+  totalElevationLoss = state.loss;
+  currentSmoothedAltitude = smoothedAltitude;
+
+  if (!Number.isFinite(splitStartAltitude)) {
+    splitStartAltitude = smoothedAltitude;
+  }
+
+  runningElevationGain.textContent =
+    `${Math.round(totalElevationGain)} m`;
+
+  return smoothedAltitude;
+}
+
+function interpolateAltitude(
+  startAltitude,
+  endAltitude,
+  progress
+) {
+  if (
+    !Number.isFinite(startAltitude) ||
+    !Number.isFinite(endAltitude)
+  ) {
+    return null;
+  }
+
+  const safeProgress = Math.max(0, Math.min(1, Number(progress) || 0));
+
+  return (
+    startAltitude +
+    (endAltitude - startAltitude) * safeProgress
+  );
+}
+
 function getEmotionalPaceLabel() {
   return selectedPaceMood;
 }
@@ -560,7 +782,9 @@ function addCompletedSplits(
   previousDistance,
   segmentDistance,
   previousElapsedSeconds,
-  currentElapsedSeconds
+  currentElapsedSeconds,
+  previousAltitude,
+  currentAltitude
 ) {
   if (segmentDistance <= 0) {
     return;
@@ -579,15 +803,36 @@ function addCompletedSplits(
     const splitDurationSeconds =
       splitEndElapsedSeconds - splitStartElapsedSeconds;
 
+    const splitEndAltitude = interpolateAltitude(
+      previousAltitude,
+      currentAltitude,
+      progressToSplit
+    );
+
+    const elevationChange =
+      Number.isFinite(splitStartAltitude) &&
+      Number.isFinite(splitEndAltitude)
+        ? splitEndAltitude - splitStartAltitude
+        : null;
+
     splitRecords.push({
       index: splitRecords.length + 1,
       distanceMeters: 1000,
       durationSeconds: Math.round(splitDurationSeconds),
       duration: formatDurationFromSeconds(splitDurationSeconds),
-      pace: formatPaceFromSeconds(splitDurationSeconds, 1000)
+      pace: formatPaceFromSeconds(splitDurationSeconds, 1000),
+      elevationChange:
+        Number.isFinite(elevationChange)
+          ? Math.round(elevationChange)
+          : null
     });
 
     splitStartElapsedSeconds = splitEndElapsedSeconds;
+
+    if (Number.isFinite(splitEndAltitude)) {
+      splitStartAltitude = splitEndAltitude;
+    }
+
     nextSplitDistanceMeters += 1000;
   }
 }
@@ -604,6 +849,12 @@ function getSplitsForSave() {
     const finalSplitDurationSeconds =
       seconds - splitStartElapsedSeconds;
 
+    const finalElevationChange =
+      Number.isFinite(splitStartAltitude) &&
+      Number.isFinite(currentSmoothedAltitude)
+        ? currentSmoothedAltitude - splitStartAltitude
+        : null;
+
     savedSplits.push({
       index: savedSplits.length + 1,
       distanceMeters: Math.round(remainingDistanceMeters),
@@ -612,7 +863,11 @@ function getSplitsForSave() {
       pace: formatPaceFromSeconds(
         finalSplitDurationSeconds,
         remainingDistanceMeters
-      )
+      ),
+      elevationChange:
+        Number.isFinite(finalElevationChange)
+          ? Math.round(finalElevationChange)
+          : null
     });
   }
 
@@ -638,11 +893,17 @@ function renderDetailSplits(record) {
         ? `${split.index}km`
         : `마지막 ${(split.distanceMeters / 1000).toFixed(2)}km`;
 
+      const elevationChange = Number(split.elevationChange);
+      const elevationText = Number.isFinite(elevationChange)
+        ? `${elevationChange > 0 ? '+' : ''}${Math.round(elevationChange)}m`
+        : '--';
+
       return `
         <div class="split-row">
           <span class="split-label">${label}</span>
           <span class="split-duration">${split.duration}</span>
           <strong class="split-pace">${split.pace}</strong>
+          <span class="split-elevation">${elevationText}</span>
         </div>
       `;
     })
@@ -907,6 +1168,15 @@ function addDirectionArrowsToDetailMap(points) {
 function saveRunRecord() {
   const runEndTime = new Date();
 
+  addGpsDiagnostic(runningGpsDiagnosticLog, {
+    accepted: true,
+    reason: 'record-save',
+    displayedDistance: distanceDisplay.textContent,
+    savedDistance: (totalDistance / 1000).toFixed(2),
+    totalDistanceMeters: Number(totalDistance.toFixed(2)),
+    elapsedSeconds: seconds
+  });
+
   const record = {
     id: Date.now(),
 
@@ -935,6 +1205,18 @@ function saveRunRecord() {
     pace: paceDisplay.textContent,
 
     elevationGain: Math.round(totalElevationGain),
+
+    elevationLoss: Math.round(totalElevationLoss),
+
+    gpsDiagnosticSummary: {
+      sampleCount: runningGpsDiagnosticLog.length,
+      acceptedCount: runningGpsDiagnosticLog.filter(function (entry) {
+        return entry.accepted === true;
+      }).length,
+      rejectedCount: runningGpsDiagnosticLog.filter(function (entry) {
+        return entry.accepted === false;
+      }).length
+    },
 
     heartRate: null,
 
@@ -965,6 +1247,10 @@ routeSegments: routeSegments
     });
   })
   };
+
+  record.gpsDiagnostics = runningGpsDiagnosticLog.map(function (entry) {
+    return { ...entry };
+  });
 
   runRecords.unshift(record);
 
@@ -1156,7 +1442,7 @@ function showDetailMap(record) {
       if (segment.length >= 2) {
         const actualLine =
           L.polyline(segment, {
-            color: '#76e4d2',
+            color: routeData.isRunTrip ? '#76e4d2' : '#facc15',
             weight: 6,
             opacity: 0.95,
             lineCap: 'round',
@@ -1384,6 +1670,11 @@ function normalizeActivityRecord(record) {
     elevationGain:
       Number.isFinite(Number(record.elevationGain))
         ? Math.round(Number(record.elevationGain))
+        : null,
+
+    elevationLoss:
+      Number.isFinite(Number(record.elevationLoss))
+        ? Math.round(Number(record.elevationLoss))
         : null,
 
     heartRate:
@@ -2187,8 +2478,13 @@ if (!isRunning) {
   if (seconds === 0) {
     runStartTime = new Date();
     totalElevationGain = 0;
-lastValidAltitude = null;
-lastRunningGpsAccuracy = null;
+    totalElevationLoss = 0;
+    lastValidAltitude = null;
+    elevationReferenceAltitude = null;
+    recentAltitudeSamples = [];
+    currentSmoothedAltitude = null;
+    splitStartAltitude = null;
+    lastRunningGpsAccuracy = null;
 runningGpsDiagnosticLog = [];
 
 runningCalories.textContent = '0 kcal';
@@ -2211,6 +2507,10 @@ runningGpsStatus.textContent = 'GPS 위치 확인 중';
   routeLine = null;
   lastValidPosition = null;
   lastValidAltitude = null;
+  elevationReferenceAltitude = null;
+  recentAltitudeSamples = [];
+  currentSmoothedAltitude = null;
+  splitStartAltitude = null;
   recentPositions = [];
 
   beginNewRouteSegment();
@@ -2262,6 +2562,19 @@ if (accuracy > MAX_ACCURACY) {
     accuracy
   );
 
+  const altitudeData = getAltitudeData(position);
+
+  addGpsDiagnostic(runningGpsDiagnosticLog, {
+    accepted: false,
+    reason: 'low-accuracy',
+    latitude: Number(latitude.toFixed(7)),
+    longitude: Number(longitude.toFixed(7)),
+    accuracy: Number(accuracy.toFixed(1)),
+    altitude: altitudeData.altitude,
+    altitudeAccuracy: altitudeData.altitudeAccuracy,
+    totalDistanceMeters: Number(totalDistance.toFixed(2))
+  });
+
   runningGpsStatus.textContent =
     'GPS 정확도 확인 중';
 
@@ -2292,6 +2605,38 @@ if (lastValidPosition) {
       lastValidPosition.accuracy
     );
 
+  const timing = getGpsSampleTiming(
+    lastValidPosition.timestamp,
+    gpsTimestamp
+  );
+
+  const speedMetersPerSecond = getGpsSpeedMetersPerSecond(
+    distanceFromLast,
+    lastValidPosition.timestamp,
+    gpsTimestamp
+  );
+
+  const altitudeData = getAltitudeData(position);
+
+  const commonDiagnostic = {
+    latitude: Number(latitude.toFixed(7)),
+    longitude: Number(longitude.toFixed(7)),
+    smoothedLatitude: Number(smoothedPosition.latitude.toFixed(7)),
+    smoothedLongitude: Number(smoothedPosition.longitude.toFixed(7)),
+    accuracy: Number(accuracy.toFixed(1)),
+    previousAccuracy: Number((lastValidPosition.accuracy || accuracy).toFixed(1)),
+    altitude: altitudeData.altitude,
+    altitudeAccuracy: altitudeData.altitudeAccuracy,
+    elapsedMs: timing.elapsedMs,
+    rawDistanceMeters: Number(distanceFromLast.toFixed(2)),
+    speedMetersPerSecond:
+      Number.isFinite(speedMetersPerSecond)
+        ? Number(speedMetersPerSecond.toFixed(2))
+        : null,
+    minimumAcceptedDistanceMeters: Number(minimumAcceptedDistance.toFixed(2)),
+    totalDistanceBeforeMeters: Number(totalDistance.toFixed(2))
+  };
+
   if (
     isGpsSampleTooSoon(
       lastValidPosition.timestamp,
@@ -2299,10 +2644,11 @@ if (lastValidPosition) {
     )
   ) {
     addGpsDiagnostic(runningGpsDiagnosticLog, {
+      ...commonDiagnostic,
       accepted: false,
       reason: 'sample-too-soon',
-      accuracy: Math.round(accuracy),
-      distanceMeters: Number(distanceFromLast.toFixed(2))
+      reflectedDistanceMeters: 0,
+      totalDistanceMeters: Number(totalDistance.toFixed(2))
     });
     return;
   }
@@ -2319,12 +2665,11 @@ if (lastValidPosition) {
     );
 
     addGpsDiagnostic(runningGpsDiagnosticLog, {
+      ...commonDiagnostic,
       accepted: false,
       reason: 'below-distance-threshold',
-      accuracy: Math.round(accuracy),
-      previousAccuracy: Math.round(lastValidPosition.accuracy || accuracy),
-      distanceMeters: Number(distanceFromLast.toFixed(2)),
-      minimumMeters: Number(minimumAcceptedDistance.toFixed(2))
+      reflectedDistanceMeters: 0,
+      totalDistanceMeters: Number(totalDistance.toFixed(2))
     });
 
     return;
@@ -2351,10 +2696,11 @@ if (lastValidPosition) {
     ];
 
     addGpsDiagnostic(runningGpsDiagnosticLog, {
+      ...commonDiagnostic,
       accepted: false,
       reason: 'implausible-speed',
-      accuracy: Math.round(accuracy),
-      distanceMeters: Number(distanceFromLast.toFixed(2))
+      reflectedDistanceMeters: 0,
+      totalDistanceMeters: Number(totalDistance.toFixed(2))
     });
 
     return;
@@ -2362,6 +2708,7 @@ if (lastValidPosition) {
 
   const previousDistance = totalDistance;
   const previousElapsedSeconds = lastGpsElapsedSeconds;
+  const previousAltitude = currentSmoothedAltitude;
   const calibratedDistance =
     getCalibratedGpsDistance(
       distanceFromLast
@@ -2369,23 +2716,31 @@ if (lastValidPosition) {
 
   totalDistance += calibratedDistance;
 
+  const smoothedAltitude = updateRunningElevation(position);
+
   addGpsDiagnostic(runningGpsDiagnosticLog, {
+    ...commonDiagnostic,
     accepted: true,
     reason: 'distance-added',
-    accuracy: Math.round(accuracy),
-    previousAccuracy: Math.round(lastValidPosition.accuracy || accuracy),
-    rawDistanceMeters: Number(distanceFromLast.toFixed(2)),
     calibratedDistanceMeters: Number(calibratedDistance.toFixed(2)),
+    reflectedDistanceMeters: Number(calibratedDistance.toFixed(2)),
     calibrationFactor: GPS_DISTANCE_CALIBRATION_FACTOR,
+    smoothedAltitude:
+      Number.isFinite(smoothedAltitude)
+        ? Number(smoothedAltitude.toFixed(2))
+        : null,
+    elevationGainMeters: Number(totalElevationGain.toFixed(2)),
+    elevationLossMeters: Number(totalElevationLoss.toFixed(2)),
     totalDistanceMeters: Number(totalDistance.toFixed(2))
   });
 
-  updateRunningElevation(position);
   addCompletedSplits(
     previousDistance,
     calibratedDistance,
     previousElapsedSeconds,
-    seconds
+    seconds,
+    previousAltitude,
+    smoothedAltitude
   );
 
   distanceDisplay.textContent =
@@ -2404,6 +2759,27 @@ if (totalDistance > 0 && seconds > 0) {
 
 
 console.log('총 이동거리:', totalDistance);
+} else {
+  const initialAltitude = updateRunningElevation(position);
+  const altitudeData = getAltitudeData(position);
+
+  addGpsDiagnostic(runningGpsDiagnosticLog, {
+    accepted: true,
+    reason: 'initial-position',
+    latitude: Number(latitude.toFixed(7)),
+    longitude: Number(longitude.toFixed(7)),
+    smoothedLatitude: Number(smoothedPosition.latitude.toFixed(7)),
+    smoothedLongitude: Number(smoothedPosition.longitude.toFixed(7)),
+    accuracy: Number(accuracy.toFixed(1)),
+    altitude: altitudeData.altitude,
+    altitudeAccuracy: altitudeData.altitudeAccuracy,
+    smoothedAltitude:
+      Number.isFinite(initialAltitude)
+        ? Number(initialAltitude.toFixed(2))
+        : null,
+    reflectedDistanceMeters: 0,
+    totalDistanceMeters: Number(totalDistance.toFixed(2))
+  });
 }
 
 lastValidPosition = {
@@ -2494,6 +2870,10 @@ pauseBtn.addEventListener('click', function () {
 
   lastValidPosition = null;
   lastValidAltitude = null;
+  elevationReferenceAltitude = null;
+  recentAltitudeSamples = [];
+  currentSmoothedAltitude = null;
+  splitStartAltitude = null;
   recentPositions = [];
 
   pauseBtn.textContent = '다시 시작';
@@ -2546,6 +2926,14 @@ map.on('dragstart', function () {
 stopBtn.addEventListener('click', function () {
   console.log('러닝 종료 버튼 클릭됨');
 
+  addGpsDiagnostic(runningGpsDiagnosticLog, {
+    accepted: true,
+    reason: 'stop-button',
+    displayedDistance: distanceDisplay.textContent,
+    totalDistanceMeters: Number(totalDistance.toFixed(2)),
+    elapsedSeconds: seconds
+  });
+
   // 종료를 누른 순간부터 늦게 도착하는 GPS 좌표를 무시한다.
   isRunning = false;
   paused = true;
@@ -2594,7 +2982,12 @@ paceMoodModal.classList.add('hidden');
   timer.textContent = '00:00';
   totalDistance = 0;
 totalElevationGain = 0;
+totalElevationLoss = 0;
 lastValidAltitude = null;
+elevationReferenceAltitude = null;
+recentAltitudeSamples = [];
+currentSmoothedAltitude = null;
+splitStartAltitude = null;
 lastRunningGpsAccuracy = null;
 
 distanceDisplay.textContent = '0.00 km';
@@ -3058,6 +3451,12 @@ let runTripElapsedSeconds = 0;
 let runTripTimerInterval = null;
 
 let runTripActualDistanceMeters = 0;
+let runTripTotalElevationGain = 0;
+let runTripTotalElevationLoss = 0;
+let runTripElevationReferenceAltitude = null;
+let runTripLastValidAltitude = null;
+let runTripRecentAltitudeSamples = [];
+let runTripCurrentSmoothedAltitude = null;
 let runTripLastValidPosition = null;
 let runTripStartTime = null;
 
@@ -4354,61 +4753,38 @@ function calculateCalories(distanceMeters) {
     DEFAULT_RUNNER_WEIGHT_KG * distanceKm
   );
 }
-function updateRunningElevation(position) {
-  const rawAltitude =
-    position.coords.altitude;
+function updateRunTripElevation(position) {
+  const altitudeData = getAltitudeData(position);
 
-  const rawAltitudeAccuracy =
-    position.coords.altitudeAccuracy;
+  const smoothedAltitude = addAltitudeSample(
+    runTripRecentAltitudeSamples,
+    altitudeData.altitude,
+    altitudeData.altitudeAccuracy
+  );
 
-  if (
-    rawAltitude === null ||
-    rawAltitude === undefined
-  ) {
-    runningElevationGain.textContent =
-      `${Math.round(totalElevationGain)} m`;
-
-    return;
+  if (!Number.isFinite(smoothedAltitude)) {
+    return null;
   }
 
-  const altitude = Number(rawAltitude);
-
-  const altitudeAccuracy =
-    rawAltitudeAccuracy === null ||
-    rawAltitudeAccuracy === undefined
-      ? null
-      : Number(rawAltitudeAccuracy);
-
-  if (!Number.isFinite(altitude)) {
-    return;
-  }
-
-  if (
-    altitudeAccuracy !== null &&
-    Number.isFinite(altitudeAccuracy) &&
-    altitudeAccuracy > 30
-  ) {
-    return;
-  }
-
-  if (lastValidAltitude !== null) {
-    const elevationDifference =
-      altitude - lastValidAltitude;
-
-    if (
-      elevationDifference >= 2 &&
-      elevationDifference <= 30
-    ) {
-      totalElevationGain +=
-        elevationDifference;
+  const state = updateElevationAccumulator(
+    smoothedAltitude,
+    {
+      referenceAltitude: runTripElevationReferenceAltitude,
+      lastAltitude: runTripLastValidAltitude,
+      gain: runTripTotalElevationGain,
+      loss: runTripTotalElevationLoss
     }
-  }
+  );
 
-  lastValidAltitude = altitude;
+  runTripElevationReferenceAltitude = state.referenceAltitude;
+  runTripLastValidAltitude = state.lastAltitude;
+  runTripTotalElevationGain = state.gain;
+  runTripTotalElevationLoss = state.loss;
+  runTripCurrentSmoothedAltitude = smoothedAltitude;
 
-  runningElevationGain.textContent =
-    `${Math.round(totalElevationGain)} m`;
+  return smoothedAltitude;
 }
+
 function getRunTripPlannedDistanceMeters() {
   if (!latestRunTripRouteSummary) {
     return 0;
@@ -4444,7 +4820,7 @@ function updateRunTripDashboard() {
   )} kcal`;
 
 runTripDashboardElevationGain.textContent =
-  '0 m';
+  `${Math.round(runTripTotalElevationGain)} m`;
 
 runTripDashboardHeartRate.textContent =
   '-- bpm';
@@ -4509,6 +4885,12 @@ function resetRunTripDashboard() {
 
   runTripElapsedSeconds = 0;
   runTripActualDistanceMeters = 0;
+  runTripTotalElevationGain = 0;
+  runTripTotalElevationLoss = 0;
+  runTripElevationReferenceAltitude = null;
+  runTripLastValidAltitude = null;
+  runTripRecentAltitudeSamples = [];
+  runTripCurrentSmoothedAltitude = null;
 
   runTripLastValidPosition = null;
   runTripRecentPositions = [];
@@ -4789,6 +5171,19 @@ function startRunTripLocationWatch() {
           Date.now();
 
         if (accuracy > MAX_ACCURACY) {
+          const altitudeData = getAltitudeData(position);
+
+          addGpsDiagnostic(runTripGpsDiagnosticLog, {
+            accepted: false,
+            reason: 'low-accuracy',
+            latitude: Number(latitude.toFixed(7)),
+            longitude: Number(longitude.toFixed(7)),
+            accuracy: Number(accuracy.toFixed(1)),
+            altitude: altitudeData.altitude,
+            altitudeAccuracy: altitudeData.altitudeAccuracy,
+            totalDistanceMeters: Number(runTripActualDistanceMeters.toFixed(2))
+          });
+
           runTripDashboardGps.textContent =
             `GPS 정확도 확인 중 · ${Math.round(
               accuracy
@@ -4898,17 +5293,49 @@ function startRunTripLocationWatch() {
                 distanceFromLast
               );
 
+            const timing = getGpsSampleTiming(
+              runTripLastValidPosition.timestamp,
+              gpsTimestamp
+            );
+
+            const speedMetersPerSecond = getGpsSpeedMetersPerSecond(
+              distanceFromLast,
+              runTripLastValidPosition.timestamp,
+              gpsTimestamp
+            );
+
             runTripActualDistanceMeters +=
               calibratedDistance;
+
+            const smoothedAltitude = updateRunTripElevation(position);
+            const altitudeData = getAltitudeData(position);
 
             addGpsDiagnostic(runTripGpsDiagnosticLog, {
               accepted: true,
               reason: 'distance-added',
-              accuracy: Math.round(accuracy),
-              previousAccuracy: Math.round(runTripLastValidPosition.accuracy || accuracy),
+              latitude: Number(latitude.toFixed(7)),
+              longitude: Number(longitude.toFixed(7)),
+              smoothedLatitude: Number(currentPosition.latitude.toFixed(7)),
+              smoothedLongitude: Number(currentPosition.longitude.toFixed(7)),
+              accuracy: Number(accuracy.toFixed(1)),
+              previousAccuracy: Number((runTripLastValidPosition.accuracy || accuracy).toFixed(1)),
+              altitude: altitudeData.altitude,
+              altitudeAccuracy: altitudeData.altitudeAccuracy,
+              smoothedAltitude:
+                Number.isFinite(smoothedAltitude)
+                  ? Number(smoothedAltitude.toFixed(2))
+                  : null,
+              elapsedMs: timing.elapsedMs,
               rawDistanceMeters: Number(distanceFromLast.toFixed(2)),
+              speedMetersPerSecond:
+                Number.isFinite(speedMetersPerSecond)
+                  ? Number(speedMetersPerSecond.toFixed(2))
+                  : null,
               calibratedDistanceMeters: Number(calibratedDistance.toFixed(2)),
+              reflectedDistanceMeters: Number(calibratedDistance.toFixed(2)),
               calibrationFactor: GPS_DISTANCE_CALIBRATION_FACTOR,
+              elevationGainMeters: Number(runTripTotalElevationGain.toFixed(2)),
+              elevationLossMeters: Number(runTripTotalElevationLoss.toFixed(2)),
               totalDistanceMeters: Number(runTripActualDistanceMeters.toFixed(2))
             });
           }
@@ -4918,6 +5345,29 @@ function startRunTripLocationWatch() {
           !runTripLastValidPosition ||
           shouldAcceptPoint
         ) {
+          if (!runTripLastValidPosition) {
+            const initialAltitude = updateRunTripElevation(position);
+            const altitudeData = getAltitudeData(position);
+
+            addGpsDiagnostic(runTripGpsDiagnosticLog, {
+              accepted: true,
+              reason: 'initial-position',
+              latitude: Number(latitude.toFixed(7)),
+              longitude: Number(longitude.toFixed(7)),
+              smoothedLatitude: Number(currentPosition.latitude.toFixed(7)),
+              smoothedLongitude: Number(currentPosition.longitude.toFixed(7)),
+              accuracy: Number(accuracy.toFixed(1)),
+              altitude: altitudeData.altitude,
+              altitudeAccuracy: altitudeData.altitudeAccuracy,
+              smoothedAltitude:
+                Number.isFinite(initialAltitude)
+                  ? Number(initialAltitude.toFixed(2))
+                  : null,
+              reflectedDistanceMeters: 0,
+              totalDistanceMeters: Number(runTripActualDistanceMeters.toFixed(2))
+            });
+          }
+
           runTripLastValidPosition =
             currentPosition;
 
@@ -5044,6 +5494,12 @@ async function startRunTripFollowing() {
   isRunTripMapFollowing = true;
   runTripRecentPositions = [];
   runTripLastGpsTimestamp = null;
+  runTripTotalElevationGain = 0;
+  runTripTotalElevationLoss = 0;
+  runTripElevationReferenceAltitude = null;
+  runTripLastValidAltitude = null;
+  runTripRecentAltitudeSamples = [];
+  runTripCurrentSmoothedAltitude = null;
   runTripGpsDiagnosticLog = [];
   resetRunTripArrivalTracking();
   beginNewRunTripRouteSegment();
@@ -5079,6 +5535,15 @@ function saveRunTripRecord() {
   }
 
   const runTripEndTime = new Date();
+
+  addGpsDiagnostic(runTripGpsDiagnosticLog, {
+    accepted: true,
+    reason: 'record-save',
+    displayedDistance: runTripDashboardDistance.textContent,
+    savedDistance: (runTripActualDistanceMeters / 1000).toFixed(2),
+    totalDistanceMeters: Number(runTripActualDistanceMeters.toFixed(2)),
+    elapsedSeconds: runTripElapsedSeconds
+  });
 
   const draft = getRunTripDraft();
 
@@ -5182,7 +5647,8 @@ const actualDistanceKm =
         runTripActualDistanceMeters
       ),
 
-    elevationGain: null,
+    elevationGain: Math.round(runTripTotalElevationGain),
+    elevationLoss: Math.round(runTripTotalElevationLoss),
     heartRate: null,
     cadence: null,
     gpsAccuracy: null,
@@ -5262,6 +5728,12 @@ plannedRouteCoordinates:
 
     memo: ''
   };
+
+  record.hasGpsDiagnostics = saveLatestGpsDiagnostics(
+    record.id,
+    'runtrip',
+    runTripGpsDiagnosticLog
+  );
 
   runRecords.unshift(record);
 
@@ -7614,6 +8086,10 @@ pauseRunTripBtn.addEventListener(
   runTripLastValidPosition = null;
   runTripRecentPositions = [];
   runTripLastGpsTimestamp = null;
+  runTripElevationReferenceAltitude = null;
+  runTripLastValidAltitude = null;
+  runTripRecentAltitudeSamples = [];
+  runTripCurrentSmoothedAltitude = null;
 
   beginNewRunTripRouteSegment();
 
@@ -7648,6 +8124,10 @@ pauseRunTripBtn.addEventListener(
     runTripLastValidPosition = null;
     runTripRecentPositions = [];
     runTripLastGpsTimestamp = null;
+    runTripElevationReferenceAltitude = null;
+    runTripLastValidAltitude = null;
+    runTripRecentAltitudeSamples = [];
+    runTripCurrentSmoothedAltitude = null;
     runTripActiveRouteSegment = null;
     runTripActualRouteLine = null;
     

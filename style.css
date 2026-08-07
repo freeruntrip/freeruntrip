@@ -737,9 +737,9 @@ height: 100dvh;
 
 .split-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: minmax(54px, 1fr) auto auto minmax(48px, auto);
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   padding: 13px 12px;
   border-radius: 14px;
   background: rgba(15, 23, 42, 0.58);
@@ -761,6 +761,34 @@ height: 100dvh;
   font-size: 15px;
   font-weight: 800;
 }
+
+.split-elevation {
+  min-width: 46px;
+  color: #f8fafc;
+  font-size: 14px;
+  font-weight: 800;
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media (max-width: 390px) {
+  .split-row {
+    grid-template-columns: minmax(48px, 1fr) auto auto minmax(42px, auto);
+    gap: 7px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .split-duration,
+  .split-elevation {
+    font-size: 12px;
+  }
+
+  .split-pace {
+    font-size: 13px;
+  }
+}
+
 /* 월간 러닝 리포트 */
 #monthlyReportScreen {
   min-height: 100vh;
@@ -7228,4 +7256,40 @@ body {
 /* 2026-08-07 RunTrip 상단 경로 요약 제거 후 간격 정리 */
 #detailTimeRange {
   margin-bottom: 18px;
+}
+
+
+/* ========================================
+   2026-08-07 러닝 시작 버튼 디자인 통일
+   RunTrip 검색창의 다크 네이비 톤을 기준으로 적용
+======================================== */
+.running-idle-panel #startBtn {
+  width: 100%;
+  min-height: 52px;
+  box-sizing: border-box;
+  padding: 0 18px;
+
+  border: 1px solid rgba(129, 218, 216, 0.34);
+  border-radius: 16px;
+
+  background: rgba(23, 32, 51, 0.96);
+  color: #f8fafc;
+
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.01em;
+
+  box-shadow:
+    0 10px 24px rgba(15, 23, 42, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.running-idle-panel #startBtn:active {
+  transform: scale(0.985);
+  border-color: rgba(129, 218, 216, 0.58);
+  background: rgba(30, 41, 59, 0.98);
 }
