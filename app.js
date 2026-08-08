@@ -433,6 +433,84 @@ let runningGpsDiagnosticLog = [];
 let runTripGpsDiagnosticLog = [];
 let runRecords = JSON.parse(localStorage.getItem('runRecords')) || [];
 
+/*
+  기록 저장 안정화:
+  장시간 러닝/RunTrip의 GPS 진단 로그를 기록마다 전부 localStorage에
+  보관하면 Safari 저장 용량을 초과해 종료 저장이 예외로 중단될 수 있다.
+  화면/거리/GPS 측정 로직은 그대로 두고, 기록에 첨부하는 진단 로그만
+  최근 샘플로 제한한다. 저장 공간이 부족하면 기존 기록의 진단 로그를
+  제거한 경량 사본으로 한 번 더 저장한다.
+*/
+const RECORD_GPS_DIAGNOSTIC_LIMIT = 300;
+
+function getGpsDiagnosticsForRecord(sourceLog) {
+  if (!Array.isArray(sourceLog)) {
+    return [];
+  }
+
+  return sourceLog
+    .slice(-RECORD_GPS_DIAGNOSTIC_LIMIT)
+    .map(function (entry) {
+      return { ...entry };
+    });
+}
+
+function persistRunRecordsSafely(nextRecords) {
+  try {
+    localStorage.setItem(
+      'runRecords',
+      JSON.stringify(nextRecords)
+    );
+
+    return {
+      success: true,
+      records: nextRecords,
+      compacted: false
+    };
+  } catch (error) {
+    console.warn(
+      '기록 전체 저장 실패, GPS 진단 로그를 정리해 다시 저장합니다:',
+      error
+    );
+  }
+
+  const compactedRecords = nextRecords.map(function (record) {
+    if (!record || typeof record !== 'object') {
+      return record;
+    }
+
+    return {
+      ...record,
+      gpsDiagnostics: []
+    };
+  });
+
+  try {
+    localStorage.setItem(
+      'runRecords',
+      JSON.stringify(compactedRecords)
+    );
+
+    return {
+      success: true,
+      records: compactedRecords,
+      compacted: true
+    };
+  } catch (error) {
+    console.error(
+      '기록 저장 최종 실패:',
+      error
+    );
+
+    return {
+      success: false,
+      records: nextRecords,
+      compacted: false,
+      error: error
+    };
+  }
+}
+
 let selectedPaceMood =
   localStorage.getItem('selectedPaceMood') ||
   '마음 환기 Pace';
@@ -1207,9 +1285,9 @@ routeSegments: routeSegments
   })
   };
 
-  record.gpsDiagnostics = runningGpsDiagnosticLog.map(function (entry) {
-    return { ...entry };
-  });
+  record.gpsDiagnostics = getGpsDiagnosticsForRecord(
+    runningGpsDiagnosticLog
+  );
 
   runRecords.unshift(record);
 
@@ -5662,9 +5740,9 @@ plannedRouteCoordinates:
   };
 
   record.gpsDiagnostics =
-  runTripGpsDiagnosticLog.map(function (entry) {
-    return { ...entry };
-  });
+    getGpsDiagnosticsForRecord(
+      runTripGpsDiagnosticLog
+    );
 
 record.gpsDiagnosticSummary = {
   sampleCount:
@@ -5685,12 +5763,27 @@ record.gpsDiagnosticSummary = {
     ).length
 };
 
-  runRecords.unshift(record);
+  const nextRunRecords = [
+    record,
+    ...runRecords
+  ];
 
-  localStorage.setItem(
-    'runRecords',
-    JSON.stringify(runRecords)
-  );
+  const persistResult =
+    persistRunRecordsSafely(
+      nextRunRecords
+    );
+
+  if (!persistResult.success) {
+    return null;
+  }
+
+  runRecords = persistResult.records;
+
+  if (persistResult.compacted) {
+    console.warn(
+      '저장 공간 확보를 위해 기존 기록의 GPS 진단 로그를 정리했습니다.'
+    );
+  }
 
   renderRunRecords();
   renderRecordProfileFeed();
@@ -5772,6 +5865,16 @@ function completeRunTrip(
 
   const savedRecord =
     saveRunTripRecord();
+
+  if (!savedRecord) {
+    isRunTripCompletionInProgress = false;
+
+    alert(
+      'RUNTRIP 기록을 저장하지 못했어요. 기록은 그대로 유지하고 있으니 다시 종료해 주세요.'
+    );
+
+    return null;
+  }
 
   clearActiveRunTripState();
 
