@@ -462,9 +462,9 @@
 </section>
 <div id="paceMoodModal" class="hidden">
   <div class="pace-mood-modal-card">
-    <p id="activitySaveModalLabel" class="card-label">TODAY'S PACE MOOD</p>
-    <h3 id="activitySaveModalTitle">오늘 러닝의 Pace Mood를 선택해 주세요</h3>
-    <p id="activitySaveModalGuide" class="pace-mood-guide">선택한 감성 문구가 이번 러닝 기록에 저장됩니다.</p>
+    <p class="card-label">TODAY'S PACE MOOD</p>
+    <h3>오늘 러닝의 Pace Mood를 선택해 주세요</h3>
+    <p class="pace-mood-guide">선택한 감성 문구가 이번 러닝 기록에 저장됩니다.</p>
 
     <div id="paceMoodOptions">
       <button class="pace-mood-option" data-mood="생각 정리 Pace">생각 정리</button>
@@ -475,24 +475,7 @@
       <button class="pace-mood-option" data-mood="낭만 충전 Pace">낭만 충전</button>
       <button class="pace-mood-option" data-mood="나를 돌보는 Pace">나를 돌보는</button>
     </div>
-<div class="run-memory-inputs">
-  <label for="runPhotoInput" class="run-photo-label">
-    <span>RUN PHOTO <em>(선택)</em></span>
-    <input id="runPhotoInput" type="file" accept="image/*" />
-    <small id="runPhotoFileName">사진을 선택하면 기록에 함께 저장됩니다.</small>
-  </label>
-
-  <label for="runMemoInput" class="run-memo-label">
-    <span>RUN NOTE <em>(선택)</em></span>
-    <textarea
-      id="runMemoInput"
-      maxlength="80"
-      placeholder="오늘 러닝의 한 줄을 남겨보세요"
-    ></textarea>
-    <small><span id="runMemoCount">0</span>/80</small>
-  </label>
-</div>
-    <div class="pace-mood-modal-actions">
+<div class="pace-mood-modal-actions">
   <button
     id="backFromPaceMoodBtn"
     type="button"
@@ -634,7 +617,32 @@
     <div id="detailSplitsList"></div>
   </section>
 
-  <div id="detailMemory" class="hidden">
+  <section class="detail-photo-actions">
+  <button
+    id="detailTakePhotoBtn"
+    class="detail-take-photo-btn"
+    type="button"
+  >
+    <span aria-hidden="true">⌾</span>
+    <strong>사진 찍기</strong>
+  </button>
+
+  <p>
+    촬영한 사진을 이 기록과 함께 남길 수 있어요.
+  </p>
+</section>
+
+<input
+  id="detailCameraInput"
+  class="detail-camera-input"
+  type="file"
+  accept="image/*"
+  capture="environment"
+  aria-hidden="true"
+  tabindex="-1"
+/>
+
+<div id="detailMemory" class="hidden">
     <img id="detailRunPhoto" alt="러닝 기록 사진" />
 
     <div id="detailRunMemoWrap">

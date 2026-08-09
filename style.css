@@ -7345,3 +7345,69 @@ body {
     font-size: 19px;
   }
 }
+
+
+/* ========================================
+   2026-08-10 기록 상세 사진 찍기 버튼 V1
+======================================== */
+.detail-photo-actions {
+  margin-top: 14px;
+  margin-bottom: 14px;
+}
+
+.detail-take-photo-btn {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 16px;
+  border: 1px solid rgba(129, 218, 216, 0.38);
+  border-radius: 16px;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(23, 32, 51, 0.98),
+      rgba(30, 41, 59, 0.98)
+    );
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.detail-take-photo-btn > span {
+  color: #81dad8;
+  font-size: 21px;
+  line-height: 1;
+}
+
+.detail-take-photo-btn > strong {
+  font: inherit;
+}
+
+.detail-take-photo-btn:active {
+  transform: scale(0.985);
+  border-color: rgba(129, 218, 216, 0.62);
+}
+
+.detail-photo-actions > p {
+  margin: 8px 3px 0;
+  color: #94a3b8;
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.detail-camera-input {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
