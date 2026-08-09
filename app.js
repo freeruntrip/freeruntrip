@@ -5680,9 +5680,9 @@ pace:
       'RunTrip Journey',
 
     originName:
-       getRunTripPlaceDisplayName(
-         draft.origin
-      ) || '출발지',
+      getRunTripSavedOriginName(
+        draft.origin
+      ),
 
     destinationName:
       getRunTripPlaceDisplayName(
@@ -6007,6 +6007,104 @@ async function reverseGeocodeRunTripOrigin(
 
     return null;
   }
+}
+
+function getRunTripCurrentLocationAddress(place) {
+  if (!place) {
+    return '';
+  }
+
+  return (
+    place.roadAddress ||
+    place.lotAddress ||
+    place.address ||
+    place.primaryText ||
+    place.displayName ||
+    place.name ||
+    ''
+  );
+}
+
+function createRunTripCurrentLocationPlace(
+  place,
+  latitude,
+  longitude
+) {
+  const actualAddress =
+    getRunTripCurrentLocationAddress(
+      place
+    );
+
+  if (place && actualAddress) {
+    return {
+      ...place,
+
+      type: 'current-location',
+
+      isCurrentLocation:
+        true,
+
+      displayName:
+        actualAddress,
+
+      primaryText:
+        actualAddress,
+
+      secondaryText:
+        place.buildingName ||
+        place.name ||
+        place.secondaryText ||
+        '',
+
+      latitude:
+        Number(latitude),
+
+      longitude:
+        Number(longitude)
+    };
+  }
+
+  return {
+    type: 'current-location',
+    isCurrentLocation: true,
+    name: '현재 위치',
+    displayName: '현재 위치',
+    primaryText: '현재 위치',
+    secondaryText: '',
+    address: '',
+    roadAddress: '',
+    lotAddress: '',
+    latitude: Number(latitude),
+    longitude: Number(longitude)
+  };
+}
+
+function getRunTripSavedOriginName(place) {
+  if (!place) {
+    return '출발지';
+  }
+
+  if (
+    place.isCurrentLocation === true ||
+    place.type === 'current-location'
+  ) {
+    return (
+      getRunTripCurrentLocationAddress(
+        place
+      ) ||
+      getRunTripPlaceDisplayName(
+        place
+      ) ||
+      '현재 위치'
+    );
+  }
+
+  return (
+    getRunTripPlaceDisplayName(
+      place
+    ) ||
+    '출발지'
+  );
 }
 
 function escapePlaceSearchText(value) {
@@ -6844,6 +6942,10 @@ function createRunTripPlaceRecord(place) {
 
     source:
       place.source || '',
+
+    isCurrentLocation:
+      place.isCurrentLocation === true ||
+      place.type === 'current-location',
 
     latitude:
       Number(latLng[0]),
@@ -8030,20 +8132,16 @@ useCurrentLocationBtn.addEventListener('click', function () {
         );
 
       selectedRunTripOrigin =
-        reverseGeocodedPlace || {
-          type: 'current-location',
-          name: '현재 위치',
-          displayName: '현재 위치',
-          primaryText: '현재 위치',
-          secondaryText: '',
-          latitude: latitude,
-          longitude: longitude
-        };
+        createRunTripCurrentLocationPlace(
+          reverseGeocodedPlace,
+          latitude,
+          longitude
+        );
 
       runTripOriginInput.value =
-        getRunTripPlaceDisplayName(
+        getRunTripSavedOriginName(
           selectedRunTripOrigin
-        ) || '현재 위치';
+        );
 
       isGettingRunTripCurrentLocation = false;
 
@@ -8052,7 +8150,7 @@ useCurrentLocationBtn.addEventListener('click', function () {
 
       runTripStatus.textContent =
         reverseGeocodedPlace
-          ? `${getRunTripPlaceDisplayName(reverseGeocodedPlace)}을(를) 출발지로 설정했어요.`
+          ? `${getRunTripSavedOriginName(selectedRunTripOrigin)}을(를) 출발지로 설정했어요.`
           : '현재 위치를 출발지로 설정했어요.';
     },
 
