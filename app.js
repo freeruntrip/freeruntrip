@@ -5357,6 +5357,25 @@ function startRunTripLocationWatch() {
           }
         }
 
+        /*
+          도착 감지는 거리 측정용 GPS 필터와 분리한다.
+          경유지/도착지 근처에서 사용자가 속도를 줄이거나 멈추면
+          좌표 간 이동거리가 짧아 거리 계산에서는 제외될 수 있다.
+          하지만 정확도가 허용 범위 안인 GPS 샘플이라면
+          도착 판정에는 계속 사용해 체크포인트를 놓치지 않게 한다.
+        */
+        checkRunTripWaypointArrival(
+          currentPosition.latitude,
+          currentPosition.longitude,
+          accuracy
+        );
+
+        checkRunTripArrival(
+          currentPosition.latitude,
+          currentPosition.longitude,
+          accuracy
+        );
+
         if (
           !runTripLastValidPosition ||
           shouldAcceptPoint
@@ -5424,18 +5443,6 @@ function startRunTripLocationWatch() {
               }
             );
           }
-
-          checkRunTripWaypointArrival(
-            currentPosition.latitude,
-            currentPosition.longitude,
-            accuracy
-          );
-
-          checkRunTripArrival(
-            currentPosition.latitude,
-            currentPosition.longitude,
-            accuracy
-          );
         }
 
         updateRunTripDashboard();
