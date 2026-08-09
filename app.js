@@ -391,9 +391,23 @@ const runPhotoInput = document.getElementById('runPhotoInput');
 const runPhotoFileName = document.getElementById('runPhotoFileName');
 const runMemoInput = document.getElementById('runMemoInput');
 const runMemoCount = document.getElementById('runMemoCount');
+const activitySaveModalLabel = document.getElementById(
+  'activitySaveModalLabel'
+);
+const activitySaveModalTitle = document.getElementById(
+  'activitySaveModalTitle'
+);
+const activitySaveModalGuide = document.getElementById(
+  'activitySaveModalGuide'
+);
+const paceMoodOptionsWrap = document.getElementById(
+  'paceMoodOptions'
+);
 
 let pendingRunPhoto = '';
 let isPhotoProcessing = false;
+let pendingActivitySaveType = null;
+let pendingRunTripArrived = false;
 let detailMap = null;
 let detailRouteLines = [];
 let detailStartMarker = null;
@@ -573,6 +587,76 @@ function resetRunMemoryInputs() {
   runMemoInput.value = '';
   runMemoCount.textContent = '0';
   runPhotoFileName.textContent = '사진을 선택하면 기록에 함께 저장됩니다.';
+}
+
+function configureActivitySaveModal(activityType) {
+  const isRunTrip =
+    activityType === 'runtrip';
+
+  pendingActivitySaveType =
+    isRunTrip
+      ? 'runtrip'
+      : 'running';
+
+  activitySaveModalLabel.textContent =
+    isRunTrip
+      ? 'RUNTRIP MEMORY'
+      : "TODAY'S PACE MOOD";
+
+  activitySaveModalTitle.textContent =
+    isRunTrip
+      ? '이번 RunTrip의 순간을 남겨보세요'
+      : '오늘 러닝의 Pace Mood를 선택해 주세요';
+
+  activitySaveModalGuide.textContent =
+    isRunTrip
+      ? '사진과 한 줄 메모는 선택 사항이며 RunTrip 기록에 함께 저장됩니다.'
+      : '선택한 감성 문구와 사진, 한 줄 메모가 이번 러닝 기록에 저장됩니다.';
+
+  paceMoodOptionsWrap.classList.toggle(
+    'hidden',
+    isRunTrip
+  );
+
+  backFromPaceMoodBtn.textContent =
+    isRunTrip
+      ? 'RUNTRIP 계속하기'
+      : '러닝 계속하기';
+
+  saveRunWithMoodBtn.textContent =
+    isRunTrip
+      ? 'RUNTRIP 기록 저장'
+      : '이 Mood로 저장하기';
+}
+
+function openActivitySaveModal(
+  activityType,
+  options = {}
+) {
+  configureActivitySaveModal(
+    activityType
+  );
+
+  pendingRunTripArrived =
+    activityType === 'runtrip' &&
+    options.arrived === true;
+
+  paceMoodModal.classList.remove(
+    'hidden'
+  );
+}
+
+function closeActivitySaveModal() {
+  paceMoodModal.classList.add(
+    'hidden'
+  );
+
+  pendingActivitySaveType = null;
+  pendingRunTripArrived = false;
+
+  paceMoodOptionsWrap.classList.remove(
+    'hidden'
+  );
 }
 
 runPhotoInput.addEventListener('change', async function () {
@@ -2980,12 +3064,49 @@ stopBtn.addEventListener('click', function () {
 
   watchId = null;
 
-  paceMoodModal.classList.remove('hidden');
+  openActivitySaveModal(
+    'running'
+  );
 });
 backFromPaceMoodBtn.addEventListener(
   'click',
   function () {
-    paceMoodModal.classList.add('hidden');
+    const activityType =
+      pendingActivitySaveType;
+
+    closeActivitySaveModal();
+
+    if (activityType === 'runtrip') {
+      if (
+        !isRunTripFollowing ||
+        !runTripStartTime
+      ) {
+        return;
+      }
+
+      isRunTripPaused = false;
+      isRunTripMapFollowing = true;
+      isRunTripCompletionInProgress = false;
+      hasRunTripArrivalNotified = false;
+
+      runTripLastValidPosition = null;
+      runTripRecentPositions = [];
+      runTripLastGpsTimestamp = null;
+      runTripElevationReferenceAltitude = null;
+      runTripLastValidAltitude = null;
+      runTripRecentAltitudeSamples = [];
+      runTripCurrentSmoothedAltitude = null;
+
+      beginNewRunTripRouteSegment();
+
+      startRunTripTimer();
+      startRunTripLocationWatch();
+
+      updateRunTripDashboard();
+      saveActiveRunTripState();
+
+      return;
+    }
 
     // 종료 직전까지 측정한 시간·거리·경로를 유지한 채
     // 일반 러닝을 다시 시작한다.
@@ -2993,6 +3114,36 @@ backFromPaceMoodBtn.addEventListener(
   }
 );
 saveRunWithMoodBtn.addEventListener('click', function () {
+  if (isPhotoProcessing) {
+    return;
+  }
+
+  const activityType =
+    pendingActivitySaveType ||
+    'running';
+
+  if (activityType === 'runtrip') {
+    const savedRunTripRecord =
+      completeRunTrip({
+        arrived:
+          pendingRunTripArrived,
+        skipMemoryPrompt: true,
+        photo:
+          pendingRunPhoto,
+        memo:
+          runMemoInput.value.trim()
+      });
+
+    if (!savedRunTripRecord) {
+      return;
+    }
+
+    resetRunMemoryInputs();
+    closeActivitySaveModal();
+
+    return;
+  }
+
   const activeMoodButton = document.querySelector('.pace-mood-option.active');
 
   if (activeMoodButton) {
@@ -3004,46 +3155,45 @@ saveRunWithMoodBtn.addEventListener('click', function () {
     );
   }
 
-const savedRunRecord =
-  saveRunRecord();
+  const savedRunRecord =
+    saveRunRecord();
 
-resetRunMemoryInputs();
-
-paceMoodModal.classList.add('hidden');
+  resetRunMemoryInputs();
+  closeActivitySaveModal();
 
   seconds = 0;
   timer.textContent = '00:00';
   totalDistance = 0;
-totalElevationGain = 0;
-totalElevationLoss = 0;
-lastValidAltitude = null;
-elevationReferenceAltitude = null;
-recentAltitudeSamples = [];
-currentSmoothedAltitude = null;
-splitStartAltitude = null;
-lastRunningGpsAccuracy = null;
+  totalElevationGain = 0;
+  totalElevationLoss = 0;
+  lastValidAltitude = null;
+  elevationReferenceAltitude = null;
+  recentAltitudeSamples = [];
+  currentSmoothedAltitude = null;
+  splitStartAltitude = null;
+  lastRunningGpsAccuracy = null;
 
-distanceDisplay.textContent = '0.00 km';
-paceDisplay.textContent = `--'--"`;
+  distanceDisplay.textContent = '0.00 km';
+  paceDisplay.textContent = `--'--"`;
 
-runningCalories.textContent = '0 kcal';
-runningElevationGain.textContent = '0 m';
-runningHeartRate.textContent = '-- bpm';
-runningCadence.textContent = '-- spm';
+  runningCalories.textContent = '0 kcal';
+  runningElevationGain.textContent = '0 m';
+  runningHeartRate.textContent = '-- bpm';
+  runningCadence.textContent = '-- spm';
 
-runningGpsStatus.textContent =
-  'GPS 연결 준비';
+  runningGpsStatus.textContent =
+    'GPS 연결 준비';
 
- routeCoordinates = [];
-routeSegments = [];
-activeRouteSegment = [];
-recentPositions = [];
-lastValidPosition = null;
+  routeCoordinates = [];
+  routeSegments = [];
+  activeRouteSegment = [];
+  recentPositions = [];
+  lastValidPosition = null;
 
-splitRecords = [];
-nextSplitDistanceMeters = 1000;
-splitStartElapsedSeconds = 0;
-lastGpsElapsedSeconds = 0;
+  splitRecords = [];
+  nextSplitDistanceMeters = 1000;
+  splitStartElapsedSeconds = 0;
+  lastGpsElapsedSeconds = 0;
 
   routeLines.forEach(function (line) {
     map.removeLayer(line);
@@ -3602,7 +3752,7 @@ function showRunTripCheckpointNotice(options = {}) {
         ${
           isWaypoint
             ? '다음 경유지 또는 도착지로 계속 이동해 주세요.'
-            : 'RUNTRIP을 자동 종료하고 기록을 저장하고 있어요.'
+            : 'RUNTRIP을 완료했어요. 사진과 한 줄 메모를 남길 수 있어요.'
         }
       </span>
     </div>
@@ -5546,7 +5696,7 @@ async function startRunTripFollowing() {
 
   saveActiveRunTripState();
 }
-function saveRunTripRecord() {
+function saveRunTripRecord(options = {}) {
   if (!runTripStartTime) {
     return null;
   }
@@ -5741,9 +5891,13 @@ routeSegments:
 plannedRouteCoordinates:
   plannedRoute,
 
-    photo: '',
+    photo:
+      options.photo || '',
 
-    memo: ''
+    memo:
+      String(
+        options.memo || ''
+      ).trim()
   };
 
   record.gpsDiagnostics =
@@ -5861,17 +6015,60 @@ function completeRunTrip(
   options = {}
 ) {
   if (
-    isRunTripCompletionInProgress ||
     !isRunTripFollowing ||
     !runTripStartTime
   ) {
     return null;
   }
 
-  isRunTripCompletionInProgress = true;
+  if (
+    options.skipMemoryPrompt !== true
+  ) {
+    if (isRunTripCompletionInProgress) {
+      return null;
+    }
+
+    isRunTripCompletionInProgress = true;
+    isRunTripPaused = true;
+
+    clearInterval(
+      runTripTimerInterval
+    );
+
+    runTripTimerInterval = null;
+
+    if (
+      runTripFollowWatchId !== null &&
+      runTripFollowWatchId !== undefined
+    ) {
+      navigator.geolocation.clearWatch(
+        runTripFollowWatchId
+      );
+    }
+
+    runTripFollowWatchId = null;
+
+    updateRunTripDashboard();
+    saveActiveRunTripState();
+
+    openActivitySaveModal(
+      'runtrip',
+      {
+        arrived:
+          options.arrived === true
+      }
+    );
+
+    return null;
+  }
 
   const savedRecord =
-    saveRunTripRecord();
+    saveRunTripRecord({
+      photo:
+        options.photo || '',
+      memo:
+        options.memo || ''
+    });
 
   if (!savedRecord) {
     isRunTripCompletionInProgress = false;
