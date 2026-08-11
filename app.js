@@ -3499,7 +3499,10 @@ let runTripNextWaypointIndex = 0;
 let runTripWaypointArrivalHits = 0;
 let runTripDestinationArrivalHits = 0;
 let runTripClosestDestinationDistance = Infinity;
+let activeRunTripCheckpointNotice = null;
 
+const RUNTRIP_NOTICE_VISIBLE_DISTANCE_METERS = 50;
+const RUNTRIP_NOTICE_DISMISS_DISTANCE_METERS = 60;
 const RUNTRIP_ARRIVAL_DISTANCE_METERS = 40;
 const RUNTRIP_ARRIVAL_MAX_ACCURACY_METERS = 40;
 const RUNTRIP_ARRIVAL_MIN_DISTANCE_METERS = 50;
@@ -3565,6 +3568,7 @@ function getWeightedSmoothedRunTripPosition(
 }
 
 function resetRunTripArrivalTracking() {
+  removeRunTripCheckpointNotice();
   runTripNextWaypointIndex = 0;
   runTripWaypointArrivalHits = 0;
   runTripDestinationArrivalHits = 0;
@@ -3592,13 +3596,81 @@ function getRunTripWaypointTargets() {
     : [];
 }
 
-function showRunTripCheckpointNotice(options = {}) {
-  const existingNotice =
-    document.querySelector('.runtrip-arrival-notice');
+function getRunTripWaypointOrdinal(number) {
+  const labels = [
+    '첫번째',
+    '두번째',
+    '세번째'
+  ];
 
-  if (existingNotice) {
-    existingNotice.remove();
+  const index =
+    Math.max(1, Number(number) || 1) - 1;
+
+  return labels[index] || `${index + 1}번째`;
+}
+
+function removeRunTripCheckpointNotice() {
+  if (
+    activeRunTripCheckpointNotice &&
+    activeRunTripCheckpointNotice.element
+  ) {
+    activeRunTripCheckpointNotice.element.remove();
   }
+
+  activeRunTripCheckpointNotice = null;
+}
+
+function updateRunTripCheckpointNoticeDistance(
+  latitude,
+  longitude
+) {
+  if (
+    !activeRunTripCheckpointNotice ||
+    !Array.isArray(
+      activeRunTripCheckpointNotice.targetLatLng
+    )
+  ) {
+    return;
+  }
+
+  const targetLatLng =
+    activeRunTripCheckpointNotice.targetLatLng;
+
+  const distanceToNoticeTarget =
+    calculateDistance(
+      latitude,
+      longitude,
+      targetLatLng[0],
+      targetLatLng[1]
+    );
+
+  activeRunTripCheckpointNotice.distanceMeters =
+    distanceToNoticeTarget;
+
+  /*
+    경유지 알림은 50m 안에서 계속 유지한다.
+    GPS 흔들림으로 50m 경계를 잠깐 넘는 경우 바로 닫히지 않도록
+    60m를 실제 닫힘 기준으로 사용한다.
+  */
+  if (
+    distanceToNoticeTarget >
+    RUNTRIP_NOTICE_DISMISS_DISTANCE_METERS
+  ) {
+    removeRunTripCheckpointNotice();
+  }
+}
+
+function openRunTripCheckpointCamera() {
+  if (!detailCameraInput) {
+    return;
+  }
+
+  detailCameraInput.value = '';
+  detailCameraInput.click();
+}
+
+function showRunTripCheckpointNotice(options = {}) {
+  removeRunTripCheckpointNotice();
 
   const isWaypoint =
     options.type === 'waypoint';
@@ -3612,32 +3684,99 @@ function showRunTripCheckpointNotice(options = {}) {
       : 'runtrip-arrival-notice';
 
   notice.setAttribute('role', 'alert');
+  notice.setAttribute('aria-live', 'assertive');
+
+  const waypointNumber =
+    Math.max(1, Number(options.number) || 1);
+
+  const title = isWaypoint
+    ? `${getRunTripWaypointOrdinal(waypointNumber)} 경유지에 도착했어요.`
+    : '도착지에 도착했어요.';
+
+  const placeText =
+    escapePlaceSearchText(
+      options.name ||
+      (isWaypoint ? '경유지' : '도착지')
+    );
 
   notice.innerHTML = `
     <div class="runtrip-arrival-notice-icon">
-      ${isWaypoint ? String(options.number || '✓') : '✓'}
+      ${isWaypoint ? String(waypointNumber) : '✓'}
     </div>
 
-    <div>
+    <div class="runtrip-arrival-notice-content">
       <strong>
-        ${
-          isWaypoint
-            ? `${escapePlaceSearchText(options.name || '경유지')}에 도착했어요`
-            : '도착지에 도착했어요'
-        }
+        ${title}
       </strong>
 
-      <span>
-        ${
-          isWaypoint
-            ? '다음 경유지 또는 도착지로 계속 이동해 주세요.'
-            : 'RUNTRIP을 자동 종료하고 기록을 저장하고 있어요.'
-        }
+      <span class="runtrip-arrival-notice-place">
+        ${placeText}
       </span>
+
+      <div class="runtrip-arrival-notice-actions">
+        <button
+          class="runtrip-arrival-notice-pause"
+          type="button"
+        >
+          일시정지
+        </button>
+
+        <button
+          class="runtrip-arrival-notice-photo"
+          type="button"
+        >
+          사진 기록 남기기
+        </button>
+      </div>
     </div>
   `;
 
   document.body.appendChild(notice);
+
+  activeRunTripCheckpointNotice = {
+    element: notice,
+    type: options.type || 'destination',
+    targetLatLng:
+      Array.isArray(options.targetLatLng)
+        ? options.targetLatLng.slice(0, 2)
+        : null,
+    distanceMeters: 0
+  };
+
+  const pauseNoticeButton =
+    notice.querySelector(
+      '.runtrip-arrival-notice-pause'
+    );
+
+  const photoNoticeButton =
+    notice.querySelector(
+      '.runtrip-arrival-notice-photo'
+    );
+
+  if (pauseNoticeButton) {
+    pauseNoticeButton.addEventListener(
+      'click',
+      function () {
+        if (
+          !isRunTripFollowing ||
+          isRunTripPaused
+        ) {
+          return;
+        }
+
+        pauseRunTripBtn.click();
+      }
+    );
+  }
+
+  if (photoNoticeButton) {
+    photoNoticeButton.addEventListener(
+      'click',
+      function () {
+        openRunTripCheckpointCamera();
+      }
+    );
+  }
 
   if (navigator.vibrate) {
     navigator.vibrate(
@@ -3646,14 +3785,6 @@ function showRunTripCheckpointNotice(options = {}) {
         : [180, 80, 180]
     );
   }
-
-  setTimeout(function () {
-    notice.classList.add('is-hiding');
-
-    setTimeout(function () {
-      notice.remove();
-    }, 300);
-  }, isWaypoint ? 3400 : 4200);
 }
 
 function checkRunTripWaypointArrival(
@@ -3709,7 +3840,8 @@ function checkRunTripWaypointArrival(
   showRunTripCheckpointNotice({
     type: 'waypoint',
     number: runTripNextWaypointIndex + 1,
-    name: target.name
+    name: target.name,
+    targetLatLng: target.latLng
   });
 
   runTripNextWaypointIndex++;
@@ -4624,8 +4756,20 @@ function getRunTripArrivalTargetLatLng() {
 }
 
 function showRunTripArrivalNotice() {
+  const draft = getRunTripDraft();
+  const arrivalPlace =
+    draft.returnToStart
+      ? draft.origin
+      : draft.destination;
+
   showRunTripCheckpointNotice({
-    type: 'destination'
+    type: 'destination',
+    name:
+      getRunTripPlaceDisplayName(
+        arrivalPlace
+      ) || '도착지',
+    targetLatLng:
+      getRunTripArrivalTargetLatLng()
   });
 }
 
@@ -5393,6 +5537,11 @@ function startRunTripLocationWatch() {
           하지만 정확도가 허용 범위 안인 GPS 샘플이라면
           도착 판정에는 계속 사용해 체크포인트를 놓치지 않게 한다.
         */
+        updateRunTripCheckpointNoticeDistance(
+          currentPosition.latitude,
+          currentPosition.longitude
+        );
+
         checkRunTripWaypointArrival(
           currentPosition.latitude,
           currentPosition.longitude,
@@ -5913,6 +6062,7 @@ function completeRunTrip(
   }
 
   clearActiveRunTripState();
+  removeRunTripCheckpointNotice();
 
   stopRunTripFollowing({
     restoreRoute: false

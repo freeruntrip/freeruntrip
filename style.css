@@ -7411,3 +7411,245 @@ body {
   opacity: 0;
   pointer-events: none;
 }
+
+/* ========================================
+   2026-08-11 RunTrip 경유지 · 도착 알림 UX
+   - 거리 기반 유지
+   - 50m 안에서 표시 유지 / 60m 이탈 시 JS에서 닫힘
+   - 일시정지 · 사진 기록 남기기 버튼
+======================================== */
+
+.runtrip-arrival-notice {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 14px);
+  left: 50%;
+  z-index: 10001;
+
+  width: min(
+    calc(100% - 24px),
+    calc(var(--app-mobile-width) - 24px)
+  );
+
+  box-sizing: border-box;
+  padding: 14px;
+
+  transform: translateX(-50%);
+
+  border: 1px solid rgba(129, 218, 216, 0.46);
+  border-radius: 20px;
+
+  background:
+    linear-gradient(
+      145deg,
+      rgba(15, 23, 42, 0.985),
+      rgba(23, 32, 51, 0.985)
+    );
+
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+
+  color: #ffffff;
+
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.34);
+
+  animation:
+    runtrip-arrival-in
+    280ms
+    ease-out;
+
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+
+  pointer-events: auto;
+}
+
+/* 경유지는 민트, 최종 도착지는 같은 계열에서 조금 더 강조 */
+.runtrip-arrival-notice.is-waypoint {
+  border-color: rgba(129, 218, 216, 0.5);
+}
+
+.runtrip-arrival-notice-icon {
+  width: 42px;
+  height: 42px;
+
+  box-sizing: border-box;
+  border-radius: 50%;
+
+  background: #81dad8;
+  color: #0f172a;
+
+  display: grid;
+  place-items: center;
+
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 1;
+
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.34),
+    0 7px 16px rgba(0, 0, 0, 0.18);
+}
+
+.runtrip-arrival-notice-content {
+  min-width: 0;
+}
+
+.runtrip-arrival-notice-content > strong {
+  display: block;
+
+  margin: 1px 0 0;
+
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+/* 사용자가 선택한 장소명/도로명/지번 원문 */
+.runtrip-arrival-notice-place {
+  display: block;
+
+  margin-top: 5px;
+
+  overflow: hidden;
+
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 버튼은 한 줄 2개 */
+.runtrip-arrival-notice-actions {
+  display: grid;
+  grid-template-columns: 0.88fr 1.42fr;
+  gap: 8px;
+
+  margin-top: 12px;
+}
+
+.runtrip-arrival-notice-actions button {
+  min-width: 0;
+  height: 42px;
+
+  box-sizing: border-box;
+  padding: 0 10px;
+
+  border-radius: 12px;
+
+  appearance: none;
+  -webkit-appearance: none;
+
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 왼쪽: 일시정지 */
+.runtrip-arrival-notice-pause {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+}
+
+.runtrip-arrival-notice-photo {
+  border: 1px solid rgba(250, 204, 21, 0.7);
+
+  background: #facc15;
+  color: #111827;
+}
+
+.runtrip-arrival-notice-actions button:active {
+  transform: scale(0.975);
+}
+
+.runtrip-arrival-notice-photo:active {
+  background: #eab308;
+}
+
+.runtrip-arrival-notice-pause:active {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/*
+  이전 타이머 기반 알림의 is-hiding 효과는
+  새 거리 기반 알림에서는 사용하지 않지만,
+  혹시 남아 있는 과거 호출에도 자연스럽게 대응한다.
+*/
+.runtrip-arrival-notice.is-hiding {
+  opacity: 0;
+
+  transform:
+    translateX(-50%)
+    translateY(-10px);
+
+  pointer-events: none;
+
+  transition:
+    opacity 0.22s ease,
+    transform 0.22s ease;
+}
+
+/* 작은 iPhone 대응 */
+@media (max-width: 390px) {
+  .runtrip-arrival-notice {
+    top: calc(env(safe-area-inset-top, 0px) + 10px);
+
+    width: calc(100% - 18px);
+
+    padding: 12px;
+
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 10px;
+
+    border-radius: 17px;
+  }
+
+  .runtrip-arrival-notice-icon {
+    width: 38px;
+    height: 38px;
+
+    font-size: 16px;
+  }
+
+  .runtrip-arrival-notice-content > strong {
+    font-size: 14px;
+  }
+
+  .runtrip-arrival-notice-place {
+    margin-top: 4px;
+
+    font-size: 11px;
+  }
+
+  .runtrip-arrival-notice-actions {
+    grid-template-columns: 0.9fr 1.45fr;
+    gap: 7px;
+
+    margin-top: 10px;
+  }
+
+  .runtrip-arrival-notice-actions button {
+    height: 40px;
+
+    padding: 0 7px;
+
+    border-radius: 11px;
+
+    font-size: 11px;
+  }
+}
+
