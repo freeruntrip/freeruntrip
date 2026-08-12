@@ -627,7 +627,10 @@ async function renderRunTripMomentPhotos(record) {
 
     moments.innerHTML = `
       <div class="runtrip-moments-header">
-        <span>RUNTRIP MOMENTS</span>
+        <div>
+          <span>RUNTRIP MOMENTS</span>
+          <small>여정 속 순간</small>
+        </div>
         <strong>${photos.length}장의 기록</strong>
       </div>
 
@@ -640,6 +643,9 @@ async function renderRunTripMomentPhotos(record) {
                 ? '도착지'
                 : '활동 기록';
 
+          const placeName =
+            String(photo.placeName || '').trim();
+
           return `
             <article class="runtrip-moment-card">
               <img
@@ -649,7 +655,11 @@ async function renderRunTripMomentPhotos(record) {
 
               <div class="runtrip-moment-copy">
                 <strong>${escapePlaceSearchText(checkpointLabel)}</strong>
-                <span>${escapePlaceSearchText(photo.placeName || '')}</span>
+                ${
+                  placeName
+                    ? `<span>${escapePlaceSearchText(placeName)}</span>`
+                    : ''
+                }
                 <small>
                   ${(Math.max(0, Number(photo.distanceMeters) || 0) / 1000).toFixed(2)} km
                   · ${formatRunTripTimer(photo.elapsedSeconds || 0)}
@@ -3436,6 +3446,75 @@ if (detailTakePhotoBtn && detailCameraInput) {
           return;
         }
 
+        if (
+          pendingRunTripPhotoContext &&
+          completedRunTripRecordId !== null
+        ) {
+          const context = {
+            ...pendingRunTripPhotoContext,
+            capturedAt: capturedAt
+          };
+
+          const photoId =
+            `runtrip-photo-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2, 8)}`;
+
+          await saveRunTripPhotoToDatabase({
+            id: photoId,
+            recordId: Number(completedRunTripRecordId),
+            sessionId: context.sessionId,
+            activityType: 'runtrip',
+            source: context.source,
+            checkpointNumber: context.checkpointNumber,
+            placeName: context.placeName,
+            elapsedSeconds: context.elapsedSeconds,
+            distanceMeters: context.distanceMeters,
+            latitude: context.latitude,
+            longitude: context.longitude,
+            accuracy: context.accuracy,
+            capturedAt: context.capturedAt,
+            fileName: capturedFile.name || '',
+            mimeType: 'image/jpeg',
+            dataUrl: dataUrl
+          });
+
+          const completedRecord =
+            runRecords.find(function (item) {
+              return (
+                Number(item.id) ===
+                Number(completedRunTripRecordId)
+              );
+            });
+
+          if (completedRecord) {
+            completedRecord.photoIds =
+              Array.isArray(completedRecord.photoIds)
+                ? completedRecord.photoIds.slice()
+                : [];
+
+            completedRecord.photoIds.push(photoId);
+
+            const persistResult =
+              persistRunRecordsSafely(runRecords);
+
+            if (persistResult.success) {
+              runRecords = persistResult.records;
+              renderRunRecords();
+              renderRecordProfileFeed();
+            }
+          }
+
+          console.log(
+            'RunTrip 도착지 사진 기록 저장 완료:',
+            photoId,
+            context
+          );
+
+          pendingRunTripPhotoContext = null;
+          return;
+        }
+
         if (!selectedDetailRecord) {
           return;
         }
@@ -3874,6 +3953,7 @@ let runTripWaypointArrivalHits = 0;
 let runTripDestinationArrivalHits = 0;
 let runTripClosestDestinationDistance = Infinity;
 let activeRunTripCheckpointNotice = null;
+let completedRunTripRecordId = null;
 
 const RUNTRIP_NOTICE_VISIBLE_DISTANCE_METERS = 50;
 const RUNTRIP_NOTICE_DISMISS_DISTANCE_METERS = 60;
@@ -4096,10 +4176,14 @@ function showRunTripCheckpointNotice(options = {}) {
 
       <div class="runtrip-arrival-notice-actions">
         <button
-          class="runtrip-arrival-notice-pause"
+          class="${
+            isWaypoint
+              ? 'runtrip-arrival-notice-pause'
+              : 'runtrip-arrival-notice-record'
+          }"
           type="button"
         >
-          일시정지
+          ${isWaypoint ? '일시정지' : '기록 확인'}
         </button>
 
         <button
@@ -4133,6 +4217,11 @@ function showRunTripCheckpointNotice(options = {}) {
       '.runtrip-arrival-notice-pause'
     );
 
+  const recordNoticeButton =
+    notice.querySelector(
+      '.runtrip-arrival-notice-record'
+    );
+
   const photoNoticeButton =
     notice.querySelector(
       '.runtrip-arrival-notice-photo'
@@ -4150,6 +4239,15 @@ function showRunTripCheckpointNotice(options = {}) {
         }
 
         pauseRunTripBtn.click();
+      }
+    );
+  }
+
+  if (recordNoticeButton) {
+    recordNoticeButton.addEventListener(
+      'click',
+      function () {
+        openCompletedRunTripRecord();
       }
     );
   }
@@ -5262,13 +5360,14 @@ function checkRunTripArrival(
   hasRunTripArrivalNotified = true;
 
   showRunTripArrivalNotice();
-  saveActiveRunTripState();
 
-  setTimeout(function () {
-    completeRunTrip({
-      arrived: true
-    });
-  }, 900);
+  /*
+    도착이 확정된 순간 기록을 즉시 저장하고 측정을 종료한다.
+    기록 상세 화면으로 자동 이동하지 않고 마지막 지도 화면을 유지한다.
+  */
+  completeRunTrip({
+    arrived: true
+  });
 }
 
 function formatRunTripPlannedDuration(totalMinutes) {
@@ -6090,6 +6189,8 @@ async function startRunTripFollowing() {
   runTripGpsDiagnosticLog = [];
   activeRunTripPhotoIds = [];
   pendingRunTripPhotoContext = null;
+  completedRunTripRecordId = null;
+  runTripPanel.classList.remove('runtrip-arrived');
   resetRunTripArrivalTracking();
   beginNewRunTripRouteSegment();
 
@@ -6444,6 +6545,132 @@ function resetRunTripDraftState() {
   updateRunTripWaypointControls();
 }
 
+function freezeRunTripAtArrival(savedRecord) {
+  clearInterval(runTripTimerInterval);
+  runTripTimerInterval = null;
+
+  if (
+    runTripFollowWatchId !== null &&
+    runTripFollowWatchId !== undefined
+  ) {
+    navigator.geolocation.clearWatch(
+      runTripFollowWatchId
+    );
+  }
+
+  runTripFollowWatchId = null;
+
+  /*
+    도착 후에는 지도와 마지막 경로/마커는 그대로 두고
+    시간, 거리, GPS 경로 추가만 완전히 멈춘다.
+  */
+  isRunTripFollowing = false;
+  isRunTripPaused = true;
+  isRunTripMapFollowing = false;
+  runTripActiveRouteSegment = null;
+  runTripActualRouteLine = null;
+
+  completedRunTripRecordId =
+    savedRecord
+      ? Number(savedRecord.id)
+      : null;
+
+  runTripPanel.classList.add(
+    'runtrip-arrived'
+  );
+
+  updateRunTripDashboard();
+
+  runTripDashboardGps.textContent =
+    '기록 완료';
+
+  runTripDashboardFollowState.textContent =
+    '도착 완료';
+
+  runTripDashboardFollowState.disabled = true;
+  runTripDashboardFollowState.classList.add(
+    'is-paused'
+  );
+}
+
+function resetCompletedRunTripAfterArrival() {
+  removeRunTripCheckpointNotice();
+
+  runTripPanel.classList.remove(
+    'runtrip-arrived'
+  );
+
+  stopRunTripFollowing({
+    restoreRoute: false
+  });
+
+  clearRunTripVisualState();
+  runTripRouteRequestId++;
+  resetRunTripDraftState();
+
+  runTripStartTime = null;
+  runTripActualRouteCoordinates = [];
+  runTripActualRouteSegments = [];
+  runTripActiveRouteSegment = null;
+  runTripActualRouteLine = null;
+  runTripActualRouteLines = [];
+  hasRunTripArrivalNotified = false;
+  isRunTripMapFollowing = true;
+  runTripRecentPositions = [];
+  runTripLastGpsTimestamp = null;
+  activeRunTripPhotoIds = [];
+  pendingRunTripPhotoContext = null;
+  resetRunTripArrivalTracking();
+}
+
+function openCompletedRunTripRecord() {
+  const recordId =
+    Number(completedRunTripRecordId);
+
+  if (!Number.isFinite(recordId)) {
+    return;
+  }
+
+  resetCompletedRunTripAfterArrival();
+
+  selectedRecordFilter = 'all';
+
+  recordsFilterTabs.forEach(
+    function (tab) {
+      const isActive =
+        tab.dataset.recordFilter === 'all';
+
+      tab.classList.toggle(
+        'active',
+        isActive
+      );
+
+      tab.setAttribute(
+        'aria-selected',
+        String(isActive)
+      );
+    }
+  );
+
+  openAppPage('records');
+
+  const savedRecordCard =
+    recordsList.querySelector(
+      `[data-record-id="${recordId}"]`
+    );
+
+  if (savedRecordCard) {
+    savedRecordCard.click();
+  } else {
+    window.scrollTo({
+      top: 0,
+      behavior: 'auto'
+    });
+  }
+
+  completedRunTripRecordId = null;
+}
+
 function completeRunTrip(
   options = {}
 ) {
@@ -6471,6 +6698,17 @@ function completeRunTrip(
   }
 
   clearActiveRunTripState();
+
+  if (options.arrived === true) {
+    freezeRunTripAtArrival(
+      savedRecord
+    );
+
+    isRunTripCompletionInProgress = false;
+
+    return savedRecord;
+  }
+
   removeRunTripCheckpointNotice();
 
   stopRunTripFollowing({
@@ -6518,11 +6756,9 @@ function completeRunTrip(
     openAppPage('records');
 
     const savedRecordCard =
-      savedRecord
-        ? recordsList.querySelector(
-            `[data-record-id="${savedRecord.id}"]`
-          )
-        : null;
+      recordsList.querySelector(
+        `[data-record-id="${savedRecord.id}"]`
+      );
 
     if (savedRecordCard) {
       savedRecordCard.click();

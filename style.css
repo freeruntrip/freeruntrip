@@ -7653,3 +7653,155 @@ body {
   }
 }
 
+
+/* ========================================
+   2026-08-13 RunTrip 도착 완료 UX
+   - 도착 순간 측정 종료, 마지막 지도 화면 고정
+   - 도착 알림: 기록 확인 · 사진 기록 남기기
+======================================== */
+.runtrip-arrival-notice-record {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+}
+
+.runtrip-arrival-notice-record:active {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+/* 도착 완료 후에는 실행 조작 버튼을 숨겨
+   기록이 계속 진행 중인 것처럼 보이지 않게 한다. */
+.runtrip-arrived .runtrip-dashboard-actions {
+  display: none !important;
+}
+
+.runtrip-arrived .runtrip-dashboard-badge {
+  display: none;
+}
+
+.runtrip-arrived #runTripDashboardGps {
+  color: #81dad8 !important;
+}
+
+.runtrip-arrived .runtrip-dashboard-follow-state {
+  border-color: rgba(129, 218, 216, 0.38);
+  background: rgba(129, 218, 216, 0.12);
+  color: #81dad8 !important;
+}
+
+/* ========================================
+   2026-08-13 RUNTRIP MOMENTS 카드 UI
+======================================== */
+.runtrip-moments {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid rgba(129, 218, 216, 0.2);
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.58);
+}
+
+.runtrip-moments-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.runtrip-moments-header > div {
+  min-width: 0;
+}
+
+.runtrip-moments-header span {
+  display: block;
+  color: #81dad8;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+.runtrip-moments-header small {
+  display: block;
+  margin-top: 4px;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.runtrip-moments-header strong {
+  flex-shrink: 0;
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.runtrip-moments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.runtrip-moment-card {
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.runtrip-moment-card img {
+  display: block;
+  width: 100%;
+  height: 250px;
+  object-fit: cover;
+  background: #020617;
+}
+
+.runtrip-moment-copy {
+  padding: 13px 14px 14px;
+}
+
+.runtrip-moment-copy strong,
+.runtrip-moment-copy span,
+.runtrip-moment-copy small {
+  display: block;
+}
+
+.runtrip-moment-copy strong {
+  color: #f8fafc;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.runtrip-moment-copy span {
+  margin-top: 4px;
+  overflow: hidden;
+  color: #cbd5e1;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runtrip-moment-copy small {
+  margin-top: 8px;
+  color: #81dad8;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+@media (max-width: 390px) {
+  .runtrip-moments {
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .runtrip-moment-card img {
+    height: 220px;
+  }
+
+  .runtrip-moment-copy {
+    padding: 12px;
+  }
+}
