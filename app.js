@@ -1698,7 +1698,7 @@ function showDetailMap(record) {
 
       const plannedLine =
         L.polyline(segment, {
-          color: '#ffffff',
+          color: '#76e4d2',
           weight: 6,
           opacity: 0.95,
           dashArray: '1 12',
@@ -4725,7 +4725,7 @@ function restoreActiveRunTripState(
   L.polyline(
     plannedCoordinates,
     {
-      color: '#ffffff',
+      color: '#76e4d2',
       weight: 6,
       opacity: 0.95,
       dashArray: '1 12',
@@ -7865,7 +7865,7 @@ async function renderRunTripMapPreview() {
     clearRunTripMapPreview();
 
     L.polyline(routeCoordinates, {
-      color: '#ffffff',
+      color: '#76e4d2',
       weight: 6,
       opacity: 0.95,
       dashArray: '1 12',
@@ -7920,7 +7920,7 @@ latestRunTripRouteSummary = null;
 
     if (fallbackPath.length >= 2) {
       L.polyline(fallbackPath, {
-        color: '#ffffff',
+        color: '#76e4d2',
         weight: 6,
         opacity: 0.8,
         dashArray: '1 12',
