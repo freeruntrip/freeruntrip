@@ -6,12 +6,17 @@
 
   <title>Running App</title>
 
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet/dist/leaflet.css"
-  />
+ <link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet/dist/leaflet.css"
+/>
 
-  <link rel="stylesheet" href="style.css" />
+<link
+  href="https://api.mapbox.com/mapbox-gl-js/v3.25.0/mapbox-gl.css"
+  rel="stylesheet"
+/>
+
+<link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
@@ -248,7 +253,21 @@
 </section>
 
   <div id="map"></div>
-
+  
+   <div
+    id="mapboxMainMap"
+    style="display:none;"
+   ></div>
+   
+  <div
+   id="mapboxMigrationTest"
+   style="
+    display:none;
+    position:fixed;
+    inset:0;
+    z-index:99999;
+  "
+  ></div>
   <div id="controls">
   <section id="runningIdlePanel" class="running-idle-panel">
     <button id="startBtn" type="button">
@@ -1048,6 +1067,9 @@
 </nav>
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.25.0/mapbox-gl.js"></script>
+
 <script src="app.js"></script>
 
 </body>

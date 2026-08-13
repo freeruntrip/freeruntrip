@@ -1,3 +1,138 @@
+const FREERUNTRIP_MAPBOX_ACCESS_TOKEN =
+  '';
+
+const FREERUNTRIP_MAPBOX_STYLE_URL =
+  'mapbox://styles/freeruntrip/cmsmtajtt000s01rf21vj5xbv';
+
+function testFreeRunTripMapboxMap() {
+  const testContainer =
+    document.getElementById('mapboxMigrationTest');
+
+  if (!testContainer) {
+    console.error(
+      'Mapbox 테스트 컨테이너를 찾지 못했습니다.'
+    );
+    return;
+  }
+
+  if (
+    typeof mapboxgl === 'undefined'
+  ) {
+    console.error(
+      'Mapbox GL JS가 로드되지 않았습니다.'
+    );
+    return;
+  }
+
+  mapboxgl.accessToken =
+    FREERUNTRIP_MAPBOX_ACCESS_TOKEN;
+
+  testContainer.style.display =
+    'block';
+
+  const migrationTestMap =
+    new mapboxgl.Map({
+      container: testContainer,
+      style:
+        FREERUNTRIP_MAPBOX_STYLE_URL,
+
+      center: [
+        126.9780,
+        37.5665
+      ],
+
+      zoom: 13,
+
+      pitch: 0,
+      bearing: 0
+    });
+
+  migrationTestMap.on(
+    'load',
+    function () {
+      console.log(
+        'FreeRunTrip Mapbox 실제 앱 연결 테스트 성공'
+      );
+    }
+  );
+
+  migrationTestMap.on(
+    'error',
+    function (event) {
+      console.error(
+        'FreeRunTrip Mapbox 실제 앱 연결 테스트 실패:',
+        event.error || event
+      );
+    }
+  );
+
+  window.freeRunTripMapboxMigrationTest =
+    migrationTestMap;
+}
+
+let freeRunTripMapboxMainMap = null;
+
+function initializeFreeRunTripMapboxMainMap() {
+  if (freeRunTripMapboxMainMap) {
+    return freeRunTripMapboxMainMap;
+  }
+
+  const mapboxMainContainer =
+    document.getElementById('mapboxMainMap');
+
+  if (!mapboxMainContainer) {
+    console.error(
+      'Mapbox 메인 지도 컨테이너를 찾지 못했습니다.'
+    );
+
+    return null;
+  }
+
+  mapboxgl.accessToken =
+    FREERUNTRIP_MAPBOX_ACCESS_TOKEN;
+
+  freeRunTripMapboxMainMap =
+    new mapboxgl.Map({
+      container: mapboxMainContainer,
+
+      style:
+        FREERUNTRIP_MAPBOX_STYLE_URL,
+
+      center: [
+        126.9780,
+        37.5665
+      ],
+
+      zoom: 13,
+
+      pitch: 0,
+      bearing: 0,
+
+      attributionControl: true
+    });
+
+  freeRunTripMapboxMainMap.on(
+    'load',
+    function () {
+      console.log(
+        'FreeRunTrip Mapbox 메인 지도 준비 완료'
+      );
+    }
+  );
+
+  freeRunTripMapboxMainMap.on(
+    'error',
+    function (event) {
+      console.error(
+        'FreeRunTrip Mapbox 메인 지도 오류:',
+        event.error || event
+      );
+    }
+  );
+
+  return freeRunTripMapboxMainMap;
+}
+
 const map = L.map('map', {
   zoomControl: false,
   preferCanvas: true
