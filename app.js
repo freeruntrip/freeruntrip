@@ -1,5 +1,9 @@
 const FREERUNTRIP_MAPBOX_ACCESS_TOKEN =
-  '';
+  [
+    'pk.',
+    'eyJ1IjoiZnJlZXJ1bnRyaXAiLCJhIjoiY21zbXN1MW52MG82ZjM0cHZuaDV1ZGduZSJ9',
+    '.dVLnvYx-HQirD4OBzHBgHQ'
+  ].join('');
 
 const FREERUNTRIP_MAPBOX_STYLE_URL =
   'mapbox://styles/freeruntrip/cmsmtajtt000s01rf21vj5xbv';
@@ -112,13 +116,42 @@ function initializeFreeRunTripMapboxMainMap() {
     });
 
   freeRunTripMapboxMainMap.on(
-    'load',
-    function () {
-      console.log(
-        'FreeRunTrip Mapbox 메인 지도 준비 완료'
+  'load',
+  function () {
+    console.log(
+      'FreeRunTrip Mapbox 메인 지도 준비 완료'
+    );
+
+    initializeMapboxRunningRouteLayer();
+
+    freeRunTripMapboxMainMap.once(
+  'idle',
+  function () {
+    initializeMapboxRunTripPlannedRouteLayer();
+
+    if (
+      latestRunTripRouteSummary &&
+      Array.isArray(
+        latestRunTripRouteSummary.coordinates
+      )
+    ) {
+      updateMapboxRunTripPlannedRoute(
+        latestRunTripRouteSummary.coordinates
       );
     }
-  );
+
+    freeRunTripMapboxMainMap.once(
+      'idle',
+      function () {
+        initializeMapboxRunTripActualRouteLayer();
+
+        updateMapboxRunTripActualRoute();
+      }
+    );
+  }
+);
+  }
+);
 
   freeRunTripMapboxMainMap.on(
     'error',
@@ -132,6 +165,8 @@ function initializeFreeRunTripMapboxMainMap() {
 
   return freeRunTripMapboxMainMap;
 }
+
+initializeFreeRunTripMapboxMainMap();
 
 const map = L.map('map', {
   zoomControl: false,
@@ -171,11 +206,192 @@ let seconds = 0;
 let timerInterval;
 let isRunning = false;
 let currentMarker;
+let mapboxRunningCurrentMarker = null;
 let routeCoordinates = [];
 let routeSegments = [];
 let activeRouteSegment = [];
 let routeLine;
 let routeLines = [];
+let mapboxRunningRouteSourceReady = false;
+
+const MAPBOX_RUNNING_ROUTE_SOURCE_ID =
+  'freeruntrip-running-route-source';
+
+const MAPBOX_RUNNING_ROUTE_LAYER_ID =
+  'freeruntrip-running-route-layer';
+function initializeMapboxRunningRouteLayer() {
+  if (!freeRunTripMapboxMainMap) {
+    return;
+  }
+
+  if (!freeRunTripMapboxMainMap.isStyleLoaded()) {
+    return;
+  }
+
+  if (
+    !freeRunTripMapboxMainMap.getSource(
+      MAPBOX_RUNNING_ROUTE_SOURCE_ID
+    )
+  ) {
+    freeRunTripMapboxMainMap.addSource(
+      MAPBOX_RUNNING_ROUTE_SOURCE_ID,
+      {
+        type: 'geojson',
+
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'MultiLineString',
+            coordinates: []
+          }
+        }
+      }
+    );
+  }
+
+  if (
+    !freeRunTripMapboxMainMap.getLayer(
+      MAPBOX_RUNNING_ROUTE_LAYER_ID
+    )
+  ) {
+    freeRunTripMapboxMainMap.addLayer({
+      id: MAPBOX_RUNNING_ROUTE_LAYER_ID,
+
+      type: 'line',
+
+      source:
+        MAPBOX_RUNNING_ROUTE_SOURCE_ID,
+
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round'
+      },
+
+      paint: {
+        'line-color': '#facc15',
+        'line-width': 6,
+        'line-opacity': 0.9
+      }
+    });
+  }
+
+  mapboxRunningRouteSourceReady = true;
+}
+
+function updateMapboxRunningRoute() {
+  if (
+    !freeRunTripMapboxMainMap ||
+    !mapboxRunningRouteSourceReady
+  ) {
+    return;
+  }
+
+  const source =
+    freeRunTripMapboxMainMap.getSource(
+      MAPBOX_RUNNING_ROUTE_SOURCE_ID
+    );
+
+  if (!source) {
+    return;
+  }
+
+  const mapboxSegments =
+    routeSegments
+      .filter(function (segment) {
+        return (
+          Array.isArray(segment) &&
+          segment.length >= 2
+        );
+      })
+      .map(function (segment) {
+        return segment.map(
+          function (point) {
+            return [
+              Number(point[1]),
+              Number(point[0])
+            ];
+          }
+        );
+      });
+
+  source.setData({
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'MultiLineString',
+      coordinates: mapboxSegments
+    }
+  });
+}
+function clearMapboxRunningRoute() {
+  if (
+    !freeRunTripMapboxMainMap ||
+    !mapboxRunningRouteSourceReady
+  ) {
+    return;
+  }
+
+  const source =
+    freeRunTripMapboxMainMap.getSource(
+      MAPBOX_RUNNING_ROUTE_SOURCE_ID
+    );
+
+  if (!source) {
+    return;
+  }
+
+  source.setData({
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'MultiLineString',
+      coordinates: []
+    }
+  });
+}
+function updateMapboxRunningCurrentMarker(latLng) {
+  if (
+    !freeRunTripMapboxMainMap ||
+    !Array.isArray(latLng) ||
+    latLng.length < 2
+  ) {
+    return;
+  }
+
+  const latitude =
+    Number(latLng[0]);
+
+  const longitude =
+    Number(latLng[1]);
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return;
+  }
+
+  const lngLat = [
+    longitude,
+    latitude
+  ];
+
+  if (!mapboxRunningCurrentMarker) {
+    mapboxRunningCurrentMarker =
+      new mapboxgl.Marker()
+        .setLngLat(lngLat)
+        .addTo(
+          freeRunTripMapboxMainMap
+        );
+
+    return;
+  }
+
+  mapboxRunningCurrentMarker.setLngLat(
+    lngLat
+  );
+}
 function beginNewRouteSegment() {
   activeRouteSegment = [];
   routeSegments.push(activeRouteSegment);
@@ -203,6 +419,8 @@ function appendRoutePointToActiveSegment(point) {
   } else {
     routeLine.setLatLngs(activeRouteSegment);
   }
+
+  updateMapboxRunningRoute();
 }
 let paused = false;
 let watchId;
@@ -358,7 +576,54 @@ function centerRunningMapOnPosition(latLng, options = {}) {
     );
   });
 }
+function centerMapboxRunningMapOnPosition(
+  latLng,
+  options = {}
+) {
+  if (
+    !freeRunTripMapboxMainMap ||
+    !Array.isArray(latLng) ||
+    latLng.length < 2
+  ) {
+    return;
+  }
 
+  const latitude =
+    Number(latLng[0]);
+
+  const longitude =
+    Number(latLng[1]);
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return;
+  }
+
+  const targetZoom = Math.max(
+    freeRunTripMapboxMainMap.getZoom(),
+    17
+  );
+
+  const mapboxOptions = {
+    center: [
+      longitude,
+      latitude
+    ],
+
+    zoom: targetZoom,
+
+    duration:
+      options.animate === true
+        ? 500
+        : 0
+  };
+
+  freeRunTripMapboxMainMap.easeTo(
+    mapboxOptions
+  );
+}
 function getRunTripMapVerticalOffset() {
   const runTripExecutionPanel =
     document.querySelector(
@@ -397,7 +662,115 @@ function centerRunTripMapOnPosition(
     );
   });
 }
+function centerMapboxRunTripMapOnPosition(
+  latLng,
+  options = {}
+) {
+  if (
+    !freeRunTripMapboxMainMap ||
+    !Array.isArray(latLng) ||
+    latLng.length < 2
+  ) {
+    return;
+  }
 
+  const latitude =
+    Number(latLng[0]);
+
+  const longitude =
+    Number(latLng[1]);
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return;
+  }
+
+  const mapboxContainer =
+    freeRunTripMapboxMainMap.getContainer();
+
+  const mapRect =
+    mapboxContainer.getBoundingClientRect();
+
+  const runTripExecutionPanel =
+    document.querySelector(
+      '.runtrip-following .runtrip-editor-card'
+    );
+
+  let visibleTop =
+    mapRect.top;
+
+  const visibleBottom =
+    mapRect.bottom;
+
+  if (
+    runTripExecutionPanel &&
+    !runTripExecutionPanel.classList.contains(
+      'hidden'
+    )
+  ) {
+    const panelRect =
+      runTripExecutionPanel.getBoundingClientRect();
+
+    if (
+      panelRect.bottom > mapRect.top &&
+      panelRect.top < mapRect.bottom
+    ) {
+      visibleTop = Math.min(
+        mapRect.bottom,
+        Math.max(
+          mapRect.top,
+          panelRect.bottom + 12
+        )
+      );
+    }
+  }
+
+  const fullMapCenterY =
+    (
+      mapRect.top +
+      mapRect.bottom
+    ) / 2;
+
+  const visibleMapCenterY =
+    (
+      visibleTop +
+      visibleBottom
+    ) / 2;
+
+  const verticalOffset =
+    Math.round(
+      visibleMapCenterY -
+      fullMapCenterY
+    );
+
+  const targetZoom =
+    Math.max(
+      freeRunTripMapboxMainMap.getZoom(),
+      17
+    );
+
+  freeRunTripMapboxMainMap.easeTo({
+    center: [
+      longitude,
+      latitude
+    ],
+
+    zoom:
+      targetZoom,
+
+    offset: [
+      0,
+      verticalOffset
+    ],
+
+    duration:
+      options.animate === true
+        ? 500
+        : 0
+  });
+}
 const SMOOTHING_COUNT = 3;
 const DEFAULT_RUNNER_WEIGHT_KG = 70;
 
@@ -510,6 +883,10 @@ const detailNumericPace = document.getElementById('detailNumericPace');
 const detailPaceTitle = document.getElementById('detailPaceTitle');
 const detailPaceHint = document.getElementById('detailPaceHint');
 const detailMapElement = document.getElementById('detailMap');
+const mapboxDetailMapElement =
+  document.getElementById(
+    'mapboxDetailMap'
+  );
 const detailMemory = document.getElementById('detailMemory');
 const detailMapSection = document.getElementById('detailMapSection');
 const detailRunPhoto = document.getElementById('detailRunPhoto');
@@ -536,6 +913,19 @@ let pendingRunPhoto = '';
 let isPhotoProcessing = false;
 let detailMap = null;
 let detailRouteLines = [];
+let mapboxDetailMap = null;
+let mapboxDetailMarkers = [];
+const MAPBOX_DETAIL_PLANNED_ROUTE_SOURCE_ID =
+  'freeruntrip-detail-planned-route-source';
+
+const MAPBOX_DETAIL_PLANNED_ROUTE_LAYER_ID =
+  'freeruntrip-detail-planned-route-layer';
+
+const MAPBOX_DETAIL_ACTUAL_ROUTE_SOURCE_ID =
+  'freeruntrip-detail-actual-route-source';
+
+const MAPBOX_DETAIL_ACTUAL_ROUTE_LAYER_ID =
+  'freeruntrip-detail-actual-route-layer';
 let detailStartMarker = null;
 let detailFinishMarker = null;
 let detailWaypointMarkers = [];
@@ -1698,6 +2088,371 @@ renderMonthlyReport();
 
   return record;
 }
+function initializeMapboxDetailRouteLayers() {
+  if (
+    !mapboxDetailMap ||
+    !mapboxDetailMap.isStyleLoaded()
+  ) {
+    return;
+  }
+
+  if (
+    !mapboxDetailMap.getSource(
+      MAPBOX_DETAIL_PLANNED_ROUTE_SOURCE_ID
+    )
+  ) {
+    mapboxDetailMap.addSource(
+      MAPBOX_DETAIL_PLANNED_ROUTE_SOURCE_ID,
+      {
+        type: 'geojson',
+
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'MultiLineString',
+            coordinates: []
+          }
+        }
+      }
+    );
+  }
+
+  if (
+    !mapboxDetailMap.getLayer(
+      MAPBOX_DETAIL_PLANNED_ROUTE_LAYER_ID
+    )
+  ) {
+    mapboxDetailMap.addLayer({
+      id:
+        MAPBOX_DETAIL_PLANNED_ROUTE_LAYER_ID,
+
+      type: 'line',
+
+      source:
+        MAPBOX_DETAIL_PLANNED_ROUTE_SOURCE_ID,
+
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round'
+      },
+
+      paint: {
+        'line-color': '#76e4d2',
+        'line-width': 6,
+        'line-opacity': 0.95,
+        'line-dasharray': [
+          0.1,
+          2
+        ]
+      }
+    });
+  }
+
+  if (
+    !mapboxDetailMap.getSource(
+      MAPBOX_DETAIL_ACTUAL_ROUTE_SOURCE_ID
+    )
+  ) {
+    mapboxDetailMap.addSource(
+      MAPBOX_DETAIL_ACTUAL_ROUTE_SOURCE_ID,
+      {
+        type: 'geojson',
+
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'MultiLineString',
+            coordinates: []
+          }
+        }
+      }
+    );
+  }
+
+  if (
+    !mapboxDetailMap.getLayer(
+      MAPBOX_DETAIL_ACTUAL_ROUTE_LAYER_ID
+    )
+  ) {
+    mapboxDetailMap.addLayer({
+      id:
+        MAPBOX_DETAIL_ACTUAL_ROUTE_LAYER_ID,
+
+      type: 'line',
+
+      source:
+        MAPBOX_DETAIL_ACTUAL_ROUTE_SOURCE_ID,
+
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round'
+      },
+
+      paint: {
+        'line-color': '#76e4d2',
+        'line-width': 6,
+        'line-opacity': 0.95
+      }
+    });
+  }
+}
+function initializeMapboxDetailMap() {
+  if (mapboxDetailMap) {
+    return mapboxDetailMap;
+  }
+
+  if (!mapboxDetailMapElement) {
+  return null;
+  }
+
+  mapboxgl.accessToken =
+    FREERUNTRIP_MAPBOX_ACCESS_TOKEN;
+
+  mapboxDetailMap =
+    new mapboxgl.Map({
+      container:
+        mapboxDetailMapElement,
+
+      style:
+        FREERUNTRIP_MAPBOX_STYLE_URL,
+
+      center: [
+        126.9780,
+        37.5665
+      ],
+
+      zoom: 13,
+
+      pitch: 0,
+      bearing: 0,
+
+      attributionControl: true
+    });
+
+  mapboxDetailMap.on(
+    'load',
+    function () {
+      console.log(
+        'FreeRunTrip Mapbox 기록 상세 지도 준비 완료'
+      );
+
+      initializeMapboxDetailRouteLayers();
+    }
+  );
+
+  mapboxDetailMap.on(
+    'error',
+    function (event) {
+      console.error(
+        'FreeRunTrip Mapbox 기록 상세 지도 오류:',
+        event.error || event
+      );
+    }
+  );
+
+  return mapboxDetailMap;
+}
+function clearMapboxDetailMarkers() {
+  mapboxDetailMarkers.forEach(
+    function (marker) {
+      marker.remove();
+    }
+  );
+
+  mapboxDetailMarkers = [];
+}
+
+function createMapboxDetailMarker(
+  label,
+  type,
+  latLng
+) {
+  if (
+    !mapboxDetailMap ||
+    !Array.isArray(latLng) ||
+    latLng.length < 2
+  ) {
+    return null;
+  }
+
+  const latitude =
+    Number(latLng[0]);
+
+  const longitude =
+    Number(latLng[1]);
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return null;
+  }
+
+  const markerElement =
+    document.createElement('div');
+
+  if (
+    type === 'start' ||
+    type === 'waypoint' ||
+    type === 'destination'
+  ) {
+    markerElement.className =
+      `runtrip-preview-marker ${type}`;
+
+    markerElement.innerHTML = `
+      <div class="runtrip-preview-marker-body">
+        <span>
+          ${escapePlaceSearchText(label)}
+        </span>
+      </div>
+
+      <div
+        class="runtrip-preview-marker-tip"
+      ></div>
+    `;
+  } else {
+    markerElement.className =
+      `run-marker ${type}`;
+
+    markerElement.innerHTML = `
+      <div>
+        ${escapePlaceSearchText(label)}
+      </div>
+    `;
+  }
+
+  const marker =
+    new mapboxgl.Marker({
+      element: markerElement,
+      anchor:
+        type === 'start' ||
+        type === 'waypoint' ||
+        type === 'destination'
+          ? 'bottom'
+          : 'center'
+    })
+      .setLngLat([
+        longitude,
+        latitude
+      ])
+      .addTo(mapboxDetailMap);
+
+  mapboxDetailMarkers.push(marker);
+
+  return marker;
+}
+
+function convertDetailSegmentsToMapbox(
+  segments
+) {
+  if (!Array.isArray(segments)) {
+    return [];
+  }
+
+  return segments
+    .map(function (segment) {
+      if (!Array.isArray(segment)) {
+        return [];
+      }
+
+      return segment
+        .filter(function (point) {
+          return (
+            Array.isArray(point) &&
+            point.length >= 2 &&
+            Number.isFinite(
+              Number(point[0])
+            ) &&
+            Number.isFinite(
+              Number(point[1])
+            )
+          );
+        })
+        .map(function (point) {
+          return [
+            Number(point[1]),
+            Number(point[0])
+          ];
+        });
+    })
+    .filter(function (segment) {
+      return segment.length >= 2;
+    });
+}
+
+function updateMapboxDetailRoutes(
+  record,
+  routeData
+) {
+  if (
+    !mapboxDetailMap ||
+    !mapboxDetailMap.isStyleLoaded()
+  ) {
+    return;
+  }
+
+  initializeMapboxDetailRouteLayers();
+
+  const plannedSource =
+    mapboxDetailMap.getSource(
+      MAPBOX_DETAIL_PLANNED_ROUTE_SOURCE_ID
+    );
+
+  const actualSource =
+    mapboxDetailMap.getSource(
+      MAPBOX_DETAIL_ACTUAL_ROUTE_SOURCE_ID
+    );
+
+  const plannedSegments =
+    convertDetailSegmentsToMapbox(
+      routeData.plannedSegments
+    );
+
+  const actualSegments =
+    convertDetailSegmentsToMapbox(
+      routeData.actualSegments
+    );
+
+  if (plannedSource) {
+    plannedSource.setData({
+      type: 'Feature',
+      properties: {},
+      geometry: {
+        type: 'MultiLineString',
+        coordinates:
+          plannedSegments
+      }
+    });
+  }
+
+  if (actualSource) {
+    actualSource.setData({
+      type: 'Feature',
+      properties: {},
+      geometry: {
+        type: 'MultiLineString',
+        coordinates:
+          actualSegments
+      }
+    });
+  }
+
+  if (
+    mapboxDetailMap.getLayer(
+      MAPBOX_DETAIL_ACTUAL_ROUTE_LAYER_ID
+    )
+  ) {
+    mapboxDetailMap.setPaintProperty(
+      MAPBOX_DETAIL_ACTUAL_ROUTE_LAYER_ID,
+      'line-color',
+      routeData.isRunTrip
+        ? '#76e4d2'
+        : '#facc15'
+    );
+  }
+}
 function getDetailRouteData(record) {
   const isRunTrip =
     getRecordActivityType(record) ===
@@ -1792,6 +2547,240 @@ function getDetailRouteData(record) {
     hasPlanned:
       plannedSegments.length > 0
   };
+}
+function showMapboxDetailMap(record) {
+  const routeData =
+    getDetailRouteData(record);
+
+  if (
+    !routeData.hasActual &&
+    !routeData.hasPlanned
+  ) {
+    return;
+  }
+
+  const detailMapInstance =
+    initializeMapboxDetailMap();
+
+  if (!detailMapInstance) {
+    return;
+  }
+
+  const renderMapboxDetail =
+    function () {
+      mapboxDetailMap.resize();
+
+      clearMapboxDetailMarkers();
+
+      updateMapboxDetailRoutes(
+        record,
+        routeData
+      );
+
+      const allPoints = [];
+
+      routeData.plannedSegments.forEach(
+        function (segment) {
+          segment.forEach(
+            function (point) {
+              if (
+                Array.isArray(point) &&
+                point.length >= 2
+              ) {
+                allPoints.push(point);
+              }
+            }
+          );
+        }
+      );
+
+      routeData.actualSegments.forEach(
+        function (segment) {
+          segment.forEach(
+            function (point) {
+              if (
+                Array.isArray(point) &&
+                point.length >= 2
+              ) {
+                allPoints.push(point);
+              }
+            }
+          );
+        }
+      );
+
+      const markerSegments =
+        routeData.hasActual
+          ? routeData.actualSegments
+          : routeData.plannedSegments;
+
+      if (
+        !Array.isArray(markerSegments) ||
+        markerSegments.length === 0
+      ) {
+        return;
+      }
+
+      const firstSegment =
+        markerSegments[0];
+
+      const lastSegment =
+        markerSegments[
+          markerSegments.length - 1
+        ];
+
+      if (
+        !Array.isArray(firstSegment) ||
+        firstSegment.length === 0 ||
+        !Array.isArray(lastSegment) ||
+        lastSegment.length === 0
+      ) {
+        return;
+      }
+
+      const routeStartPoint =
+        firstSegment[0];
+
+      const routeFinishPoint =
+        lastSegment[
+          lastSegment.length - 1
+        ];
+
+      if (routeData.isRunTrip) {
+        const savedOriginPoint =
+          getSavedRunTripPlaceLatLng(
+            record.originPlace
+          );
+
+        const savedDestinationPoint =
+          getSavedRunTripPlaceLatLng(
+            record.destinationPlace
+          );
+
+        const startPoint =
+          savedOriginPoint ||
+          routeStartPoint;
+
+        const finishPoint =
+          savedDestinationPoint ||
+          routeFinishPoint;
+
+        createMapboxDetailMarker(
+          'S',
+          'start',
+          startPoint
+        );
+
+        const waypointPlaces =
+          Array.isArray(
+            record.waypointPlaces
+          )
+            ? record.waypointPlaces
+            : [];
+
+        waypointPlaces.forEach(
+          function (waypoint, index) {
+            const waypointPoint =
+              getSavedRunTripPlaceLatLng(
+                waypoint
+              );
+
+            if (!waypointPoint) {
+              return;
+            }
+
+            createMapboxDetailMarker(
+              String(index + 1),
+              'waypoint',
+              waypointPoint
+            );
+
+            allPoints.push(
+              waypointPoint
+            );
+          }
+        );
+
+        createMapboxDetailMarker(
+          'D',
+          'destination',
+          finishPoint
+        );
+
+        allPoints.push(
+          startPoint,
+          finishPoint
+        );
+      } else {
+        createMapboxDetailMarker(
+          'START',
+          'running-start-marker',
+          routeStartPoint
+        );
+
+        createMapboxDetailMarker(
+          'FINISH',
+          'running-finish-marker',
+          routeFinishPoint
+        );
+      }
+
+      if (allPoints.length === 0) {
+        return;
+      }
+
+      const bounds =
+        new mapboxgl.LngLatBounds();
+
+      allPoints.forEach(
+        function (point) {
+          if (
+            !Array.isArray(point) ||
+            point.length < 2
+          ) {
+            return;
+          }
+
+          const latitude =
+            Number(point[0]);
+
+          const longitude =
+            Number(point[1]);
+
+          if (
+            !Number.isFinite(latitude) ||
+            !Number.isFinite(longitude)
+          ) {
+            return;
+          }
+
+          bounds.extend([
+            longitude,
+            latitude
+          ]);
+        }
+      );
+
+      if (!bounds.isEmpty()) {
+        mapboxDetailMap.fitBounds(
+          bounds,
+          {
+            padding: 24,
+            maxZoom: 17,
+            duration: 0
+          }
+        );
+      }
+    };
+
+  if (mapboxDetailMap.isStyleLoaded()) {
+    renderMapboxDetail();
+  } else {
+    mapboxDetailMap.once(
+      'load',
+      renderMapboxDetail
+    );
+  }
 }
 function showDetailMap(record) {
   const routeData =
@@ -2700,10 +3689,18 @@ if (isRunTrip) {
     );
 
     if (hasRoute) {
-      requestAnimationFrame(function () {
-        showDetailMap(record);
-      });
-    }
+  detailMapElement.style.display =
+    'none';
+
+  if (mapboxDetailMapElement) {
+    mapboxDetailMapElement.style.display =
+      'block';
+  }
+
+  requestAnimationFrame(function () {
+    showMapboxDetailMap(record);
+  });
+}
   }
 
   recordCard.addEventListener(
@@ -2907,7 +3904,26 @@ startBtn.addEventListener('click', async function () {
 if (!isRunning) {
   runningIdlePanel.classList.add('hidden');
   runningDashboard.classList.remove('hidden');
-  map.getContainer().style.display = 'block';
+
+  map.getContainer().style.display =
+    'none';
+
+  const mapboxMainContainer =
+    document.getElementById(
+      'mapboxMainMap'
+    );
+
+  if (mapboxMainContainer) {
+    mapboxMainContainer.style.display =
+      'block';
+  }
+
+  if (freeRunTripMapboxMainMap) {
+    requestAnimationFrame(function () {
+      freeRunTripMapboxMainMap.resize();
+    });
+  }
+
   isRunningMapFollowing = true;
   updateRunningFollowState();
 
@@ -2931,6 +3947,9 @@ runningGpsStatus.textContent = 'GPS 위치 확인 중';
   routeCoordinates = [];
   routeSegments = [];
   activeRouteSegment = [];
+
+  clearMapboxRunningRoute();
+
   beginNewRouteSegment();
 
     splitRecords = [];
@@ -3244,11 +4263,23 @@ if (!currentMarker) {
 } else {
   currentMarker.setLatLng(currentLatLng);
 }
-
+updateMapboxRunningCurrentMarker(
+  currentLatLng
+);
 if (isRunningMapFollowing) {
-  centerRunningMapOnPosition(currentLatLng, {
-    animate: false
-  });
+  centerRunningMapOnPosition(
+    currentLatLng,
+    {
+      animate: false
+    }
+  );
+
+  centerMapboxRunningMapOnPosition(
+    currentLatLng,
+    {
+      animate: false
+    }
+  );
 }
 },
 
@@ -3340,6 +4371,13 @@ runningFollowStateBtn.addEventListener(
         ],
         { animate: true }
       );
+      centerMapboxRunningMapOnPosition(
+       [
+         lastValidPosition.latitude,
+         lastValidPosition.longitude
+       ],
+       { animate: true }
+     );
     }
 
     updateRunningFollowState();
@@ -3358,6 +4396,22 @@ map.on('dragstart', function () {
   isRunningMapFollowing = false;
   updateRunningFollowState();
 });
+
+freeRunTripMapboxMainMap.on(
+  'dragstart',
+  function () {
+    if (
+      !isRunning ||
+      paused ||
+      !isRunningMapFollowing
+    ) {
+      return;
+    }
+
+    isRunningMapFollowing = false;
+    updateRunningFollowState();
+  }
+);
 
 stopBtn.addEventListener('click', function () {
   console.log('러닝 종료 버튼 클릭됨');
@@ -3437,9 +4491,12 @@ runningCadence.textContent = '-- spm';
 runningGpsStatus.textContent =
   'GPS 연결 준비';
 
- routeCoordinates = [];
+routeCoordinates = [];
 routeSegments = [];
 activeRouteSegment = [];
+
+clearMapboxRunningRoute();
+
 recentPositions = [];
 lastValidPosition = null;
 
@@ -3459,7 +4516,10 @@ lastGpsElapsedSeconds = 0;
     map.removeLayer(currentMarker);
     currentMarker = null;
   }
-
+   if (mapboxRunningCurrentMarker) {
+    mapboxRunningCurrentMarker.remove();
+    mapboxRunningCurrentMarker = null;
+  }
   isRunning = false;
   runStartTime = null;
   paused = false;
@@ -3810,6 +4870,296 @@ let selectedRunTripDestination = null;
 
 let isGettingRunTripCurrentLocation = false;
 
+let mapboxRunTripPlannedRouteSourceReady = false;
+let mapboxRunTripPreviewMarkers = [];
+
+let mapboxRunTripActualRouteSourceReady = false;
+
+const MAPBOX_RUNTRIP_ACTUAL_ROUTE_SOURCE_ID =
+  'freeruntrip-runtrip-actual-route-source';
+
+const MAPBOX_RUNTRIP_ACTUAL_ROUTE_LAYER_ID =
+  'freeruntrip-runtrip-actual-route-layer';
+
+const MAPBOX_RUNTRIP_PLANNED_ROUTE_SOURCE_ID =
+  'freeruntrip-runtrip-planned-route-source';
+
+const MAPBOX_RUNTRIP_PLANNED_ROUTE_LAYER_ID =
+  'freeruntrip-runtrip-planned-route-layer';
+
+function initializeMapboxRunTripPlannedRouteLayer() {
+  if (!freeRunTripMapboxMainMap) {
+    return;
+  }
+
+  if (!freeRunTripMapboxMainMap.isStyleLoaded()) {
+    return;
+  }
+
+  if (
+    !freeRunTripMapboxMainMap.getSource(
+      MAPBOX_RUNTRIP_PLANNED_ROUTE_SOURCE_ID
+    )
+  ) {
+    freeRunTripMapboxMainMap.addSource(
+      MAPBOX_RUNTRIP_PLANNED_ROUTE_SOURCE_ID,
+      {
+        type: 'geojson',
+
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: []
+          }
+        }
+      }
+    );
+  }
+
+  if (
+    !freeRunTripMapboxMainMap.getLayer(
+      MAPBOX_RUNTRIP_PLANNED_ROUTE_LAYER_ID
+    )
+  ) {
+    freeRunTripMapboxMainMap.addLayer({
+      id:
+        MAPBOX_RUNTRIP_PLANNED_ROUTE_LAYER_ID,
+
+      type: 'line',
+
+      source:
+        MAPBOX_RUNTRIP_PLANNED_ROUTE_SOURCE_ID,
+
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round'
+      },
+
+      paint: {
+        'line-color': '#76e4d2',
+        'line-width': 6,
+        'line-opacity': 0.95,
+        'line-dasharray': [0.1, 2]
+      }
+    });
+  }
+
+  mapboxRunTripPlannedRouteSourceReady =
+    true;
+}
+function initializeMapboxRunTripActualRouteLayer() {
+  if (!freeRunTripMapboxMainMap) {
+    return;
+  }
+
+  if (!freeRunTripMapboxMainMap.isStyleLoaded()) {
+    return;
+  }
+
+  if (
+    !freeRunTripMapboxMainMap.getSource(
+      MAPBOX_RUNTRIP_ACTUAL_ROUTE_SOURCE_ID
+    )
+  ) {
+    freeRunTripMapboxMainMap.addSource(
+      MAPBOX_RUNTRIP_ACTUAL_ROUTE_SOURCE_ID,
+      {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'MultiLineString',
+            coordinates: []
+          }
+        }
+      }
+    );
+  }
+
+  if (
+    !freeRunTripMapboxMainMap.getLayer(
+      MAPBOX_RUNTRIP_ACTUAL_ROUTE_LAYER_ID
+    )
+  ) {
+    freeRunTripMapboxMainMap.addLayer({
+      id:
+        MAPBOX_RUNTRIP_ACTUAL_ROUTE_LAYER_ID,
+
+      type: 'line',
+
+      source:
+        MAPBOX_RUNTRIP_ACTUAL_ROUTE_SOURCE_ID,
+
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round'
+      },
+
+      paint: {
+        'line-color': '#76e4d2',
+        'line-width': 6,
+        'line-opacity': 0.95
+      }
+    });
+  }
+
+  mapboxRunTripActualRouteSourceReady =
+    true;
+}
+function updateMapboxRunTripPlannedRoute(
+  coordinates
+) {
+  if (!freeRunTripMapboxMainMap) {
+    return;
+  }
+
+  if (!mapboxRunTripPlannedRouteSourceReady) {
+    initializeMapboxRunTripPlannedRouteLayer();
+  }
+
+  if (!mapboxRunTripPlannedRouteSourceReady) {
+    return;
+  }
+
+  const source =
+    freeRunTripMapboxMainMap.getSource(
+      MAPBOX_RUNTRIP_PLANNED_ROUTE_SOURCE_ID
+    );
+
+  if (!source) {
+    return;
+  }
+
+  const mapboxCoordinates =
+    Array.isArray(coordinates)
+      ? coordinates
+          .filter(function (point) {
+            return (
+              Array.isArray(point) &&
+              point.length >= 2 &&
+              Number.isFinite(
+                Number(point[0])
+              ) &&
+              Number.isFinite(
+                Number(point[1])
+              )
+            );
+          })
+          .map(function (point) {
+            return [
+              Number(point[1]),
+              Number(point[0])
+            ];
+          })
+      : [];
+
+  source.setData({
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'LineString',
+      coordinates: mapboxCoordinates
+    }
+  });
+}
+
+function clearMapboxRunTripPlannedRoute() {
+  updateMapboxRunTripPlannedRoute([]);
+}
+function updateMapboxRunTripActualRoute() {
+  if (!freeRunTripMapboxMainMap) {
+    return;
+  }
+
+  if (!mapboxRunTripActualRouteSourceReady) {
+    initializeMapboxRunTripActualRouteLayer();
+  }
+
+  if (!mapboxRunTripActualRouteSourceReady) {
+    return;
+  }
+
+  const source =
+    freeRunTripMapboxMainMap.getSource(
+      MAPBOX_RUNTRIP_ACTUAL_ROUTE_SOURCE_ID
+    );
+
+  if (!source) {
+    return;
+  }
+
+  const mapboxSegments =
+    runTripActualRouteSegments
+      .filter(function (segment) {
+        return (
+          Array.isArray(segment) &&
+          segment.length >= 2
+        );
+      })
+      .map(function (segment) {
+        return segment
+          .filter(function (point) {
+            return (
+              Array.isArray(point) &&
+              point.length >= 2 &&
+              Number.isFinite(
+                Number(point[0])
+              ) &&
+              Number.isFinite(
+                Number(point[1])
+              )
+            );
+          })
+          .map(function (point) {
+            return [
+              Number(point[1]),
+              Number(point[0])
+            ];
+          });
+      })
+      .filter(function (segment) {
+        return segment.length >= 2;
+      });
+
+  source.setData({
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'MultiLineString',
+      coordinates: mapboxSegments
+    }
+  });
+}
+
+function clearMapboxRunTripActualRoute() {
+  if (
+    !freeRunTripMapboxMainMap ||
+    !mapboxRunTripActualRouteSourceReady
+  ) {
+    return;
+  }
+
+  const source =
+    freeRunTripMapboxMainMap.getSource(
+      MAPBOX_RUNTRIP_ACTUAL_ROUTE_SOURCE_ID
+    );
+
+  if (!source) {
+    return;
+  }
+
+  source.setData({
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'MultiLineString',
+      coordinates: []
+    }
+  });
+}
 const runTripPreviewLayer = L.layerGroup().addTo(map);
 let runTripRouteRequestId = 0;
 let latestRunTripRouteSummary = null;
@@ -4076,6 +5426,7 @@ const startRunTripFollowBtn = document.getElementById(
 let isRunTripFollowing = false;
 let runTripFollowWatchId = null;
 let runTripFollowMarker = null;
+let mapboxRunTripFollowMarker = null;
 let isRunTripPaused = false;
 let isRunTripCountdownActive = false;
 let isRunTripMapFollowing = true;
@@ -4968,7 +6319,9 @@ function restoreActiveRunTripState(
   ).addTo(
     runTripPreviewLayer
   );
-
+   updateMapboxRunTripPlannedRoute(
+      plannedCoordinates
+   );
   const restoredDraft =
     getRunTripDraft();
 
@@ -5028,23 +6381,29 @@ function restoreActiveRunTripState(
   }
 
   restoredMarkers.forEach(
-    function (marker) {
-      L.marker(
-        marker.latLng,
-        {
-          icon:
-            createRunTripPreviewMarkerIcon(
-              marker.label,
-              marker.type
-            ),
+  function (marker) {
+    L.marker(
+      marker.latLng,
+      {
+        icon:
+          createRunTripPreviewMarkerIcon(
+            marker.label,
+            marker.type
+          ),
 
-          interactive: false
-        }
-      ).addTo(
-        runTripPreviewLayer
-      );
-    }
-  );
+        interactive: false
+      }
+    ).addTo(
+      runTripPreviewLayer
+    );
+
+    createMapboxRunTripPreviewMarker(
+      marker.label,
+      marker.type,
+      marker.latLng
+    );
+  }
+);
 
   const restoredActualSegments =
   runTripActualRouteSegments
@@ -5081,6 +6440,8 @@ restoredActualSegments.forEach(
   }
 );
 
+updateMapboxRunTripActualRoute();
+
   isRunTripConfirmed = true;
 
 currentAppPage = 'runtrip';
@@ -5102,15 +6463,22 @@ runTripPanel.classList.add(
     'hidden'
   );
 
-  runTripPanel.classList.remove(
-    'hidden'
-  );
-
   map.getContainer().style.display =
-    'block';
+  'none';
 
-  controlsSection.style.display =
-    'none';
+const mapboxMainContainer =
+  document.getElementById('mapboxMainMap');
+
+if (mapboxMainContainer) {
+  mapboxMainContainer.style.display =
+    'block';
+}
+
+if (freeRunTripMapboxMainMap) {
+  requestAnimationFrame(function () {
+    freeRunTripMapboxMainMap.resize();
+  });
+}
 
   recordsSection.classList.add(
     'hidden'
@@ -5220,6 +6588,8 @@ function appendRunTripRoutePoint(point) {
       runTripActiveRouteSegment
     );
   }
+
+    updateMapboxRunTripActualRoute();
 }
 
 
@@ -5937,6 +7307,11 @@ function stopRunTripFollowing(options = {}) {
 
     runTripFollowMarker = null;
   }
+  if (mapboxRunTripFollowMarker) {
+  mapboxRunTripFollowMarker.remove();
+
+  mapboxRunTripFollowMarker = null;
+}
 
   resetRunTripDashboard();
   updateRunTripFollowButton();
@@ -6233,20 +7608,31 @@ function startRunTripLocationWatch() {
                   zIndexOffset: 1000
                 }
               ).addTo(map);
-          } else {
-            runTripFollowMarker.setLatLng(
-              acceptedLatLng
-            );
-          }
+           } else {
+  runTripFollowMarker.setLatLng(
+    acceptedLatLng
+  );
+}
 
-          if (isRunTripMapFollowing) {
-            centerRunTripMapOnPosition(
-              acceptedLatLng,
-              {
-                animate: false
-              }
-            );
-          }
+updateMapboxRunTripFollowMarker(
+  acceptedLatLng
+);
+
+if (isRunTripMapFollowing) {
+  centerRunTripMapOnPosition(
+    acceptedLatLng,
+    {
+      animate: false
+    }
+  );
+
+  centerMapboxRunTripMapOnPosition(
+    acceptedLatLng,
+    {
+      animate: false
+    }
+  );
+}
         }
 
         updateRunTripDashboard();
@@ -6310,6 +7696,9 @@ async function startRunTripFollowing() {
   runTripActiveRouteSegment = null;
   runTripActualRouteLine = null;
   runTripActualRouteLines = [];
+
+  clearMapboxRunTripActualRoute();
+
   hasRunTripArrivalNotified = false;
   isRunTripCompletionInProgress = false;
   isRunTripMapFollowing = true;
@@ -7234,7 +8623,22 @@ function closeRunTripSearchScreen() {
   runTripSearchInput.value = '';
   activeRunTripSearchTarget = null;
 
-  map.getContainer().style.display = 'block';
+  map.getContainer().style.display =
+  'none';
+
+const mapboxMainContainer =
+  document.getElementById('mapboxMainMap');
+
+if (mapboxMainContainer) {
+  mapboxMainContainer.style.display =
+    'block';
+}
+
+if (freeRunTripMapboxMainMap) {
+  requestAnimationFrame(function () {
+    freeRunTripMapboxMainMap.resize();
+  });
+}
 
   setTimeout(function () {
     map.invalidateSize();
@@ -7263,6 +8667,14 @@ runTripSearchInput.value = isDefaultCurrentLocation
   map.getContainer().style.display = 'none';
   runTripSearchScreen.classList.remove('hidden');
 
+  const mapboxMainContainer =
+  document.getElementById('mapboxMainMap');
+
+  if (mapboxMainContainer) {
+    mapboxMainContainer.style.display =
+     'none';
+  }
+  
   setTimeout(function () {
     runTripSearchInput.focus();
   }, 100);
@@ -7928,6 +9340,79 @@ function createRunTripPreviewMarkerIcon(label, type) {
     iconAnchor: [21, 48]
   });
 }
+function createMapboxRunTripPreviewMarker(
+  label,
+  type,
+  latLng
+) {
+  if (
+    !freeRunTripMapboxMainMap ||
+    !Array.isArray(latLng) ||
+    latLng.length < 2
+  ) {
+    return null;
+  }
+
+  const latitude =
+    Number(latLng[0]);
+
+  const longitude =
+    Number(latLng[1]);
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return null;
+  }
+
+  const markerElement =
+    document.createElement('div');
+
+  markerElement.className =
+    `runtrip-preview-marker ${type}`;
+
+  markerElement.innerHTML = `
+    <div class="runtrip-preview-marker-body">
+      <span>
+        ${escapePlaceSearchText(label)}
+      </span>
+    </div>
+
+    <div
+      class="runtrip-preview-marker-tip"
+    ></div>
+  `;
+
+  const marker =
+    new mapboxgl.Marker({
+      element: markerElement,
+      anchor: 'bottom'
+    })
+      .setLngLat([
+        longitude,
+        latitude
+      ])
+      .addTo(
+        freeRunTripMapboxMainMap
+      );
+
+  mapboxRunTripPreviewMarkers.push(
+    marker
+  );
+
+  return marker;
+}
+
+function clearMapboxRunTripPreviewMarkers() {
+  mapboxRunTripPreviewMarkers.forEach(
+    function (marker) {
+      marker.remove();
+    }
+  );
+
+  mapboxRunTripPreviewMarkers = [];
+}
 function createRunTripFollowMarkerIcon() {
   return L.divIcon({
     className: 'runtrip-follow-marker',
@@ -7940,6 +9425,65 @@ function createRunTripFollowMarkerIcon() {
     iconAnchor: [17, 17]
   });
 }
+function updateMapboxRunTripFollowMarker(
+  latLng
+) {
+  if (
+    !freeRunTripMapboxMainMap ||
+    !Array.isArray(latLng) ||
+    latLng.length < 2
+  ) {
+    return;
+  }
+
+  const latitude =
+    Number(latLng[0]);
+
+  const longitude =
+    Number(latLng[1]);
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return;
+  }
+
+  const lngLat = [
+    longitude,
+    latitude
+  ];
+
+  if (!mapboxRunTripFollowMarker) {
+    const markerElement =
+      document.createElement('div');
+
+    markerElement.className =
+      'runtrip-follow-marker';
+
+    markerElement.innerHTML = `
+      <div class="runtrip-follow-marker-pulse">
+        <span></span>
+      </div>
+    `;
+
+    mapboxRunTripFollowMarker =
+      new mapboxgl.Marker({
+        element: markerElement,
+        anchor: 'center'
+      })
+        .setLngLat(lngLat)
+        .addTo(
+          freeRunTripMapboxMainMap
+        );
+
+    return;
+  }
+
+  mapboxRunTripFollowMarker.setLngLat(
+    lngLat
+  );
+}
 function clearRunTripMapPreview() {
   runTripPreviewLayer.clearLayers();
 }
@@ -7949,6 +9493,10 @@ function clearRunTripVisualState() {
      취소·종료·다른 탭 이동 시 같은 함수를 사용해
      일반 러닝 지도에 예정/실제 경로가 남는 것을 방지한다. */
   clearRunTripMapPreview();
+
+  clearMapboxRunTripPlannedRoute();
+  clearMapboxRunTripActualRoute();
+  clearMapboxRunTripPreviewMarkers();
 
   runTripActualRouteLines.forEach(function (line) {
     if (line && map.hasLayer(line)) {
@@ -7966,6 +9514,11 @@ function clearRunTripVisualState() {
 
     runTripFollowMarker = null;
   }
+  if (mapboxRunTripFollowMarker) {
+  mapboxRunTripFollowMarker.remove();
+
+  mapboxRunTripFollowMarker = null;
+}
 }
 function getRunTripMapFitOptions() {
   const mapContainer = map.getContainer();
@@ -8021,6 +9574,99 @@ function fitRunTripMapBounds(bounds) {
   map.fitBounds(
     bounds,
     getRunTripMapFitOptions()
+  );
+
+  if (!freeRunTripMapboxMainMap) {
+    return;
+  }
+
+  freeRunTripMapboxMainMap.resize();
+
+  const southWest =
+    bounds.getSouthWest();
+
+  const northEast =
+    bounds.getNorthEast();
+
+  if (
+    !southWest ||
+    !northEast
+  ) {
+    return;
+  }
+
+  const mapboxContainer =
+    freeRunTripMapboxMainMap.getContainer();
+
+  const mapRect =
+    mapboxContainer.getBoundingClientRect();
+
+  const routeEditor =
+    runTripEditorCard;
+
+  let coveredTopHeight = 0;
+
+  if (routeEditor) {
+    const editorRect =
+      routeEditor.getBoundingClientRect();
+
+    coveredTopHeight =
+      Math.max(
+        0,
+        Math.min(
+          editorRect.bottom,
+          mapRect.bottom
+        ) -
+          Math.max(
+            editorRect.top,
+            mapRect.top
+          )
+      );
+  }
+
+  const horizontalPadding = 36;
+  const markerPadding = 48;
+
+  const topPadding =
+    Math.max(
+      120,
+      Math.round(
+        coveredTopHeight +
+        markerPadding
+      )
+    );
+
+  freeRunTripMapboxMainMap.fitBounds(
+    [
+      [
+        southWest.lng,
+        southWest.lat
+      ],
+
+      [
+        northEast.lng,
+        northEast.lat
+      ]
+    ],
+    {
+      padding: {
+        top:
+          topPadding,
+
+        bottom:
+          110,
+
+        left:
+          horizontalPadding,
+
+        right:
+          horizontalPadding
+      },
+
+      maxZoom: 16,
+
+      duration: 500
+    }
   );
 }
 function getRunTripRouteUrl() {
@@ -8084,6 +9730,8 @@ async function renderRunTripMapPreview() {
   latestRunTripRouteSummary = null;
 
   clearRunTripMapPreview();
+  clearMapboxRunTripPlannedRoute();
+  clearMapboxRunTripPreviewMarkers();
 
   const draft = getRunTripDraft();
 
@@ -8137,6 +9785,12 @@ async function renderRunTripMapPreview() {
       ),
       interactive: false
     }).addTo(runTripPreviewLayer);
+
+    createMapboxRunTripPreviewMarker(
+      marker.label,
+      marker.type,
+      marker.latLng
+    );
   });
 
   if (!originLatLng || !destinationLatLng) {
@@ -8234,6 +9888,7 @@ async function renderRunTripMapPreview() {
     }
 
     clearRunTripMapPreview();
+    clearMapboxRunTripPreviewMarkers();
 
     L.polyline(routeCoordinates, {
       color: '#76e4d2',
@@ -8243,6 +9898,9 @@ async function renderRunTripMapPreview() {
       lineCap: 'round',
       lineJoin: 'round'
     }).addTo(runTripPreviewLayer);
+    updateMapboxRunTripPlannedRoute(
+  routeCoordinates
+);
 
     previewMarkers.forEach(function (marker) {
       L.marker(marker.latLng, {
@@ -8252,6 +9910,12 @@ async function renderRunTripMapPreview() {
         ),
         interactive: false
       }).addTo(runTripPreviewLayer);
+
+      createMapboxRunTripPreviewMarker(
+        marker.label,
+        marker.type,
+        marker.latLng
+      );
     });
 
     const routeBounds = L.latLngBounds(routeCoordinates);
@@ -8309,7 +9973,21 @@ latestRunTripRouteSummary = null;
 }
 
 function openRunTripPanel() {
-  map.getContainer().style.display = 'block';
+  map.getContainer().style.display = 'none';
+
+const mapboxMainContainer =
+  document.getElementById('mapboxMainMap');
+
+if (mapboxMainContainer) {
+  mapboxMainContainer.style.display =
+    'block';
+}
+
+if (freeRunTripMapboxMainMap) {
+  requestAnimationFrame(function () {
+    freeRunTripMapboxMainMap.resize();
+  });
+}
 
   controlsSection.style.display = 'none';
   recordsSection.classList.add('hidden');
@@ -9275,7 +10953,13 @@ runTripDashboardFollowState.addEventListener(
           animate: true
         }
       );
-    }
+      centerMapboxRunTripMapOnPosition(
+         currentLatLng,
+         {
+           animate: true
+         }
+       );  
+    }  
 
     updateRunTripDashboard();
   }
@@ -9293,6 +10977,22 @@ map.on(
     }
 
     isRunTripMapFollowing = false;
+    updateRunTripDashboard();
+  }
+);
+freeRunTripMapboxMainMap.on(
+  'dragstart',
+  function () {
+    if (
+      !isRunTripFollowing ||
+      isRunTripPaused ||
+      !isRunTripMapFollowing
+    ) {
+      return;
+    }
+
+    isRunTripMapFollowing = false;
+
     updateRunTripDashboard();
   }
 );
@@ -9340,7 +11040,15 @@ function hideAllMainAppScreens() {
   map.getContainer().style.display =
     'none';
 
-  controlsSection.style.display =
+  const mapboxMainContainer =
+     document.getElementById('mapboxMainMap');
+
+  if (mapboxMainContainer) {
+    mapboxMainContainer.style.display =
+      'none';
+  }
+  
+    controlsSection.style.display =
     'none';
 
   recordsSection.classList.add(
@@ -9439,28 +11147,38 @@ function openAppPage(pageName) {
   }
 
   if (pageName === 'running') {
-    /* RunTrip에서 사용한 예정 경로·마커가
-       일반 러닝 지도에 남지 않도록 탭 진입 시 정리한다. */
-    clearRunTripVisualState();
+  /* RunTrip에서 사용한 예정 경로·마커가
+     일반 러닝 지도에 남지 않도록 탭 진입 시 정리한다. */
+  clearRunTripVisualState();
 
-    map.getContainer().style.display =
-      'block';
+  map.getContainer().style.display =
+    'none';
 
-    controlsSection.style.display =
-      'flex';
-
-    recordsSection.classList.add(
-      'hidden'
+  const mapboxMainContainer =
+    document.getElementById(
+      'mapboxMainMap'
     );
 
-    requestAnimationFrame(function () {
-      map.invalidateSize({
-        pan: false
-      });
-    });
-
-    return;
+  if (mapboxMainContainer) {
+    mapboxMainContainer.style.display =
+      'block';
   }
+
+  controlsSection.style.display =
+    'flex';
+
+  recordsSection.classList.add(
+    'hidden'
+  );
+
+  if (freeRunTripMapboxMainMap) {
+    requestAnimationFrame(function () {
+      freeRunTripMapboxMainMap.resize();
+    });
+  }
+
+  return;
+}
 
   if (pageName === 'runtrip') {
     /* RunTrip 생성·준비 화면에서도
