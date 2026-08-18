@@ -213,6 +213,7 @@ let activeRouteSegment = [];
 let routeLine;
 let routeLines = [];
 let mapboxRunningRouteSourceReady = false;
+let runningRouteNeedsNewSegment = false;
 
 const MAPBOX_RUNNING_ROUTE_SOURCE_ID =
   'freeruntrip-running-route-source';
@@ -399,8 +400,12 @@ function beginNewRouteSegment() {
 }
 
 function appendRoutePointToActiveSegment(point) {
-  if (!activeRouteSegment) {
+  if (
+    runningRouteNeedsNewSegment ||
+    !activeRouteSegment
+  ) {
     beginNewRouteSegment();
+    runningRouteNeedsNewSegment = false;
   }
 
   routeCoordinates.push(point);
@@ -2132,6 +2137,8 @@ function initializeMapboxDetailRouteLayers() {
       source:
         MAPBOX_DETAIL_PLANNED_ROUTE_SOURCE_ID,
 
+      slot: 'top',
+
       layout: {
         'line-cap': 'round',
         'line-join': 'round'
@@ -2184,6 +2191,8 @@ function initializeMapboxDetailRouteLayers() {
 
       source:
         MAPBOX_DETAIL_ACTUAL_ROUTE_SOURCE_ID,
+
+      slot: 'top',
 
       layout: {
         'line-cap': 'round',
@@ -3947,6 +3956,8 @@ runningGpsStatus.textContent = 'GPS 위치 확인 중';
   routeCoordinates = [];
   routeSegments = [];
   activeRouteSegment = [];
+  runningRouteNeedsNewSegment = false;
+
 
   clearMapboxRunningRoute();
 
@@ -3968,7 +3979,6 @@ runningGpsStatus.textContent = 'GPS 위치 확인 중';
   splitStartAltitude = null;
   recentPositions = [];
 
-  beginNewRouteSegment();
 
   lastGpsElapsedSeconds = seconds;
   paused = false;
@@ -4334,6 +4344,7 @@ pauseBtn.addEventListener('click', function () {
   // 일시정지 구간의 대각선 연결을 방지한다.
   routeLine = null;
   activeRouteSegment = null;
+  runningRouteNeedsNewSegment = true;
 
   lastValidPosition = null;
   lastValidAltitude = null;
@@ -4494,6 +4505,7 @@ runningGpsStatus.textContent =
 routeCoordinates = [];
 routeSegments = [];
 activeRouteSegment = [];
+runningRouteNeedsNewSegment = false;
 
 clearMapboxRunningRoute();
 
