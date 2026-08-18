@@ -2206,6 +2206,25 @@ function initializeMapboxDetailRouteLayers() {
       }
     });
   }
+    if (
+    mapboxDetailMap.getLayer(
+      MAPBOX_DETAIL_PLANNED_ROUTE_LAYER_ID
+    )
+  ) {
+    mapboxDetailMap.moveLayer(
+      MAPBOX_DETAIL_PLANNED_ROUTE_LAYER_ID
+    );
+  }
+
+  if (
+    mapboxDetailMap.getLayer(
+      MAPBOX_DETAIL_ACTUAL_ROUTE_LAYER_ID
+    )
+  ) {
+    mapboxDetailMap.moveLayer(
+      MAPBOX_DETAIL_ACTUAL_ROUTE_LAYER_ID
+    );
+  }
 }
 function initializeMapboxDetailMap() {
   if (mapboxDetailMap) {
@@ -2423,6 +2442,39 @@ function updateMapboxDetailRoutes(
     convertDetailSegmentsToMapbox(
       routeData.actualSegments
     );
+      console.log(
+    'Mapbox 상세 경로 확인:',
+    {
+      activityType:
+        routeData.isRunTrip
+          ? 'runtrip'
+          : 'running',
+
+      actualSegmentCount:
+        actualSegments.length,
+
+      actualPointCount:
+        actualSegments.reduce(
+          function (sum, segment) {
+            return sum + segment.length;
+          },
+          0
+        ),
+
+      plannedSegmentCount:
+        plannedSegments.length,
+
+      actualLayerExists:
+        Boolean(
+          mapboxDetailMap.getLayer(
+            MAPBOX_DETAIL_ACTUAL_ROUTE_LAYER_ID
+          )
+        ),
+
+      actualSourceExists:
+        Boolean(actualSource)
+    }
+  );
 
   if (plannedSource) {
     plannedSource.setData({
@@ -2782,12 +2834,24 @@ function showMapboxDetailMap(record) {
       }
     };
 
+    const renderMapboxDetailSafely =
+    function () {
+      renderMapboxDetail();
+
+      mapboxDetailMap.once(
+        'idle',
+        function () {
+          renderMapboxDetail();
+        }
+      );
+    };
+
   if (mapboxDetailMap.isStyleLoaded()) {
-    renderMapboxDetail();
+    renderMapboxDetailSafely();
   } else {
     mapboxDetailMap.once(
       'load',
-      renderMapboxDetail
+      renderMapboxDetailSafely
     );
   }
 }
