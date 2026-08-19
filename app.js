@@ -4034,7 +4034,18 @@ runningGpsStatus.textContent = 'GPS 위치 확인 중';
   }
 
   if (paused) {
+  /*
+    일시정지 후 재시작하는 순간
+    이전 경로와 완전히 분리된 새 세그먼트를 만든다.
+    이후 첫 GPS 좌표부터 이 새 세그먼트에 기록한다.
+  */
   routeLine = null;
+  activeRouteSegment = null;
+
+  beginNewRouteSegment();
+
+  runningRouteNeedsNewSegment = false;
+
   lastValidPosition = null;
   lastValidAltitude = null;
   elevationReferenceAltitude = null;
@@ -4043,8 +4054,13 @@ runningGpsStatus.textContent = 'GPS 위치 확인 중';
   splitStartAltitude = null;
   recentPositions = [];
 
-
   lastGpsElapsedSeconds = seconds;
+
+  console.log(
+    '러닝 새 경로 세그먼트 시작:',
+    routeSegments.length
+  );
+
   paused = false;
 }
 
