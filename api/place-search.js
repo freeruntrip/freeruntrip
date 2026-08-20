@@ -99,7 +99,37 @@ function isLotAddressQuery(query) {
     normalizedQuery
   );
 }
+function getLotAddressFallbackQueries(query) {
+  const normalizedQuery = String(query || '')
+    .trim()
+    .replace(/\s+/g, ' ');
 
+  if (!isLotAddressQuery(normalizedQuery)) {
+    return [];
+  }
+
+  const parts = normalizedQuery.split(' ');
+  const fallbackQueries = [];
+
+  for (let index = 0; index < parts.length; index += 1) {
+    if (/(?:읍|면|동|리)$/.test(parts[index])) {
+      const shortenedQuery = parts
+        .slice(index)
+        .join(' ');
+
+      if (
+        shortenedQuery &&
+        shortenedQuery !== normalizedQuery
+      ) {
+        fallbackQueries.push(shortenedQuery);
+      }
+    }
+  }
+
+  return [
+    ...new Set(fallbackQueries)
+  ];
+}
 function normalizeAddressPlaces(documents = [], query = '') {
   const preferLotAddress =
     isLotAddressQuery(query);
@@ -828,22 +858,64 @@ async function handleFetchRequest(request) {
     }
 
     try {
-      const [addressResult, keywordResult] = await Promise.all([
-        requestKakaoSearch({
-          endpoint:
-            'https://dapi.kakao.com/v2/local/search/address.json',
-          query,
-          kakaoRestApiKey,
-          size: 10,
-        }),
-        requestKakaoSearch({
-          endpoint:
-            'https://dapi.kakao.com/v2/local/search/keyword.json',
-          query,
-          kakaoRestApiKey,
-          size: 10,
-        }),
-      ]);
+      let [addressResult, keywordResult] =
+  await Promise.all([
+    requestKakaoSearch({
+      endpoint:
+        'https://dapi.kakao.com/v2/local/search/address.json',
+      query,
+      kakaoRestApiKey,
+      size: 10,
+    }),
+    requestKakaoSearch({
+      endpoint:
+        'https://dapi.kakao.com/v2/local/search/keyword.json',
+      query,
+      kakaoRestApiKey,
+      size: 10,
+    }),
+  ]);
+
+const hasAddressDocuments =
+  addressResult.ok &&
+  Array.isArray(
+    addressResult.data?.documents
+  ) &&
+  addressResult.data.documents.length > 0;
+
+if (
+  isLotAddressQuery(query) &&
+  !hasAddressDocuments
+) {
+  const fallbackQueries =
+    getLotAddressFallbackQueries(query);
+
+  for (const fallbackQuery of fallbackQueries) {
+    const fallbackAddressResult =
+      await requestKakaoSearch({
+        endpoint:
+          'https://dapi.kakao.com/v2/local/search/address.json',
+        query: fallbackQuery,
+        kakaoRestApiKey,
+        size: 10,
+      });
+
+    const fallbackDocuments =
+      fallbackAddressResult.ok &&
+      Array.isArray(
+        fallbackAddressResult.data?.documents
+      )
+        ? fallbackAddressResult.data.documents
+        : [];
+
+    if (fallbackDocuments.length > 0) {
+      addressResult =
+        fallbackAddressResult;
+
+      break;
+    }
+  }
+}
 
       if (!addressResult.ok && !keywordResult.ok) {
         return jsonResponse(
