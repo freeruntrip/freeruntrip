@@ -2078,20 +2078,44 @@ routeSegments: routeSegments
     runningGpsDiagnosticLog
   );
 
-  runRecords.unshift(record);
+  const nextRunRecords = [
+  record,
+  ...runRecords
+];
 
-  localStorage.setItem(
-    'runRecords',
-    JSON.stringify(runRecords)
+const persistResult =
+  persistRunRecordsSafely(
+    nextRunRecords
   );
+
+if (!persistResult.success) {
+  console.error(
+    '일반 러닝 기록 저장 실패:',
+    persistResult.error
+  );
+
+  return null;
+}
+
+runRecords =
+  persistResult.records;
+
+if (persistResult.compacted) {
+  console.warn(
+    '저장 공간 확보를 위해 기존 기록의 GPS 진단 로그를 정리했습니다.'
+  );
+}
 
 renderRunRecords();
 renderRecordProfileFeed();
 renderMonthlyReport();
 
-  console.log('저장된 러닝 기록:', record);
+console.log(
+  '저장된 러닝 기록:',
+  record
+);
 
-  return record;
+return record;
 }
 function initializeMapboxDetailRouteLayers() {
   if (
@@ -4503,7 +4527,34 @@ freeRunTripMapboxMainMap.on(
     updateRunningFollowState();
   }
 );
+function connectReliableSafariTap(button) {
+  if (!button) {
+    return;
+  }
 
+  button.style.touchAction =
+    'manipulation';
+
+  button.addEventListener(
+    'touchend',
+    function (event) {
+      event.preventDefault();
+
+      button.click();
+    },
+    {
+      passive: false
+    }
+  );
+}
+
+connectReliableSafariTap(
+  stopBtn
+);
+
+connectReliableSafariTap(
+  saveRunWithMoodBtn
+);
 stopBtn.addEventListener('click', function () {
   console.log('러닝 종료 버튼 클릭됨');
 
@@ -4546,14 +4597,29 @@ saveRunWithMoodBtn.addEventListener('click', function () {
   if (activeMoodButton) {
     selectedPaceMood = activeMoodButton.dataset.mood;
 
-    localStorage.setItem(
-      'selectedPaceMood',
-      selectedPaceMood
-    );
+    try {
+  localStorage.setItem(
+    'selectedPaceMood',
+    selectedPaceMood
+  );
+} catch (error) {
+  console.warn(
+    'Pace Mood 설정 저장 실패:',
+    error
+  );
+}
   }
 
 const savedRunRecord =
   saveRunRecord();
+
+if (!savedRunRecord) {
+  alert(
+    '러닝 기록을 저장하지 못했어요. 기록은 그대로 유지하고 있으니 다시 저장해 주세요.'
+  );
+
+  return;
+}
 
 resetRunMemoryInputs();
 
