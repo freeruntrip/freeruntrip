@@ -1342,159 +1342,82 @@ let freeRunTripActiveVoiceAudio = null;
 let freeRunTripVoiceUnlocked = false;
 let nextRunningVoiceDistanceMeters = 1000;
 
-function primeFreeRunTripRegisteredAudio() {
-  const registeredEntries =
-    Object.values(
-      freeRunTripVoiceAudioRegistry
+function playFreeRunTripRegisteredAudioNow(
+  key
+) {
+  const safeKey =
+    String(key || '').trim();
+
+  const entry =
+    freeRunTripVoiceAudioRegistry[
+      safeKey
+    ];
+
+  if (
+    !entry ||
+    !entry.audio
+  ) {
+    return false;
+  }
+
+  const audio =
+    entry.audio;
+
+  try {
+    if (
+      freeRunTripActiveVoiceAudio &&
+      freeRunTripActiveVoiceAudio !==
+        audio
+    ) {
+      freeRunTripActiveVoiceAudio.pause();
+      freeRunTripActiveVoiceAudio.currentTime = 0;
+    }
+
+    audio.pause();
+    audio.currentTime = 0;
+
+    freeRunTripActiveVoiceAudio =
+      audio;
+
+    const playPromise =
+      audio.play();
+
+    if (
+      playPromise &&
+      typeof playPromise.catch ===
+        'function'
+    ) {
+      playPromise.catch(
+        function (error) {
+          console.warn(
+            'FreeRunTrip 시작 MP3 재생 실패:',
+            safeKey,
+            error
+          );
+        }
+      );
+    }
+
+    return true;
+  } catch (error) {
+    console.warn(
+      'FreeRunTrip 시작 MP3 재생 예외:',
+      safeKey,
+      error
     );
 
-  registeredEntries.forEach(
-    function (entry) {
-      const audio =
-        entry && entry.audio;
-
-      if (!audio) {
-        return;
-      }
-
-      try {
-        audio.pause();
-        audio.currentTime = 0;
-        audio.volume = 0;
-
-        const playPromise =
-          audio.play();
-
-        if (
-          playPromise &&
-          typeof playPromise.then ===
-            'function'
-        ) {
-          playPromise
-            .then(function () {
-              setTimeout(function () {
-                try {
-                  audio.pause();
-                  audio.currentTime = 0;
-                  audio.volume = 1;
-                  entry.primed = true;
-
-                  console.log(
-                    'FreeRunTrip MP3 오디오 활성화 완료:',
-                    entry.key
-                  );
-                } catch (error) {
-                  console.warn(
-                    'FreeRunTrip MP3 활성화 마무리 실패:',
-                    error
-                  );
-                }
-              }, 40);
-            })
-            .catch(function (error) {
-              audio.volume = 1;
-
-              console.warn(
-                'FreeRunTrip MP3 오디오 활성화 실패:',
-                entry.key,
-                error
-              );
-            });
-        } else {
-          setTimeout(function () {
-            audio.pause();
-            audio.currentTime = 0;
-            audio.volume = 1;
-            entry.primed = true;
-          }, 40);
-        }
-      } catch (error) {
-        audio.volume = 1;
-
-        console.warn(
-          'FreeRunTrip MP3 오디오 활성화 예외:',
-          entry.key,
-          error
-        );
-      }
-    }
-  );
+    return false;
+  }
 }
 
 function unlockFreeRunTripVoiceGuidance() {
   prepareFreeRunTripVoiceGuidance();
 
-  /*
-    iPhone Safari 대응:
-    사용자가 직접 시작 버튼을 누른 순간
-    미리 만들어 둔 실제 MP3 Audio 객체에 play()를 호출해
-    이후 카운트다운 뒤에도 같은 객체가 재생될 수 있게 준비한다.
-  */
-  primeFreeRunTripRegisteredAudio();
-
   if (freeRunTripVoiceUnlocked) {
-    if (
-      'speechSynthesis' in window &&
-      window.speechSynthesis.paused
-    ) {
-      try {
-        window.speechSynthesis.resume();
-      } catch (error) {
-        console.warn(
-          'FreeRunTrip 음성 엔진 resume 실패:',
-          error
-        );
-      }
-    }
-
     return;
   }
 
-  if (
-    !('speechSynthesis' in window) ||
-    typeof SpeechSynthesisUtterance ===
-      'undefined'
-  ) {
-    freeRunTripVoiceUnlocked = true;
-    return;
-  }
-
-  try {
-    const unlockUtterance =
-      new SpeechSynthesisUtterance('.');
-
-    unlockUtterance.lang =
-      FREERUNTRIP_VOICE_LANGUAGE;
-
-    unlockUtterance.volume = 0;
-    unlockUtterance.rate = 1;
-    unlockUtterance.pitch = 1;
-
-    const koreanVoice =
-      getFreeRunTripKoreanVoice();
-
-    if (koreanVoice) {
-      unlockUtterance.voice =
-        koreanVoice;
-    }
-
-    window.speechSynthesis.speak(
-      unlockUtterance
-    );
-
-    freeRunTripVoiceUnlocked = true;
-
-    console.log(
-      'FreeRunTrip 음성 엔진 활성화 완료'
-    );
-  } catch (error) {
-    freeRunTripVoiceUnlocked = true;
-
-    console.warn(
-      'FreeRunTrip TTS 엔진 활성화 실패:',
-      error
-    );
-  }
+  freeRunTripVoiceUnlocked = true;
 }
 
 function prepareFreeRunTripVoiceGuidance() {
@@ -2072,26 +1995,11 @@ window.FreeRunTripVoiceGuidance = {
     cancelFreeRunTripVoiceGuidance,
 
   registerAudio:
-    registerFreeRunTripVoiceAudio
+    registerFreeRunTripVoiceAudio,
+
+  playAudioNow:
+    playFreeRunTripRegisteredAudioNow
 };
-
-document.addEventListener(
-  'click',
-  unlockFreeRunTripVoiceGuidance,
-  {
-    once: true,
-    passive: true
-  }
-);
-
-document.addEventListener(
-  'touchstart',
-  unlockFreeRunTripVoiceGuidance,
-  {
-    once: true,
-    passive: true
-  }
-);
 
 function compressRunPhoto(file) {
   return new Promise(function (resolve, reject) {
@@ -4766,6 +4674,10 @@ startBtn.addEventListener('click', async function () {
     !paused;
 
   if (isNewRunningSession) {
+    playFreeRunTripRegisteredAudioNow(
+      'running-start'
+    );
+
     const countdownCompleted =
       await showActivityCountdown('RUNNING');
 
@@ -4869,10 +4781,6 @@ pauseBtn.textContent = '일시정지';
 isRunning = true;
 hideBottomNavigation();
 updateRunningFollowState();
-
-if (isNewRunningSession) {
-  announceRunningStart();
-}
 
   setTimeout(function () {
   map.invalidateSize();
@@ -8699,8 +8607,6 @@ async function startRunTripFollowing() {
   updateRunTripFollowButton();
   updateRunTripDashboard();
 
-  announceRunTripStart();
-
   startRunTripTimer();
   startRunTripLocationWatch();
 
@@ -11783,6 +11689,10 @@ createRunTripBtn.addEventListener(
     unlockFreeRunTripVoiceGuidance();
 
     if (isRunTripConfirmed) {
+      playFreeRunTripRegisteredAudioNow(
+        'runtrip-start'
+      );
+
       startRunTripFollowing();
       return;
     }
@@ -11824,6 +11734,10 @@ startRunTripFollowBtn.addEventListener(
       stopRunTripFollowing();
       return;
     }
+
+    playFreeRunTripRegisteredAudioNow(
+      'runtrip-start'
+    );
 
     startRunTripFollowing();
   }
