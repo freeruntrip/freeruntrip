@@ -1342,8 +1342,95 @@ let freeRunTripActiveVoiceAudio = null;
 let freeRunTripVoiceUnlocked = false;
 let nextRunningVoiceDistanceMeters = 1000;
 
+function primeFreeRunTripRegisteredAudio() {
+  const registeredEntries =
+    Object.values(
+      freeRunTripVoiceAudioRegistry
+    );
+
+  registeredEntries.forEach(
+    function (entry) {
+      const audio =
+        entry && entry.audio;
+
+      if (!audio) {
+        return;
+      }
+
+      try {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.volume = 0;
+
+        const playPromise =
+          audio.play();
+
+        if (
+          playPromise &&
+          typeof playPromise.then ===
+            'function'
+        ) {
+          playPromise
+            .then(function () {
+              setTimeout(function () {
+                try {
+                  audio.pause();
+                  audio.currentTime = 0;
+                  audio.volume = 1;
+                  entry.primed = true;
+
+                  console.log(
+                    'FreeRunTrip MP3 오디오 활성화 완료:',
+                    entry.key
+                  );
+                } catch (error) {
+                  console.warn(
+                    'FreeRunTrip MP3 활성화 마무리 실패:',
+                    error
+                  );
+                }
+              }, 40);
+            })
+            .catch(function (error) {
+              audio.volume = 1;
+
+              console.warn(
+                'FreeRunTrip MP3 오디오 활성화 실패:',
+                entry.key,
+                error
+              );
+            });
+        } else {
+          setTimeout(function () {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.volume = 1;
+            entry.primed = true;
+          }, 40);
+        }
+      } catch (error) {
+        audio.volume = 1;
+
+        console.warn(
+          'FreeRunTrip MP3 오디오 활성화 예외:',
+          entry.key,
+          error
+        );
+      }
+    }
+  );
+}
+
 function unlockFreeRunTripVoiceGuidance() {
   prepareFreeRunTripVoiceGuidance();
+
+  /*
+    iPhone Safari 대응:
+    사용자가 직접 시작 버튼을 누른 순간
+    미리 만들어 둔 실제 MP3 Audio 객체에 play()를 호출해
+    이후 카운트다운 뒤에도 같은 객체가 재생될 수 있게 준비한다.
+  */
+  primeFreeRunTripRegisteredAudio();
 
   if (freeRunTripVoiceUnlocked) {
     if (
@@ -1368,6 +1455,7 @@ function unlockFreeRunTripVoiceGuidance() {
     typeof SpeechSynthesisUtterance ===
       'undefined'
   ) {
+    freeRunTripVoiceUnlocked = true;
     return;
   }
 
@@ -1400,8 +1488,10 @@ function unlockFreeRunTripVoiceGuidance() {
       'FreeRunTrip 음성 엔진 활성화 완료'
     );
   } catch (error) {
+    freeRunTripVoiceUnlocked = true;
+
     console.warn(
-      'FreeRunTrip 음성 엔진 활성화 실패:',
+      'FreeRunTrip TTS 엔진 활성화 실패:',
       error
     );
   }
@@ -1462,11 +1552,33 @@ function registerFreeRunTripVoiceAudio(
     return false;
   }
 
-  freeRunTripVoiceAudioRegistry[
-    safeKey
-  ] = safeUrl;
+  try {
+    const audio =
+      new Audio(safeUrl);
 
-  return true;
+    audio.preload = 'auto';
+    audio.playsInline = true;
+    audio.load();
+
+    freeRunTripVoiceAudioRegistry[
+      safeKey
+    ] = {
+      key: safeKey,
+      url: safeUrl,
+      audio: audio,
+      primed: false
+    };
+
+    return true;
+  } catch (error) {
+    console.error(
+      'FreeRunTrip MP3 등록 실패:',
+      safeKey,
+      error
+    );
+
+    return false;
+  }
 }
 
 function cancelFreeRunTripVoiceGuidance() {
@@ -1582,59 +1694,51 @@ function speakFreeRunTripVoice(
   const voiceKey =
     String(options.key || '').trim();
 
-  const registeredAudioUrl =
+  const registeredEntry =
     voiceKey
       ? freeRunTripVoiceAudioRegistry[
           voiceKey
         ]
-      : '';
+      : null;
 
-  if (!registeredAudioUrl) {
+  if (
+    !registeredEntry ||
+    !registeredEntry.audio
+  ) {
     speakFreeRunTripTts(message);
     return;
   }
 
+  const audio =
+    registeredEntry.audio;
+
   try {
-    const audio =
-      new Audio(
-        registeredAudioUrl
-      );
+    audio.pause();
+    audio.currentTime = 0;
+    audio.volume = 1;
 
     freeRunTripActiveVoiceAudio =
       audio;
 
-    audio.preload = 'auto';
+    const handleEnded =
+      function () {
+        if (
+          freeRunTripActiveVoiceAudio ===
+          audio
+        ) {
+          freeRunTripActiveVoiceAudio =
+            null;
+        }
+
+        audio.removeEventListener(
+          'ended',
+          handleEnded
+        );
+      };
 
     audio.addEventListener(
       'ended',
-      function () {
-        if (
-          freeRunTripActiveVoiceAudio ===
-          audio
-        ) {
-          freeRunTripActiveVoiceAudio =
-            null;
-        }
-      },
-      { once: true }
-    );
-
-    audio.addEventListener(
-      'error',
-      function () {
-        if (
-          freeRunTripActiveVoiceAudio ===
-          audio
-        ) {
-          freeRunTripActiveVoiceAudio =
-            null;
-        }
-
-        speakFreeRunTripTts(
-          message
-        );
-      },
-      { once: true }
+      handleEnded
     );
 
     const playPromise =
@@ -1648,7 +1752,8 @@ function speakFreeRunTripVoice(
       playPromise.catch(
         function (error) {
           console.warn(
-            '등록 음원 재생 실패, TTS로 대체:',
+            '등록 MP3 재생 실패, TTS로 대체:',
+            voiceKey,
             error
           );
 
@@ -1668,7 +1773,8 @@ function speakFreeRunTripVoice(
     }
   } catch (error) {
     console.warn(
-      '등록 음원 준비 실패, TTS로 대체:',
+      '등록 MP3 재생 준비 실패, TTS로 대체:',
+      voiceKey,
       error
     );
 
@@ -1929,6 +2035,20 @@ function announceRunTripDestinationArrival(
     }
   );
 }
+
+/*
+  iPhone Safari MP3 재생 1차 검증용 시작 음원.
+  최종 ElevenLabs 음원이 준비되면 같은 파일명으로 교체하면 된다.
+*/
+registerFreeRunTripVoiceAudio(
+  'running-start',
+  './assets/audio/running-start.mp3'
+);
+
+registerFreeRunTripVoiceAudio(
+  'runtrip-start',
+  './assets/audio/runtrip-start.mp3'
+);
 
 /*
   ElevenLabs 등으로 만든 고정 음성 파일을 나중에 연결할 때:
