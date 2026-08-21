@@ -1338,8 +1338,21 @@ const FREERUNTRIP_VOICE_LANGUAGE = 'ko-KR';
 const freeRunTripVoiceAudioRegistry =
   Object.create(null);
 
-let freeRunTripActiveVoiceAudio = null;
+const freeRunTripSharedAudioPlayer =
+  new Audio();
+
+freeRunTripSharedAudioPlayer.preload =
+  'auto';
+
+freeRunTripSharedAudioPlayer.playsInline =
+  true;
+
+let freeRunTripActiveVoiceAudio =
+  freeRunTripSharedAudioPlayer;
+
 let freeRunTripVoiceUnlocked = false;
+let freeRunTripAudioQueue = [];
+let freeRunTripAudioQueueRunning = false;
 let nextRunningVoiceDistanceMeters = 1000;
 
 function playFreeRunTripRegisteredAudioNow(
@@ -1348,39 +1361,31 @@ function playFreeRunTripRegisteredAudioNow(
   const safeKey =
     String(key || '').trim();
 
-  const entry =
+  const audioUrl =
     freeRunTripVoiceAudioRegistry[
       safeKey
     ];
 
-  if (
-    !entry ||
-    !entry.audio
-  ) {
+  if (!audioUrl) {
     return false;
   }
 
-  const audio =
-    entry.audio;
-
   try {
-    if (
-      freeRunTripActiveVoiceAudio &&
-      freeRunTripActiveVoiceAudio !==
-        audio
-    ) {
-      freeRunTripActiveVoiceAudio.pause();
-      freeRunTripActiveVoiceAudio.currentTime = 0;
-    }
+    freeRunTripAudioQueue = [];
+    freeRunTripAudioQueueRunning = false;
 
-    audio.pause();
-    audio.currentTime = 0;
+    freeRunTripSharedAudioPlayer.pause();
+    freeRunTripSharedAudioPlayer.currentTime = 0;
+    freeRunTripSharedAudioPlayer.src =
+      audioUrl;
 
     freeRunTripActiveVoiceAudio =
-      audio;
+      freeRunTripSharedAudioPlayer;
 
     const playPromise =
-      audio.play();
+      freeRunTripSharedAudioPlayer.play();
+
+    freeRunTripVoiceUnlocked = true;
 
     if (
       playPromise &&
@@ -1408,6 +1413,102 @@ function playFreeRunTripRegisteredAudioNow(
 
     return false;
   }
+}
+
+function playNextFreeRunTripQueuedAudio() {
+  if (
+    freeRunTripAudioQueueRunning ||
+    freeRunTripAudioQueue.length === 0
+  ) {
+    return;
+  }
+
+  const nextItem =
+    freeRunTripAudioQueue.shift();
+
+  if (!nextItem) {
+    return;
+  }
+
+  freeRunTripAudioQueueRunning = true;
+
+  const finishCurrentItem =
+    function () {
+      freeRunTripSharedAudioPlayer.removeEventListener(
+        'ended',
+        finishCurrentItem
+      );
+
+      freeRunTripAudioQueueRunning = false;
+
+      playNextFreeRunTripQueuedAudio();
+    };
+
+  freeRunTripSharedAudioPlayer.addEventListener(
+    'ended',
+    finishCurrentItem
+  );
+
+  try {
+    freeRunTripSharedAudioPlayer.pause();
+    freeRunTripSharedAudioPlayer.currentTime = 0;
+    freeRunTripSharedAudioPlayer.src =
+      nextItem.url;
+
+    const playPromise =
+      freeRunTripSharedAudioPlayer.play();
+
+    if (
+      playPromise &&
+      typeof playPromise.catch ===
+        'function'
+    ) {
+      playPromise.catch(
+        function (error) {
+          console.warn(
+            'FreeRunTrip 큐 MP3 재생 실패:',
+            nextItem.key,
+            error
+          );
+
+          finishCurrentItem();
+        }
+      );
+    }
+  } catch (error) {
+    console.warn(
+      'FreeRunTrip 큐 MP3 재생 예외:',
+      nextItem.key,
+      error
+    );
+
+    finishCurrentItem();
+  }
+}
+
+function queueFreeRunTripVoiceAudio(
+  key
+) {
+  const safeKey =
+    String(key || '').trim();
+
+  const audioUrl =
+    freeRunTripVoiceAudioRegistry[
+      safeKey
+    ];
+
+  if (!audioUrl) {
+    return false;
+  }
+
+  freeRunTripAudioQueue.push({
+    key: safeKey,
+    url: audioUrl
+  });
+
+  playNextFreeRunTripQueuedAudio();
+
+  return true;
 }
 
 function unlockFreeRunTripVoiceGuidance() {
@@ -1475,48 +1576,25 @@ function registerFreeRunTripVoiceAudio(
     return false;
   }
 
-  try {
-    const audio =
-      new Audio(safeUrl);
+  freeRunTripVoiceAudioRegistry[
+    safeKey
+  ] = safeUrl;
 
-    audio.preload = 'auto';
-    audio.playsInline = true;
-    audio.load();
-
-    freeRunTripVoiceAudioRegistry[
-      safeKey
-    ] = {
-      key: safeKey,
-      url: safeUrl,
-      audio: audio,
-      primed: false
-    };
-
-    return true;
-  } catch (error) {
-    console.error(
-      'FreeRunTrip MP3 등록 실패:',
-      safeKey,
-      error
-    );
-
-    return false;
-  }
+  return true;
 }
 
 function cancelFreeRunTripVoiceGuidance() {
-  if (freeRunTripActiveVoiceAudio) {
-    try {
-      freeRunTripActiveVoiceAudio.pause();
-      freeRunTripActiveVoiceAudio.currentTime = 0;
-    } catch (error) {
-      console.warn(
-        'FreeRunTrip 음원 정지 실패:',
-        error
-      );
-    }
+  freeRunTripAudioQueue = [];
+  freeRunTripAudioQueueRunning = false;
 
-    freeRunTripActiveVoiceAudio = null;
+  try {
+    freeRunTripSharedAudioPlayer.pause();
+    freeRunTripSharedAudioPlayer.currentTime = 0;
+  } catch (error) {
+    console.warn(
+      'FreeRunTrip MP3 정지 실패:',
+      error
+    );
   }
 
   if ('speechSynthesis' in window) {
@@ -1608,103 +1686,34 @@ function speakFreeRunTripVoice(
     return;
   }
 
-  prepareFreeRunTripVoiceGuidance();
+  const voiceKey =
+    String(options.key || '').trim();
+
+  console.log(
+    'FreeRunTrip 음성 안내 문장:',
+    message
+  );
 
   if (options.interrupt === true) {
     cancelFreeRunTripVoiceGuidance();
   }
 
-  const voiceKey =
-    String(options.key || '').trim();
-
-  const registeredEntry =
-    voiceKey
-      ? freeRunTripVoiceAudioRegistry[
-          voiceKey
-        ]
-      : null;
-
   if (
-    !registeredEntry ||
-    !registeredEntry.audio
+    voiceKey &&
+    queueFreeRunTripVoiceAudio(
+      voiceKey
+    )
   ) {
-    speakFreeRunTripTts(message);
     return;
   }
 
-  const audio =
-    registeredEntry.audio;
-
-  try {
-    audio.pause();
-    audio.currentTime = 0;
-    audio.volume = 1;
-
-    freeRunTripActiveVoiceAudio =
-      audio;
-
-    const handleEnded =
-      function () {
-        if (
-          freeRunTripActiveVoiceAudio ===
-          audio
-        ) {
-          freeRunTripActiveVoiceAudio =
-            null;
-        }
-
-        audio.removeEventListener(
-          'ended',
-          handleEnded
-        );
-      };
-
-    audio.addEventListener(
-      'ended',
-      handleEnded
-    );
-
-    const playPromise =
-      audio.play();
-
-    if (
-      playPromise &&
-      typeof playPromise.catch ===
-        'function'
-    ) {
-      playPromise.catch(
-        function (error) {
-          console.warn(
-            '등록 MP3 재생 실패, TTS로 대체:',
-            voiceKey,
-            error
-          );
-
-          if (
-            freeRunTripActiveVoiceAudio ===
-            audio
-          ) {
-            freeRunTripActiveVoiceAudio =
-              null;
-          }
-
-          speakFreeRunTripTts(
-            message
-          );
-        }
-      );
-    }
-  } catch (error) {
-    console.warn(
-      '등록 MP3 재생 준비 실패, TTS로 대체:',
-      voiceKey,
-      error
-    );
-
-    speakFreeRunTripTts(
-      message
-    );
-  }
+  /*
+    등록 MP3가 아직 없는 동적 문장은
+    개발 중 확인용 TTS fallback을 유지한다.
+    iPhone Safari에서는 TTS가 재생되지 않을 수 있으므로
+    최종 제품에서는 동적 음성 생성/숫자 음원 조합으로 교체한다.
+  */
+  speakFreeRunTripTts(message);
 }
 
 function formatFreeRunTripVoiceDuration(
@@ -1869,13 +1878,37 @@ function announceRunningDistanceMilestones(
         );
       }
 
-      speakFreeRunTripVoice(
-        messageParts.join(' '),
+      const runningVoiceMessage =
+        messageParts.join(' ');
+
+      console.log(
+        'FreeRunTrip 일반 러닝 km 안내:',
         {
-          key:
-            `running-kilometer-${kilometer}`,
-          interrupt: false
+          kilometer: kilometer,
+          elapsedSeconds: seconds,
+          elapsedText: elapsedText,
+          averagePaceText: paceText,
+          message: runningVoiceMessage
         }
+      );
+
+      const kilometerVoiceKey =
+        freeRunTripVoiceAudioRegistry[
+          `running-kilometer-${kilometer}`
+        ]
+          ? `running-kilometer-${kilometer}`
+          : 'running-kilometer-generic';
+
+      queueFreeRunTripVoiceAudio(
+        kilometerVoiceKey
+      );
+
+      queueFreeRunTripVoiceAudio(
+        'running-elapsed-time'
+      );
+
+      queueFreeRunTripVoiceAudio(
+        'running-average-pace'
       );
     }
 
@@ -1973,6 +2006,56 @@ registerFreeRunTripVoiceAudio(
   './assets/audio/runtrip-start.mp3'
 );
 
+registerFreeRunTripVoiceAudio(
+  'running-kilometer-1',
+  './assets/audio/running-kilometer-1.mp3'
+);
+
+registerFreeRunTripVoiceAudio(
+  'running-kilometer-2',
+  './assets/audio/running-kilometer-2.mp3'
+);
+
+registerFreeRunTripVoiceAudio(
+  'running-kilometer-3',
+  './assets/audio/running-kilometer-3.mp3'
+);
+
+registerFreeRunTripVoiceAudio(
+  'running-kilometer-generic',
+  './assets/audio/running-kilometer-generic.mp3'
+);
+
+registerFreeRunTripVoiceAudio(
+  'running-elapsed-time',
+  './assets/audio/running-elapsed-time.mp3'
+);
+
+registerFreeRunTripVoiceAudio(
+  'running-average-pace',
+  './assets/audio/running-average-pace.mp3'
+);
+
+registerFreeRunTripVoiceAudio(
+  'runtrip-waypoint-1',
+  './assets/audio/runtrip-waypoint-1.mp3'
+);
+
+registerFreeRunTripVoiceAudio(
+  'runtrip-waypoint-2',
+  './assets/audio/runtrip-waypoint-2.mp3'
+);
+
+registerFreeRunTripVoiceAudio(
+  'runtrip-waypoint-3',
+  './assets/audio/runtrip-waypoint-3.mp3'
+);
+
+registerFreeRunTripVoiceAudio(
+  'runtrip-destination',
+  './assets/audio/runtrip-destination.mp3'
+);
+
 /*
   ElevenLabs 등으로 만든 고정 음성 파일을 나중에 연결할 때:
   registerFreeRunTripVoiceAudio(
@@ -1998,7 +2081,10 @@ window.FreeRunTripVoiceGuidance = {
     registerFreeRunTripVoiceAudio,
 
   playAudioNow:
-    playFreeRunTripRegisteredAudioNow
+    playFreeRunTripRegisteredAudioNow,
+
+  queueAudio:
+    queueFreeRunTripVoiceAudio
 };
 
 function compressRunPhoto(file) {
