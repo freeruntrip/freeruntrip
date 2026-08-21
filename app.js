@@ -1339,7 +1339,73 @@ const freeRunTripVoiceAudioRegistry =
   Object.create(null);
 
 let freeRunTripActiveVoiceAudio = null;
+let freeRunTripVoiceUnlocked = false;
 let nextRunningVoiceDistanceMeters = 1000;
+
+function unlockFreeRunTripVoiceGuidance() {
+  prepareFreeRunTripVoiceGuidance();
+
+  if (freeRunTripVoiceUnlocked) {
+    if (
+      'speechSynthesis' in window &&
+      window.speechSynthesis.paused
+    ) {
+      try {
+        window.speechSynthesis.resume();
+      } catch (error) {
+        console.warn(
+          'FreeRunTrip 음성 엔진 resume 실패:',
+          error
+        );
+      }
+    }
+
+    return;
+  }
+
+  if (
+    !('speechSynthesis' in window) ||
+    typeof SpeechSynthesisUtterance ===
+      'undefined'
+  ) {
+    return;
+  }
+
+  try {
+    const unlockUtterance =
+      new SpeechSynthesisUtterance('.');
+
+    unlockUtterance.lang =
+      FREERUNTRIP_VOICE_LANGUAGE;
+
+    unlockUtterance.volume = 0;
+    unlockUtterance.rate = 1;
+    unlockUtterance.pitch = 1;
+
+    const koreanVoice =
+      getFreeRunTripKoreanVoice();
+
+    if (koreanVoice) {
+      unlockUtterance.voice =
+        koreanVoice;
+    }
+
+    window.speechSynthesis.speak(
+      unlockUtterance
+    );
+
+    freeRunTripVoiceUnlocked = true;
+
+    console.log(
+      'FreeRunTrip 음성 엔진 활성화 완료'
+    );
+  } catch (error) {
+    console.warn(
+      'FreeRunTrip 음성 엔진 활성화 실패:',
+      error
+    );
+  }
+}
 
 function prepareFreeRunTripVoiceGuidance() {
   if (
@@ -1876,6 +1942,9 @@ window.FreeRunTripVoiceGuidance = {
   prepare:
     prepareFreeRunTripVoiceGuidance,
 
+  unlock:
+    unlockFreeRunTripVoiceGuidance,
+
   speak:
     speakFreeRunTripVoice,
 
@@ -1888,7 +1957,7 @@ window.FreeRunTripVoiceGuidance = {
 
 document.addEventListener(
   'click',
-  prepareFreeRunTripVoiceGuidance,
+  unlockFreeRunTripVoiceGuidance,
   {
     once: true,
     passive: true
@@ -1897,7 +1966,7 @@ document.addEventListener(
 
 document.addEventListener(
   'touchstart',
-  prepareFreeRunTripVoiceGuidance,
+  unlockFreeRunTripVoiceGuidance,
   {
     once: true,
     passive: true
@@ -4568,6 +4637,8 @@ renderRecordProfileFeed();
 
 startBtn.addEventListener('click', async function () {
   console.log('러닝 시작 버튼 클릭됨');
+
+  unlockFreeRunTripVoiceGuidance();
 
   const isNewRunningSession =
     !isRunning &&
@@ -11589,6 +11660,8 @@ useCurrentLocationBtn.addEventListener('click', function () {
 createRunTripBtn.addEventListener(
   'click',
   async function () {
+    unlockFreeRunTripVoiceGuidance();
+
     if (isRunTripConfirmed) {
       startRunTripFollowing();
       return;
@@ -11625,6 +11698,8 @@ createRunTripBtn.addEventListener(
 startRunTripFollowBtn.addEventListener(
   'click',
   function () {
+    unlockFreeRunTripVoiceGuidance();
+
     if (isRunTripFollowing) {
       stopRunTripFollowing();
       return;
