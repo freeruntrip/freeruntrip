@@ -1325,6 +1325,585 @@ let splitRecords = [];
 let nextSplitDistanceMeters = 1000;
 let splitStartElapsedSeconds = 0;
 let lastGpsElapsedSeconds = 0;
+
+/* ========================================
+   FreeRunTrip 음성 안내 V1
+   - GPS 계산 / 저장 / 도착 판정과 분리된 부가 기능
+   - 기본 재생: Web Speech API (iPhone Safari 포함)
+   - ElevenLabs 등 녹음 음원은 key별 URL 등록 시 우선 재생
+======================================== */
+
+const FREERUNTRIP_VOICE_LANGUAGE = 'ko-KR';
+
+const freeRunTripVoiceAudioRegistry =
+  Object.create(null);
+
+let freeRunTripActiveVoiceAudio = null;
+let nextRunningVoiceDistanceMeters = 1000;
+
+function prepareFreeRunTripVoiceGuidance() {
+  if (
+    'speechSynthesis' in window &&
+    typeof window.speechSynthesis.getVoices === 'function'
+  ) {
+    window.speechSynthesis.getVoices();
+  }
+}
+
+function getFreeRunTripKoreanVoice() {
+  if (
+    !('speechSynthesis' in window) ||
+    typeof window.speechSynthesis.getVoices !== 'function'
+  ) {
+    return null;
+  }
+
+  const voices =
+    window.speechSynthesis.getVoices();
+
+  if (!Array.isArray(voices) || voices.length === 0) {
+    return null;
+  }
+
+  return (
+    voices.find(function (voice) {
+      return (
+        String(voice.lang || '')
+          .toLowerCase() ===
+        FREERUNTRIP_VOICE_LANGUAGE.toLowerCase()
+      );
+    }) ||
+    voices.find(function (voice) {
+      return String(voice.lang || '')
+        .toLowerCase()
+        .startsWith('ko');
+    }) ||
+    null
+  );
+}
+
+function registerFreeRunTripVoiceAudio(
+  key,
+  audioUrl
+) {
+  const safeKey =
+    String(key || '').trim();
+
+  const safeUrl =
+    String(audioUrl || '').trim();
+
+  if (!safeKey || !safeUrl) {
+    return false;
+  }
+
+  freeRunTripVoiceAudioRegistry[
+    safeKey
+  ] = safeUrl;
+
+  return true;
+}
+
+function cancelFreeRunTripVoiceGuidance() {
+  if (freeRunTripActiveVoiceAudio) {
+    try {
+      freeRunTripActiveVoiceAudio.pause();
+      freeRunTripActiveVoiceAudio.currentTime = 0;
+    } catch (error) {
+      console.warn(
+        'FreeRunTrip 음원 정지 실패:',
+        error
+      );
+    }
+
+    freeRunTripActiveVoiceAudio = null;
+  }
+
+  if ('speechSynthesis' in window) {
+    try {
+      window.speechSynthesis.cancel();
+    } catch (error) {
+      console.warn(
+        'FreeRunTrip TTS 정지 실패:',
+        error
+      );
+    }
+  }
+}
+
+function speakFreeRunTripTts(text) {
+  if (
+    !('speechSynthesis' in window) ||
+    typeof SpeechSynthesisUtterance ===
+      'undefined'
+  ) {
+    console.warn(
+      '이 브라우저에서는 음성 안내 TTS를 사용할 수 없습니다.'
+    );
+
+    return false;
+  }
+
+  const message =
+    String(text || '').trim();
+
+  if (!message) {
+    return false;
+  }
+
+  try {
+    const utterance =
+      new SpeechSynthesisUtterance(
+        message
+      );
+
+    utterance.lang =
+      FREERUNTRIP_VOICE_LANGUAGE;
+
+    utterance.rate = 0.95;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    const koreanVoice =
+      getFreeRunTripKoreanVoice();
+
+    if (koreanVoice) {
+      utterance.voice =
+        koreanVoice;
+    }
+
+    /*
+      iPhone Safari에서 speechSynthesis가
+      일시정지 상태로 남는 경우를 대비한다.
+    */
+    if (
+      window.speechSynthesis.paused
+    ) {
+      window.speechSynthesis.resume();
+    }
+
+    window.speechSynthesis.speak(
+      utterance
+    );
+
+    return true;
+  } catch (error) {
+    console.error(
+      'FreeRunTrip TTS 재생 실패:',
+      error
+    );
+
+    return false;
+  }
+}
+
+function speakFreeRunTripVoice(
+  text,
+  options = {}
+) {
+  const message =
+    String(text || '').trim();
+
+  if (!message) {
+    return;
+  }
+
+  prepareFreeRunTripVoiceGuidance();
+
+  if (options.interrupt === true) {
+    cancelFreeRunTripVoiceGuidance();
+  }
+
+  const voiceKey =
+    String(options.key || '').trim();
+
+  const registeredAudioUrl =
+    voiceKey
+      ? freeRunTripVoiceAudioRegistry[
+          voiceKey
+        ]
+      : '';
+
+  if (!registeredAudioUrl) {
+    speakFreeRunTripTts(message);
+    return;
+  }
+
+  try {
+    const audio =
+      new Audio(
+        registeredAudioUrl
+      );
+
+    freeRunTripActiveVoiceAudio =
+      audio;
+
+    audio.preload = 'auto';
+
+    audio.addEventListener(
+      'ended',
+      function () {
+        if (
+          freeRunTripActiveVoiceAudio ===
+          audio
+        ) {
+          freeRunTripActiveVoiceAudio =
+            null;
+        }
+      },
+      { once: true }
+    );
+
+    audio.addEventListener(
+      'error',
+      function () {
+        if (
+          freeRunTripActiveVoiceAudio ===
+          audio
+        ) {
+          freeRunTripActiveVoiceAudio =
+            null;
+        }
+
+        speakFreeRunTripTts(
+          message
+        );
+      },
+      { once: true }
+    );
+
+    const playPromise =
+      audio.play();
+
+    if (
+      playPromise &&
+      typeof playPromise.catch ===
+        'function'
+    ) {
+      playPromise.catch(
+        function (error) {
+          console.warn(
+            '등록 음원 재생 실패, TTS로 대체:',
+            error
+          );
+
+          if (
+            freeRunTripActiveVoiceAudio ===
+            audio
+          ) {
+            freeRunTripActiveVoiceAudio =
+              null;
+          }
+
+          speakFreeRunTripTts(
+            message
+          );
+        }
+      );
+    }
+  } catch (error) {
+    console.warn(
+      '등록 음원 준비 실패, TTS로 대체:',
+      error
+    );
+
+    speakFreeRunTripTts(
+      message
+    );
+  }
+}
+
+function formatFreeRunTripVoiceDuration(
+  totalSeconds
+) {
+  const safeSeconds =
+    Math.max(
+      0,
+      Math.round(
+        Number(totalSeconds) || 0
+      )
+    );
+
+  const hours =
+    Math.floor(
+      safeSeconds / 3600
+    );
+
+  const minutes =
+    Math.floor(
+      (safeSeconds % 3600) / 60
+    );
+
+  const secondsPart =
+    safeSeconds % 60;
+
+  const parts = [];
+
+  if (hours > 0) {
+    parts.push(
+      `${hours}시간`
+    );
+  }
+
+  if (
+    minutes > 0 ||
+    hours > 0
+  ) {
+    parts.push(
+      `${minutes}분`
+    );
+  }
+
+  parts.push(
+    `${secondsPart}초`
+  );
+
+  return parts.join(' ');
+}
+
+function formatFreeRunTripVoicePace(
+  durationSeconds,
+  distanceMeters
+) {
+  const safeDistance =
+    Math.max(
+      0,
+      Number(distanceMeters) || 0
+    );
+
+  const safeDuration =
+    Math.max(
+      0,
+      Number(durationSeconds) || 0
+    );
+
+  if (
+    safeDistance <= 0 ||
+    safeDuration <= 0
+  ) {
+    return '';
+  }
+
+  const paceSeconds =
+    safeDuration /
+    (safeDistance / 1000);
+
+  const minutes =
+    Math.floor(
+      paceSeconds / 60
+    );
+
+  const secondsPart =
+    Math.round(
+      paceSeconds % 60
+    );
+
+  return (
+    `${minutes}분 ` +
+    `${secondsPart}초`
+  );
+}
+
+function resetRunningVoiceGuidance() {
+  nextRunningVoiceDistanceMeters =
+    1000;
+}
+
+function announceRunningStart() {
+  speakFreeRunTripVoice(
+    '러닝을 시작합니다.',
+    {
+      key: 'running-start',
+      interrupt: true
+    }
+  );
+}
+
+function announceRunningDistanceMilestones(
+  previousDistanceMeters,
+  currentDistanceMeters
+) {
+  const previousDistance =
+    Math.max(
+      0,
+      Number(
+        previousDistanceMeters
+      ) || 0
+    );
+
+  const currentDistance =
+    Math.max(
+      0,
+      Number(
+        currentDistanceMeters
+      ) || 0
+    );
+
+  while (
+    currentDistance >=
+    nextRunningVoiceDistanceMeters
+  ) {
+    if (
+      previousDistance <
+      nextRunningVoiceDistanceMeters
+    ) {
+      const kilometer =
+        Math.round(
+          nextRunningVoiceDistanceMeters /
+          1000
+        );
+
+      const elapsedText =
+        formatFreeRunTripVoiceDuration(
+          seconds
+        );
+
+      const paceText =
+        formatFreeRunTripVoicePace(
+          seconds,
+          nextRunningVoiceDistanceMeters
+        );
+
+      const messageParts = [
+        `${kilometer}킬로미터입니다.`,
+        `경과 시간 ${elapsedText}.`
+      ];
+
+      if (paceText) {
+        messageParts.push(
+          `평균 페이스는 킬로미터당 ${paceText}입니다.`
+        );
+      }
+
+      speakFreeRunTripVoice(
+        messageParts.join(' '),
+        {
+          key:
+            `running-kilometer-${kilometer}`,
+          interrupt: false
+        }
+      );
+    }
+
+    nextRunningVoiceDistanceMeters +=
+      1000;
+  }
+}
+
+function announceRunTripStart() {
+  speakFreeRunTripVoice(
+    '런트립을 시작합니다.',
+    {
+      key: 'runtrip-start',
+      interrupt: true
+    }
+  );
+}
+
+function announceRunTripWaypointArrival(
+  number,
+  placeName
+) {
+  const waypointNumber =
+    Math.max(
+      1,
+      Number(number) || 1
+    );
+
+  const ordinal =
+    getRunTripWaypointOrdinal(
+      waypointNumber
+    );
+
+  const safePlaceName =
+    String(
+      placeName || ''
+    ).trim();
+
+  const message =
+    safePlaceName
+      ? (
+          `${ordinal} 경유지에 도착했어요. ` +
+          `${safePlaceName}.`
+        )
+      : (
+          `${ordinal} 경유지에 도착했어요.`
+        );
+
+  speakFreeRunTripVoice(
+    message,
+    {
+      key:
+        `runtrip-waypoint-${waypointNumber}`,
+      interrupt: true
+    }
+  );
+}
+
+function announceRunTripDestinationArrival(
+  placeName
+) {
+  const safePlaceName =
+    String(
+      placeName || ''
+    ).trim();
+
+  const message =
+    safePlaceName
+      ? (
+          `도착지에 도착했어요. ` +
+          `${safePlaceName}.`
+        )
+      : '도착지에 도착했어요.';
+
+  speakFreeRunTripVoice(
+    message,
+    {
+      key: 'runtrip-destination',
+      interrupt: true
+    }
+  );
+}
+
+/*
+  ElevenLabs 등으로 만든 고정 음성 파일을 나중에 연결할 때:
+  registerFreeRunTripVoiceAudio(
+    'runtrip-destination',
+    './audio/runtrip-destination.mp3'
+  );
+  처럼 key와 파일 경로만 등록하면 TTS보다 우선 재생된다.
+*/
+window.FreeRunTripVoiceGuidance = {
+  prepare:
+    prepareFreeRunTripVoiceGuidance,
+
+  speak:
+    speakFreeRunTripVoice,
+
+  cancel:
+    cancelFreeRunTripVoiceGuidance,
+
+  registerAudio:
+    registerFreeRunTripVoiceAudio
+};
+
+document.addEventListener(
+  'click',
+  prepareFreeRunTripVoiceGuidance,
+  {
+    once: true,
+    passive: true
+  }
+);
+
+document.addEventListener(
+  'touchstart',
+  prepareFreeRunTripVoiceGuidance,
+  {
+    once: true,
+    passive: true
+  }
+);
+
 function compressRunPhoto(file) {
   return new Promise(function (resolve, reject) {
     const reader = new FileReader();
@@ -3990,7 +4569,12 @@ renderRecordProfileFeed();
 startBtn.addEventListener('click', async function () {
   console.log('러닝 시작 버튼 클릭됨');
 
-  if (!isRunning && seconds === 0 && !paused) {
+  const isNewRunningSession =
+    !isRunning &&
+    seconds === 0 &&
+    !paused;
+
+  if (isNewRunningSession) {
     const countdownCompleted =
       await showActivityCountdown('RUNNING');
 
@@ -4026,6 +4610,7 @@ if (!isRunning) {
 
   if (seconds === 0) {
     runStartTime = new Date();
+    resetRunningVoiceGuidance();
     totalElevationGain = 0;
     totalElevationLoss = 0;
     lastValidAltitude = null;
@@ -4093,6 +4678,10 @@ pauseBtn.textContent = '일시정지';
 isRunning = true;
 hideBottomNavigation();
 updateRunningFollowState();
+
+if (isNewRunningSession) {
+  announceRunningStart();
+}
 
   setTimeout(function () {
   map.invalidateSize();
@@ -4285,6 +4874,11 @@ if (lastValidPosition) {
 
   totalDistance += calibratedDistance;
 
+  announceRunningDistanceMilestones(
+    previousDistance,
+    totalDistance
+  );
+
   const smoothedAltitude = updateRunningElevation(position);
 
   addGpsDiagnostic(runningGpsDiagnosticLog, {
@@ -4429,6 +5023,8 @@ pauseBtn.addEventListener('click', function () {
   paused = true;
   isRunning = false;
 
+  cancelFreeRunTripVoiceGuidance();
+
   clearInterval(timerInterval);
   timerInterval = null;
 
@@ -4570,6 +5166,8 @@ stopBtn.addEventListener('click', function () {
   isRunning = false;
   paused = true;
 
+  cancelFreeRunTripVoiceGuidance();
+
   clearInterval(timerInterval);
 
   if (watchId !== null && watchId !== undefined) {
@@ -4662,6 +5260,7 @@ splitRecords = [];
 nextSplitDistanceMeters = 1000;
 splitStartElapsedSeconds = 0;
 lastGpsElapsedSeconds = 0;
+resetRunningVoiceGuidance();
 
   routeLines.forEach(function (line) {
     map.removeLayer(line);
@@ -5855,6 +6454,17 @@ function showRunTripCheckpointNotice(options = {}) {
         : null,
     distanceMeters: 0
   };
+
+  if (isWaypoint) {
+    announceRunTripWaypointArrival(
+      waypointNumber,
+      activeRunTripCheckpointNotice.placeName
+    );
+  } else {
+    announceRunTripDestinationArrival(
+      activeRunTripCheckpointNotice.placeName
+    );
+  }
 
   const pauseNoticeButton =
     notice.querySelector(
@@ -7426,6 +8036,8 @@ function stopRunTripFollowing(options = {}) {
   const shouldRestoreRoute =
     options.restoreRoute !== false;
 
+  cancelFreeRunTripVoiceGuidance();
+
   if (
     runTripFollowWatchId !== null &&
     runTripFollowWatchId !== undefined
@@ -7895,6 +8507,8 @@ async function startRunTripFollowing() {
 
   updateRunTripFollowButton();
   updateRunTripDashboard();
+
+  announceRunTripStart();
 
   startRunTripTimer();
   startRunTripLocationWatch();
@@ -11051,6 +11665,8 @@ pauseRunTripBtn.addEventListener(
 
     isRunTripPaused = true;
 
+    cancelFreeRunTripVoiceGuidance();
+
     clearInterval(
       runTripTimerInterval
     );
@@ -11165,6 +11781,8 @@ endRunTripBtn.addEventListener(
     if (!shouldEnd) {
       return;
     }
+
+    cancelFreeRunTripVoiceGuidance();
 
     completeRunTrip({
       arrived: false
