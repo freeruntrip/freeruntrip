@@ -1816,7 +1816,7 @@ function announceRunningStart() {
   speakFreeRunTripVoice(
     '러닝을 시작합니다.',
     {
-      key: 'running-start',
+      key: 'running-start-voice',
       interrupt: true
     }
   );
@@ -1892,23 +1892,11 @@ function announceRunningDistanceMilestones(
         }
       );
 
-      const kilometerVoiceKey =
-        freeRunTripVoiceAudioRegistry[
-          `running-kilometer-${kilometer}`
-        ]
-          ? `running-kilometer-${kilometer}`
-          : 'running-kilometer-generic';
-
-      queueFreeRunTripVoiceAudio(
-        kilometerVoiceKey
-      );
-
-      queueFreeRunTripVoiceAudio(
-        'running-elapsed-time'
-      );
-
-      queueFreeRunTripVoiceAudio(
-        'running-average-pace'
+      speakFreeRunTripVoice(
+        runningVoiceMessage,
+        {
+          interrupt: true
+        }
       );
     }
 
@@ -1921,15 +1909,14 @@ function announceRunTripStart() {
   speakFreeRunTripVoice(
     '런트립을 시작합니다.',
     {
-      key: 'runtrip-start',
+      key: 'runtrip-start-voice',
       interrupt: true
     }
   );
 }
 
 function announceRunTripWaypointArrival(
-  number,
-  placeName
+  number
 ) {
   const waypointNumber =
     Math.max(
@@ -1937,130 +1924,88 @@ function announceRunTripWaypointArrival(
       Number(number) || 1
     );
 
-  const ordinal =
-    getRunTripWaypointOrdinal(
-      waypointNumber
-    );
+  const voiceLabels = [
+    '첫 번째',
+    '두 번째',
+    '세 번째'
+  ];
 
-  const safePlaceName =
-    String(
-      placeName || ''
-    ).trim();
+  const ordinal =
+    voiceLabels[
+      waypointNumber - 1
+    ] || `${waypointNumber}번째`;
 
   const message =
-    safePlaceName
-      ? (
-          `${ordinal} 경유지에 도착했어요. ` +
-          `${safePlaceName}.`
-        )
-      : (
-          `${ordinal} 경유지에 도착했어요.`
-        );
+    `${ordinal} 경유지에 도착했습니다.`;
 
   speakFreeRunTripVoice(
     message,
     {
       key:
-        `runtrip-waypoint-${waypointNumber}`,
+        `runtrip-waypoint-${waypointNumber}-voice`,
       interrupt: true
     }
   );
 }
 
-function announceRunTripDestinationArrival(
-  placeName
-) {
-  const safePlaceName =
-    String(
-      placeName || ''
-    ).trim();
-
-  const message =
-    safePlaceName
-      ? (
-          `도착지에 도착했어요. ` +
-          `${safePlaceName}.`
-        )
-      : '도착지에 도착했어요.';
-
+function announceRunTripDestinationArrival() {
   speakFreeRunTripVoice(
-    message,
+    '도착지에 도착했습니다.',
     {
-      key: 'runtrip-destination',
+      key: 'runtrip-destination-voice',
       interrupt: true
     }
   );
 }
 
 /*
-  iPhone Safari MP3 재생 1차 검증용 시작 음원.
-  최종 ElevenLabs 음원이 준비되면 같은 파일명으로 교체하면 된다.
+  FreeRunTrip 고정 문장 음성 MP3 등록.
+  해당 파일이 assets/audio에 있으면 MP3가 우선 재생되고,
+  파일을 등록하지 않거나 재생할 수 없는 동적 문장은 TTS를 사용한다.
+
+  필요한 고정 문장 파일명:
+  - running-start-voice.mp3       : 러닝을 시작합니다.
+  - runtrip-start-voice.mp3       : 런트립을 시작합니다.
+  - runtrip-waypoint-1-voice.mp3  : 첫 번째 경유지에 도착했습니다.
+  - runtrip-waypoint-2-voice.mp3  : 두 번째 경유지에 도착했습니다.
+  - runtrip-waypoint-3-voice.mp3  : 세 번째 경유지에 도착했습니다.
+  - runtrip-destination-voice.mp3 : 도착지에 도착했습니다.
 */
 registerFreeRunTripVoiceAudio(
-  'running-start',
-  './assets/audio/running-start.mp3'
+  'running-start-voice',
+  './assets/audio/running-start-voice.mp3'
 );
 
 registerFreeRunTripVoiceAudio(
-  'runtrip-start',
-  './assets/audio/runtrip-start.mp3'
+  'runtrip-start-voice',
+  './assets/audio/runtrip-start-voice.mp3'
 );
 
 registerFreeRunTripVoiceAudio(
-  'running-kilometer-1',
-  './assets/audio/running-kilometer-1.mp3'
+  'runtrip-waypoint-1-voice',
+  './assets/audio/runtrip-waypoint-1-voice.mp3'
 );
 
 registerFreeRunTripVoiceAudio(
-  'running-kilometer-2',
-  './assets/audio/running-kilometer-2.mp3'
+  'runtrip-waypoint-2-voice',
+  './assets/audio/runtrip-waypoint-2-voice.mp3'
 );
 
 registerFreeRunTripVoiceAudio(
-  'running-kilometer-3',
-  './assets/audio/running-kilometer-3.mp3'
+  'runtrip-waypoint-3-voice',
+  './assets/audio/runtrip-waypoint-3-voice.mp3'
 );
 
 registerFreeRunTripVoiceAudio(
-  'running-kilometer-generic',
-  './assets/audio/running-kilometer-generic.mp3'
-);
-
-registerFreeRunTripVoiceAudio(
-  'running-elapsed-time',
-  './assets/audio/running-elapsed-time.mp3'
-);
-
-registerFreeRunTripVoiceAudio(
-  'running-average-pace',
-  './assets/audio/running-average-pace.mp3'
-);
-
-registerFreeRunTripVoiceAudio(
-  'runtrip-waypoint-1',
-  './assets/audio/runtrip-waypoint-1.mp3'
-);
-
-registerFreeRunTripVoiceAudio(
-  'runtrip-waypoint-2',
-  './assets/audio/runtrip-waypoint-2.mp3'
-);
-
-registerFreeRunTripVoiceAudio(
-  'runtrip-waypoint-3',
-  './assets/audio/runtrip-waypoint-3.mp3'
-);
-
-registerFreeRunTripVoiceAudio(
-  'runtrip-destination',
-  './assets/audio/runtrip-destination.mp3'
+  'runtrip-destination-voice',
+  './assets/audio/runtrip-destination-voice.mp3'
 );
 
 /*
   ElevenLabs 등으로 만든 고정 음성 파일을 나중에 연결할 때:
   registerFreeRunTripVoiceAudio(
-    'runtrip-destination',
-    './audio/runtrip-destination.mp3'
+    'runtrip-destination-voice',
+    './assets/audio/runtrip-destination-voice.mp3'
   );
   처럼 key와 파일 경로만 등록하면 TTS보다 우선 재생된다.
 */
@@ -4760,16 +4705,14 @@ startBtn.addEventListener('click', async function () {
     !paused;
 
   if (isNewRunningSession) {
-    playFreeRunTripRegisteredAudioNow(
-      'running-start'
-    );
-
     const countdownCompleted =
       await showActivityCountdown('RUNNING');
 
     if (!countdownCompleted) {
       return;
     }
+
+    announceRunningStart();
   }
 if (!isRunning) {
   runningIdlePanel.classList.add('hidden');
@@ -6642,13 +6585,10 @@ function showRunTripCheckpointNotice(options = {}) {
 
   if (isWaypoint) {
     announceRunTripWaypointArrival(
-      waypointNumber,
-      activeRunTripCheckpointNotice.placeName
+      waypointNumber
     );
   } else {
-    announceRunTripDestinationArrival(
-      activeRunTripCheckpointNotice.placeName
-    );
+    announceRunTripDestinationArrival();
   }
 
   const pauseNoticeButton =
@@ -8641,6 +8581,8 @@ async function startRunTripFollowing() {
   if (!countdownCompleted) {
     return;
   }
+
+  announceRunTripStart();
 
   resetRunTripDashboard();
 
@@ -11775,10 +11717,6 @@ createRunTripBtn.addEventListener(
     unlockFreeRunTripVoiceGuidance();
 
     if (isRunTripConfirmed) {
-      playFreeRunTripRegisteredAudioNow(
-        'runtrip-start'
-      );
-
       startRunTripFollowing();
       return;
     }
@@ -11820,10 +11758,6 @@ startRunTripFollowBtn.addEventListener(
       stopRunTripFollowing();
       return;
     }
-
-    playFreeRunTripRegisteredAudioNow(
-      'runtrip-start'
-    );
 
     startRunTripFollowing();
   }
