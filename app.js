@@ -1353,6 +1353,8 @@ let freeRunTripActiveVoiceAudio =
 let freeRunTripVoiceUnlocked = false;
 let freeRunTripAudioQueue = [];
 let freeRunTripAudioQueueRunning = false;
+let freeRunTripDynamicVoiceObjectUrl = null;
+let freeRunTripDynamicVoiceRequestId = 0;
 let nextRunningVoiceDistanceMeters = 1000;
 
 function playFreeRunTripRegisteredAudioNow(
@@ -1586,6 +1588,7 @@ function registerFreeRunTripVoiceAudio(
 function cancelFreeRunTripVoiceGuidance() {
   freeRunTripAudioQueue = [];
   freeRunTripAudioQueueRunning = false;
+  freeRunTripDynamicVoiceRequestId++;
 
   try {
     freeRunTripSharedAudioPlayer.pause();
@@ -1595,6 +1598,14 @@ function cancelFreeRunTripVoiceGuidance() {
       'FreeRunTrip MP3 정지 실패:',
       error
     );
+  }
+
+  if (freeRunTripDynamicVoiceObjectUrl) {
+    URL.revokeObjectURL(
+      freeRunTripDynamicVoiceObjectUrl
+    );
+
+    freeRunTripDynamicVoiceObjectUrl = null;
   }
 
   if ('speechSynthesis' in window) {
@@ -1714,6 +1725,182 @@ function speakFreeRunTripVoice(
     최종 제품에서는 동적 음성 생성/숫자 음원 조합으로 교체한다.
   */
   speakFreeRunTripTts(message);
+}
+
+function getRunningDynamicVoiceUrl() {
+  if (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1'
+  ) {
+    return 'https://freeruntrip.vercel.app/api/running-tts';
+  }
+
+  return '/api/running-tts';
+}
+
+async function requestRunningDynamicVoice(
+  text
+) {
+  const message =
+    String(text || '').trim();
+
+  if (!message) {
+    return false;
+  }
+
+  /*
+    일반 러닝 km 안내는 iPhone Safari에서 실패한
+    speechSynthesis를 사용하지 않고 서버형 Typecast TTS만 사용한다.
+    기존 시작/RunTrip 고정 MP3 재생 구조는 그대로 유지한다.
+  */
+  cancelFreeRunTripVoiceGuidance();
+
+  const requestId =
+    ++freeRunTripDynamicVoiceRequestId;
+
+  console.log(
+    'FreeRunTrip 일반 러닝 Typecast 요청:',
+    message
+  );
+
+  try {
+    const response = await fetch(
+      getRunningDynamicVoiceUrl(),
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type':
+            'application/json'
+        },
+        body: JSON.stringify({
+          text: message
+        })
+      }
+    );
+
+    if (!response.ok) {
+      let errorMessage =
+        '일반 러닝 음성 생성에 실패했습니다.';
+
+      try {
+        const errorData =
+          await response.json();
+
+        if (errorData?.error) {
+          errorMessage =
+            String(errorData.error);
+        }
+      } catch (error) {
+        // JSON 오류 응답이 아니면 기본 문구를 사용한다.
+      }
+
+      throw new Error(errorMessage);
+    }
+
+    const audioBlob =
+      await response.blob();
+
+    if (
+      requestId !==
+      freeRunTripDynamicVoiceRequestId
+    ) {
+      return false;
+    }
+
+    if (
+      !audioBlob ||
+      audioBlob.size <= 0
+    ) {
+      throw new Error(
+        '생성된 음성 데이터가 없습니다.'
+      );
+    }
+
+    if (freeRunTripDynamicVoiceObjectUrl) {
+      URL.revokeObjectURL(
+        freeRunTripDynamicVoiceObjectUrl
+      );
+    }
+
+    const objectUrl =
+      URL.createObjectURL(audioBlob);
+
+    freeRunTripDynamicVoiceObjectUrl =
+      objectUrl;
+
+    freeRunTripSharedAudioPlayer.pause();
+    freeRunTripSharedAudioPlayer.currentTime = 0;
+    freeRunTripSharedAudioPlayer.src =
+      objectUrl;
+
+    freeRunTripActiveVoiceAudio =
+      freeRunTripSharedAudioPlayer;
+
+    const cleanupDynamicAudio =
+      function () {
+        freeRunTripSharedAudioPlayer.removeEventListener(
+          'ended',
+          cleanupDynamicAudio
+        );
+
+        freeRunTripSharedAudioPlayer.removeEventListener(
+          'error',
+          cleanupDynamicAudio
+        );
+
+        if (
+          freeRunTripDynamicVoiceObjectUrl ===
+          objectUrl
+        ) {
+          URL.revokeObjectURL(objectUrl);
+          freeRunTripDynamicVoiceObjectUrl =
+            null;
+        }
+      };
+
+    freeRunTripSharedAudioPlayer.addEventListener(
+      'ended',
+      cleanupDynamicAudio
+    );
+
+    freeRunTripSharedAudioPlayer.addEventListener(
+      'error',
+      cleanupDynamicAudio
+    );
+
+    const playPromise =
+      freeRunTripSharedAudioPlayer.play();
+
+    freeRunTripVoiceUnlocked = true;
+
+    if (
+      playPromise &&
+      typeof playPromise.then ===
+        'function'
+    ) {
+      await playPromise;
+    }
+
+    console.log(
+      'FreeRunTrip 일반 러닝 Typecast 재생 시작'
+    );
+
+    return true;
+  } catch (error) {
+    if (
+      requestId !==
+      freeRunTripDynamicVoiceRequestId
+    ) {
+      return false;
+    }
+
+    console.error(
+      'FreeRunTrip 일반 러닝 Typecast 재생 실패:',
+      error
+    );
+
+    return false;
+  }
 }
 
 function formatFreeRunTripVoiceDuration(
@@ -1892,11 +2079,12 @@ function announceRunningDistanceMilestones(
         }
       );
 
-      speakFreeRunTripVoice(
-        runningVoiceMessage,
-        {
-          interrupt: true
-        }
+      /*
+        일반 러닝 km 안내는 브라우저 speechSynthesis를
+        거치지 않고 Typecast 서버 TTS만 호출한다.
+      */
+      requestRunningDynamicVoice(
+        runningVoiceMessage
       );
     }
 
