@@ -2136,6 +2136,18 @@ function announceRunTripWaypointArrival(
   );
 }
 
+function announceRunningEnd() {
+  requestRunningDynamicVoice(
+    '러닝을 종료합니다. 이번 러닝은 어떤 순간이었나요?'
+  );
+}
+
+function announceRunTripEnd() {
+  requestRunningDynamicVoice(
+    '런트립을 종료합니다. 이번 런트립은 즐거우셨나요?'
+  );
+}
+
 function announceRunTripDestinationArrival() {
   speakFreeRunTripVoice(
     '도착지에 도착했습니다.',
@@ -2144,6 +2156,32 @@ function announceRunTripDestinationArrival() {
       interrupt: true
     }
   );
+}
+
+function announceRunTripDestinationThenEnd() {
+  let endVoiceStarted = false;
+
+  const startEndVoice = function () {
+    if (endVoiceStarted) {
+      return;
+    }
+
+    endVoiceStarted = true;
+
+    freeRunTripSharedAudioPlayer.removeEventListener(
+      'ended',
+      startEndVoice
+    );
+
+    announceRunTripEnd();
+  };
+
+  freeRunTripSharedAudioPlayer.addEventListener(
+    'ended',
+    startEndVoice
+  );
+
+  announceRunTripDestinationArrival();
 }
 
 /*
@@ -3214,7 +3252,8 @@ function clearMapboxDetailMarkers() {
 function createMapboxDetailMarker(
   label,
   type,
-  latLng
+  latLng,
+  horizontalOffset = 0
 ) {
   if (
     !mapboxDetailMap ||
@@ -3278,7 +3317,12 @@ function createMapboxDetailMarker(
         type === 'waypoint' ||
         type === 'destination'
           ? 'bottom'
-          : 'center'
+          : 'center',
+
+      offset: [
+        Number(horizontalOffset || 0),
+        0
+      ]
     })
       .setLngLat([
         longitude,
@@ -3645,10 +3689,18 @@ function showMapboxDetailMap(record) {
           savedDestinationPoint ||
           routeFinishPoint;
 
+        const isReturnToStartRecord =
+          record.returnToStart === true &&
+          isSameRunTripLatLng(
+            startPoint,
+            finishPoint
+          );
+
         createMapboxDetailMarker(
           'S',
           'start',
-          startPoint
+          startPoint,
+          isReturnToStartRecord ? -19 : 0
         );
 
         const waypointPlaces =
@@ -3684,7 +3736,8 @@ function showMapboxDetailMap(record) {
         createMapboxDetailMarker(
           'D',
           'destination',
-          finishPoint
+          finishPoint,
+          isReturnToStartRecord ? 19 : 0
         );
 
         allPoints.push(
@@ -5483,6 +5536,7 @@ stopBtn.addEventListener('click', function () {
   paused = true;
 
   cancelFreeRunTripVoiceGuidance();
+  announceRunningEnd();
 
   clearInterval(timerInterval);
 
@@ -5500,8 +5554,10 @@ backFromPaceMoodBtn.addEventListener(
   function () {
     paceMoodModal.classList.add('hidden');
 
+    // 종료 음성이 재생 중이라면 멈추고
     // 종료 직전까지 측정한 시간·거리·경로를 유지한 채
     // 일반 러닝을 다시 시작한다.
+    cancelFreeRunTripVoiceGuidance();
     startBtn.click();
   }
 );
@@ -5940,6 +5996,7 @@ let runTripSearchTimer = null;
 let runTripSearchRequestId = 0;
 let selectedRunTripOrigin = null;
 let selectedRunTripDestination = null;
+let isRunTripDestinationAutoSetFromOrigin = false;
 
 let isGettingRunTripCurrentLocation = false;
 
@@ -6776,7 +6833,7 @@ function showRunTripCheckpointNotice(options = {}) {
       waypointNumber
     );
   } else {
-    announceRunTripDestinationArrival();
+    announceRunTripDestinationThenEnd();
   }
 
   const pauseNoticeButton =
@@ -7260,6 +7317,20 @@ function restoreActiveRunTripState(
       savedDraft.returnToStart
     );
 
+  if (runTripReturnToggle.checked) {
+    selectedRunTripDestination =
+      selectedRunTripOrigin;
+
+    runTripDestinationInput.value =
+      getRunTripPlaceDisplayName(
+        selectedRunTripOrigin
+      );
+
+    isRunTripDestinationAutoSetFromOrigin = true;
+  } else {
+    isRunTripDestinationAutoSetFromOrigin = false;
+  }
+
   const restoredBounds =
     L.latLngBounds(
       plannedCoordinates
@@ -7413,11 +7484,25 @@ function restoreActiveRunTripState(
       restoredDraft.origin
     );
 
+  const restoredDestinationPoint =
+    getRunTripPlaceLatLng(
+      restoredDraft.destination
+    );
+
+  const restoredReturnToStart =
+    restoredDraft.returnToStart === true &&
+    isSameRunTripLatLng(
+      originPoint,
+      restoredDestinationPoint
+    );
+
   if (originPoint) {
     restoredMarkers.push({
       label: 'S',
       type: 'start',
-      latLng: originPoint
+      latLng: originPoint,
+      horizontalOffset:
+        restoredReturnToStart ? -19 : 0
     });
   }
 
@@ -7448,16 +7533,16 @@ function restoreActiveRunTripState(
     });
 
   const destinationPoint =
-    getRunTripPlaceLatLng(
-      restoredDraft.destination
-    );
+    restoredDestinationPoint;
 
   if (destinationPoint) {
     restoredMarkers.push({
       label: 'D',
       type: 'destination',
       latLng:
-        destinationPoint
+        destinationPoint,
+      horizontalOffset:
+        restoredReturnToStart ? 19 : 0
     });
   }
 
@@ -7469,7 +7554,8 @@ function restoreActiveRunTripState(
         icon:
           createRunTripPreviewMarkerIcon(
             marker.label,
-            marker.type
+            marker.type,
+            marker.horizontalOffset || 0
           ),
 
         interactive: false
@@ -7481,7 +7567,8 @@ function restoreActiveRunTripState(
     createMapboxRunTripPreviewMarker(
       marker.label,
       marker.type,
-      marker.latLng
+      marker.latLng,
+      marker.horizontalOffset || 0
     );
   }
 );
@@ -7820,12 +7907,6 @@ function showLegacyRunTripCountdown() {
 function getRunTripArrivalTargetLatLng() {
   const draft = getRunTripDraft();
 
-  if (draft.returnToStart) {
-    return getRunTripPlaceLatLng(
-      draft.origin
-    );
-  }
-
   return getRunTripPlaceLatLng(
     draft.destination
   );
@@ -7833,16 +7914,12 @@ function getRunTripArrivalTargetLatLng() {
 
 function showRunTripArrivalNotice() {
   const draft = getRunTripDraft();
-  const arrivalPlace =
-    draft.returnToStart
-      ? draft.origin
-      : draft.destination;
 
   showRunTripCheckpointNotice({
     type: 'destination',
     name:
       getRunTripPlaceDisplayName(
-        arrivalPlace
+        draft.destination
       ) || '도착지',
     targetLatLng:
       getRunTripArrivalTargetLatLng()
@@ -9108,6 +9185,7 @@ function resetRunTripDraftState() {
   runTripOriginInput.value = '현재 위치';
   runTripDestinationInput.value = '';
   runTripReturnToggle.checked = false;
+  isRunTripDestinationAutoSetFromOrigin = false;
 
   runTripWaypoints
     .querySelectorAll('.runtrip-waypoint-row')
@@ -9909,6 +9987,10 @@ connectRunTripPlaceSearch(
   runTripOriginInput.value =
     displayName;
 
+  if (runTripReturnToggle.checked) {
+    syncRunTripReturnDestination();
+  }
+
   hidePlaceSearchResults(
     runTripOriginSearchResults
   );
@@ -9934,6 +10016,11 @@ connectRunTripPlaceSearch(
     getRunTripPlaceDisplayName(place);
 
   selectedRunTripDestination = place;
+  isRunTripDestinationAutoSetFromOrigin = false;
+
+  if (runTripReturnToggle.checked) {
+    runTripReturnToggle.checked = false;
+  }
 
   runTripDestinationInput.value =
     displayName;
@@ -10102,6 +10189,10 @@ function swapRunTripPlaceSlots(firstIndex, secondIndex) {
 
   firstSlot.setPlace(secondPlace);
   secondSlot.setPlace(firstPlace);
+
+  if (runTripReturnToggle.checked) {
+    syncRunTripReturnDestination();
+  }
 
   refreshRunTripWaypointLabels();
   updateRunTripCreateButton();
@@ -10358,6 +10449,73 @@ function getRunTripPlaceLatLng(place) {
 
   return [latitude, longitude];
 }
+function isSameRunTripLatLng(
+  firstLatLng,
+  secondLatLng
+) {
+  if (
+    !Array.isArray(firstLatLng) ||
+    firstLatLng.length < 2 ||
+    !Array.isArray(secondLatLng) ||
+    secondLatLng.length < 2
+  ) {
+    return false;
+  }
+
+  const latitudeDifference =
+    Math.abs(
+      Number(firstLatLng[0]) -
+      Number(secondLatLng[0])
+    );
+
+  const longitudeDifference =
+    Math.abs(
+      Number(firstLatLng[1]) -
+      Number(secondLatLng[1])
+    );
+
+  return (
+    Number.isFinite(latitudeDifference) &&
+    Number.isFinite(longitudeDifference) &&
+    latitudeDifference < 0.0000001 &&
+    longitudeDifference < 0.0000001
+  );
+}
+
+function syncRunTripReturnDestination() {
+  if (!runTripReturnToggle.checked) {
+    if (isRunTripDestinationAutoSetFromOrigin) {
+      selectedRunTripDestination = null;
+      runTripDestinationInput.value = '';
+      isRunTripDestinationAutoSetFromOrigin = false;
+    }
+
+    updateRunTripCreateButton();
+    return;
+  }
+
+  if (!selectedRunTripOrigin) {
+    selectedRunTripDestination = null;
+    runTripDestinationInput.value = '';
+    isRunTripDestinationAutoSetFromOrigin = false;
+
+    updateRunTripCreateButton();
+    return;
+  }
+
+  selectedRunTripDestination =
+    selectedRunTripOrigin;
+
+  runTripDestinationInput.value =
+    getRunTripPlaceDisplayName(
+      selectedRunTripOrigin
+    );
+
+  isRunTripDestinationAutoSetFromOrigin = true;
+
+  updateRunTripCreateButton();
+}
+
 function createRunTripPlaceRecord(place) {
   if (!place) {
     return null;
@@ -10412,7 +10570,11 @@ function createRunTripPlaceRecord(place) {
       Number(latLng[1])
   };
 }
-function createRunTripPreviewMarkerIcon(label, type) {
+function createRunTripPreviewMarkerIcon(
+  label,
+  type,
+  horizontalOffset = 0
+) {
   return L.divIcon({
     className: `runtrip-preview-marker ${type}`,
     html: `
@@ -10422,13 +10584,17 @@ function createRunTripPreviewMarkerIcon(label, type) {
       <div class="runtrip-preview-marker-tip"></div>
     `,
     iconSize: [42, 50],
-    iconAnchor: [21, 48]
+    iconAnchor: [
+      21 - Number(horizontalOffset || 0),
+      48
+    ]
   });
 }
 function createMapboxRunTripPreviewMarker(
   label,
   type,
-  latLng
+  latLng,
+  horizontalOffset = 0
 ) {
   if (
     !freeRunTripMapboxMainMap ||
@@ -10472,7 +10638,11 @@ function createMapboxRunTripPreviewMarker(
   const marker =
     new mapboxgl.Marker({
       element: markerElement,
-      anchor: 'bottom'
+      anchor: 'bottom',
+      offset: [
+        Number(horizontalOffset || 0),
+        0
+      ]
     })
       .setLngLat([
         longitude,
@@ -10850,11 +11020,32 @@ async function renderRunTripMapPreview() {
     draft.destination
   );
 
+  const isReturnToStartRoute =
+    draft.returnToStart === true &&
+    isSameRunTripLatLng(
+      originLatLng,
+      destinationLatLng
+    );
+
+  if (originLatLng) {
+    const originMarker =
+      previewMarkers.find(function (marker) {
+        return marker.type === 'start';
+      });
+
+    if (originMarker) {
+      originMarker.horizontalOffset =
+        isReturnToStartRoute ? -19 : 0;
+    }
+  }
+
   if (destinationLatLng) {
     previewMarkers.push({
       label: 'D',
       type: 'destination',
-      latLng: destinationLatLng
+      latLng: destinationLatLng,
+      horizontalOffset:
+        isReturnToStartRoute ? 19 : 0
     });
   }
 
@@ -10866,7 +11057,8 @@ async function renderRunTripMapPreview() {
     L.marker(marker.latLng, {
       icon: createRunTripPreviewMarkerIcon(
         marker.label,
-        marker.type
+        marker.type,
+        marker.horizontalOffset || 0
       ),
       interactive: false
     }).addTo(runTripPreviewLayer);
@@ -10874,7 +11066,8 @@ async function renderRunTripMapPreview() {
     createMapboxRunTripPreviewMarker(
       marker.label,
       marker.type,
-      marker.latLng
+      marker.latLng,
+      marker.horizontalOffset || 0
     );
   });
 
@@ -10930,42 +11123,6 @@ async function renderRunTripMapPreview() {
     let totalDurationSeconds =
       Number(outwardRoute.durationSeconds) || 0;
 
-    if (draft.returnToStart) {
-      const returnRoute = await requestRunTripRoute(
-        destinationPoint,
-        originPoint,
-        [],
-        getRunTripPlaceDisplayName(
-           draft.destination
-        ) || '도착지',
-
-        getRunTripPlaceDisplayName(
-           draft.origin
-        ) || '출발지'
-      );
-
-      if (requestId !== runTripRouteRequestId) {
-        return;
-      }
-
-      const returnCoordinates =
-        Array.isArray(returnRoute.coordinates)
-          ? returnRoute.coordinates
-          : [];
-
-      if (returnCoordinates.length > 0) {
-        routeCoordinates = routeCoordinates.concat(
-          returnCoordinates.slice(1)
-        );
-      }
-
-      totalDistanceMeters +=
-        Number(returnRoute.distanceMeters) || 0;
-
-      totalDurationSeconds +=
-        Number(returnRoute.durationSeconds) || 0;
-    }
-
     if (routeCoordinates.length < 2) {
       throw new Error(
         '실제 보행 경로 좌표를 찾지 못했어요.'
@@ -10991,7 +11148,8 @@ async function renderRunTripMapPreview() {
       L.marker(marker.latLng, {
         icon: createRunTripPreviewMarkerIcon(
           marker.label,
-          marker.type
+          marker.type,
+          marker.horizontalOffset || 0
         ),
         interactive: false
       }).addTo(runTripPreviewLayer);
@@ -10999,7 +11157,8 @@ async function renderRunTripMapPreview() {
       createMapboxRunTripPreviewMarker(
         marker.label,
         marker.type,
-        marker.latLng
+        marker.latLng,
+        marker.horizontalOffset || 0
       );
     });
 
@@ -11033,10 +11192,6 @@ latestRunTripRouteSummary = null;
     const fallbackPath = previewMarkers.map(function (marker) {
       return marker.latLng;
     });
-
-    if (draft.returnToStart && fallbackPath.length >= 2) {
-      fallbackPath.push(fallbackPath[0]);
-    }
 
     if (fallbackPath.length >= 2) {
       L.polyline(fallbackPath, {
@@ -11820,9 +11975,13 @@ addWaypointBtn.addEventListener('click', function () {
   addRunTripWaypoint();
 });
 
-runTripReturnToggle.addEventListener('change', function () {
-  renderRunTripMapPreview();
-});
+runTripReturnToggle.addEventListener(
+  'change',
+  function () {
+    syncRunTripReturnDestination();
+    renderRunTripMapPreview();
+  }
+);
 
 useCurrentLocationBtn.addEventListener('click', function () {
   if (!navigator.geolocation) {
@@ -11866,6 +12025,10 @@ useCurrentLocationBtn.addEventListener('click', function () {
         getRunTripSavedOriginName(
           selectedRunTripOrigin
         );
+
+      if (runTripReturnToggle.checked) {
+        syncRunTripReturnDestination();
+      }
 
       isGettingRunTripCurrentLocation = false;
 
@@ -12101,9 +12264,14 @@ endRunTripBtn.addEventListener(
 
     cancelFreeRunTripVoiceGuidance();
 
-    completeRunTrip({
-      arrived: false
-    });
+    const savedRunTripRecord =
+      completeRunTrip({
+        arrived: false
+      });
+
+    if (savedRunTripRecord) {
+      announceRunTripEnd();
+    }
   }
 );
 updateRunTripCreateButton();

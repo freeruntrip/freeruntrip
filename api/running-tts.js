@@ -2,10 +2,49 @@ export default async function handler(
   request,
   response
 ) {
+  const origin =
+    String(
+      request.headers.origin || ''
+    );
+
+  const allowedOrigins = [
+    'http://127.0.0.1:5500',
+    'http://localhost:5500',
+    'https://freeruntrip.vercel.app'
+  ];
+
+  if (allowedOrigins.includes(origin)) {
+    response.setHeader(
+      'Access-Control-Allow-Origin',
+      origin
+    );
+
+    response.setHeader(
+      'Vary',
+      'Origin'
+    );
+  }
+
+  response.setHeader(
+    'Access-Control-Allow-Methods',
+    'POST, OPTIONS'
+  );
+
+  response.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type'
+  );
+
+  if (request.method === 'OPTIONS') {
+    return response
+      .status(204)
+      .end();
+  }
+
   if (request.method !== 'POST') {
     response.setHeader(
       'Allow',
-      'POST'
+      'POST, OPTIONS'
     );
 
     return response.status(405).json({
