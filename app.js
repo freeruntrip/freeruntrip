@@ -650,7 +650,7 @@ function centerRunTripMapOnPosition(
     return;
   }
 
-  const targetZoom = Math.max(map.getZoom(), 17);
+  const targetZoom = Math.max(map.getZoom(), 18);
 
   map.setView(
     latLng,
@@ -750,10 +750,15 @@ function centerMapboxRunTripMapOnPosition(
       fullMapCenterY
     );
 
+  /*
+    RunTrip 실행 중에는 일반 지도보다 한 단계 더 가까이 확대한다.
+    러너가 다음 교차로와 회전 지점을 빠르게 읽을 수 있도록
+    내비게이션 화면에 가까운 줌을 유지한다.
+  */
   const targetZoom =
     Math.max(
       freeRunTripMapboxMainMap.getZoom(),
-      17
+      18.2
     );
 
   freeRunTripMapboxMainMap.easeTo({
@@ -1739,7 +1744,8 @@ function getRunningDynamicVoiceUrl() {
 }
 
 async function requestRunningDynamicVoice(
-  text
+  text,
+  options = {}
 ) {
   const message =
     String(text || '').trim();
@@ -1749,11 +1755,16 @@ async function requestRunningDynamicVoice(
   }
 
   /*
-    일반 러닝 km 안내는 iPhone Safari에서 실패한
-    speechSynthesis를 사용하지 않고 서버형 Typecast TTS만 사용한다.
-    기존 시작/RunTrip 고정 MP3 재생 구조는 그대로 유지한다.
+    일반 러닝 km 안내와 종료 안내는 iPhone Safari에서 실패한
+    speechSynthesis를 사용하지 않고 서버형 Typecast TTS를 사용한다.
+
+    종료 문구처럼 여러 문장을 순서대로 재생할 때는 첫 문장 종료 후
+    다음 문장을 이어야 하므로 interrupt:false 옵션으로 기존 재생을
+    불필요하게 취소하지 않는다. 기본 동작은 기존과 동일하게 interrupt.
   */
-  cancelFreeRunTripVoiceGuidance();
+  if (options.interrupt !== false) {
+    cancelFreeRunTripVoiceGuidance();
+  }
 
   const requestId =
     ++freeRunTripDynamicVoiceRequestId;
@@ -1882,8 +1893,51 @@ async function requestRunningDynamicVoice(
     }
 
     console.log(
-      'FreeRunTrip 일반 러닝 Typecast 재생 시작'
+      'FreeRunTrip Typecast 재생 시작:',
+      message
     );
+
+    if (options.waitForEnd === true) {
+      await new Promise(function (resolve) {
+        let settled = false;
+
+        const finish = function () {
+          if (settled) {
+            return;
+          }
+
+          settled = true;
+
+          freeRunTripSharedAudioPlayer.removeEventListener(
+            'ended',
+            finish
+          );
+
+          freeRunTripSharedAudioPlayer.removeEventListener(
+            'error',
+            finish
+          );
+
+          clearTimeout(timeoutId);
+          resolve();
+        };
+
+        freeRunTripSharedAudioPlayer.addEventListener(
+          'ended',
+          finish
+        );
+
+        freeRunTripSharedAudioPlayer.addEventListener(
+          'error',
+          finish
+        );
+
+        const timeoutId = setTimeout(
+          finish,
+          Math.max(5000, Number(options.timeoutMs) || 20000)
+        );
+      });
+    }
 
     return true;
   } catch (error) {
@@ -2136,15 +2190,231 @@ function announceRunTripWaypointArrival(
   );
 }
 
+function waitFreeRunTripVoiceGap(milliseconds) {
+  return new Promise(function (resolve) {
+    setTimeout(
+      resolve,
+      Math.max(0, Number(milliseconds) || 0)
+    );
+  });
+}
+
+function playFreeRunTripRegisteredAudioAndWait(
+  key,
+  options = {}
+) {
+  const safeKey =
+    String(key || '').trim();
+
+  const audioUrl =
+    freeRunTripVoiceAudioRegistry[
+      safeKey
+    ];
+
+  if (!audioUrl) {
+    console.warn(
+      'FreeRunTrip 고정 MP3가 등록되지 않았습니다:',
+      safeKey
+    );
+
+    return Promise.resolve(false);
+  }
+
+  return new Promise(function (resolve) {
+    let finished = false;
+    let timeoutId = null;
+
+    const finish = function (success) {
+      if (finished) {
+        return;
+      }
+
+      finished = true;
+
+      freeRunTripSharedAudioPlayer.removeEventListener(
+        'ended',
+        handleEnded
+      );
+
+      freeRunTripSharedAudioPlayer.removeEventListener(
+        'error',
+        handleError
+      );
+
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+
+      resolve(success);
+    };
+
+    const handleEnded = function () {
+      finish(true);
+    };
+
+    const handleError = function () {
+      console.warn(
+        'FreeRunTrip 고정 MP3 재생 오류:',
+        safeKey
+      );
+
+      finish(false);
+    };
+
+    try {
+      freeRunTripSharedAudioPlayer.addEventListener(
+        'ended',
+        handleEnded
+      );
+
+      freeRunTripSharedAudioPlayer.addEventListener(
+        'error',
+        handleError
+      );
+
+      freeRunTripSharedAudioPlayer.pause();
+      freeRunTripSharedAudioPlayer.currentTime = 0;
+      freeRunTripSharedAudioPlayer.src =
+        audioUrl;
+
+      freeRunTripActiveVoiceAudio =
+        freeRunTripSharedAudioPlayer;
+
+      const playPromise =
+        freeRunTripSharedAudioPlayer.play();
+
+      freeRunTripVoiceUnlocked = true;
+
+      if (
+        playPromise &&
+        typeof playPromise.catch ===
+          'function'
+      ) {
+        playPromise.catch(
+          function (error) {
+            console.warn(
+              'FreeRunTrip 고정 MP3 재생 실패:',
+              safeKey,
+              error
+            );
+
+            finish(false);
+          }
+        );
+      }
+
+      timeoutId = setTimeout(
+        function () {
+          console.warn(
+            'FreeRunTrip 고정 MP3 재생 대기 시간 초과:',
+            safeKey
+          );
+
+          finish(false);
+        },
+        Math.max(
+          3000,
+          Number(options.timeoutMs) || 15000
+        )
+      );
+    } catch (error) {
+      console.warn(
+        'FreeRunTrip 고정 MP3 재생 예외:',
+        safeKey,
+        error
+      );
+
+      finish(false);
+    }
+  });
+}
+
+async function playFreeRunTripRegisteredAudioSequence(
+  keys,
+  options = {}
+) {
+  const safeKeys = Array.isArray(keys)
+    ? keys
+        .map(function (key) {
+          return String(key || '').trim();
+        })
+        .filter(Boolean)
+    : [];
+
+  if (safeKeys.length === 0) {
+    return false;
+  }
+
+  /*
+    종료 안내는 모두 고정 MP3로 재생한다.
+    Typecast 서버 TTS와 완전히 분리하고,
+    각 MP3의 실제 ended 이후에 짧은 간격을 둔 다음
+    다음 MP3를 같은 Audio 객체로 재생한다.
+  */
+  cancelFreeRunTripVoiceGuidance();
+
+  const gapMs =
+    Math.max(
+      0,
+      Number(options.gapMs) || 300
+    );
+
+  for (
+    let index = 0;
+    index < safeKeys.length;
+    index++
+  ) {
+    const key = safeKeys[index];
+
+    const played =
+      await playFreeRunTripRegisteredAudioAndWait(
+        key,
+        {
+          timeoutMs: 15000
+        }
+      );
+
+    if (!played) {
+      console.warn(
+        'FreeRunTrip 고정 종료 음성 시퀀스 중단:',
+        key
+      );
+
+      return false;
+    }
+
+    if (index < safeKeys.length - 1) {
+      await waitFreeRunTripVoiceGap(
+        gapMs
+      );
+    }
+  }
+
+  return true;
+}
+
 function announceRunningEnd() {
-  requestRunningDynamicVoice(
-    '러닝을 종료합니다. 이번 러닝은 어떤 순간이었나요?'
+  return playFreeRunTripRegisteredAudioSequence(
+    [
+      'running-end-voice',
+      'running-end-mood-voice'
+    ],
+    {
+      gapMs: 300
+    }
   );
 }
 
 function announceRunTripEnd() {
-  requestRunningDynamicVoice(
-    '런트립을 종료합니다. 이번 런트립은 즐거우셨나요?'
+  return playFreeRunTripRegisteredAudioSequence(
+    [
+      'runtrip-end-voice',
+      'runtrip-end-mood-voice'
+    ],
+    {
+      gapMs: 300
+    }
   );
 }
 
@@ -2159,29 +2429,16 @@ function announceRunTripDestinationArrival() {
 }
 
 function announceRunTripDestinationThenEnd() {
-  let endVoiceStarted = false;
-
-  const startEndVoice = function () {
-    if (endVoiceStarted) {
-      return;
+  return playFreeRunTripRegisteredAudioSequence(
+    [
+      'runtrip-destination-voice',
+      'runtrip-end-voice',
+      'runtrip-end-mood-voice'
+    ],
+    {
+      gapMs: 300
     }
-
-    endVoiceStarted = true;
-
-    freeRunTripSharedAudioPlayer.removeEventListener(
-      'ended',
-      startEndVoice
-    );
-
-    announceRunTripEnd();
-  };
-
-  freeRunTripSharedAudioPlayer.addEventListener(
-    'ended',
-    startEndVoice
   );
-
-  announceRunTripDestinationArrival();
 }
 
 /*
@@ -2196,6 +2453,10 @@ function announceRunTripDestinationThenEnd() {
   - runtrip-waypoint-2-voice.mp3  : 두 번째 경유지에 도착했습니다.
   - runtrip-waypoint-3-voice.mp3  : 세 번째 경유지에 도착했습니다.
   - runtrip-destination-voice.mp3 : 도착지에 도착했습니다.
+  - running-end-voice.mp3         : 러닝을 종료합니다.
+  - running-end-mood-voice.mp3    : 이번 러닝은 어떤 순간이었나요?
+  - runtrip-end-voice.mp3         : 런트립을 종료합니다.
+  - runtrip-end-mood-voice.mp3    : 이번 런트립은 즐거우셨나요?
 */
 registerFreeRunTripVoiceAudio(
   'running-start-voice',
@@ -2225,6 +2486,26 @@ registerFreeRunTripVoiceAudio(
 registerFreeRunTripVoiceAudio(
   'runtrip-destination-voice',
   './assets/audio/runtrip-destination-voice.mp3'
+);
+
+registerFreeRunTripVoiceAudio(
+  'running-end-voice',
+  './assets/audio/running-end-voice.mp3'
+);
+
+registerFreeRunTripVoiceAudio(
+  'running-end-mood-voice',
+  './assets/audio/running-end-mood-voice.mp3'
+);
+
+registerFreeRunTripVoiceAudio(
+  'runtrip-end-voice',
+  './assets/audio/runtrip-end-voice.mp3'
+);
+
+registerFreeRunTripVoiceAudio(
+  'runtrip-end-mood-voice',
+  './assets/audio/runtrip-end-mood-voice.mp3'
 );
 
 /*
@@ -5535,7 +5816,6 @@ stopBtn.addEventListener('click', function () {
   isRunning = false;
   paused = true;
 
-  cancelFreeRunTripVoiceGuidance();
   announceRunningEnd();
 
   clearInterval(timerInterval);
@@ -6017,6 +6297,15 @@ const MAPBOX_RUNTRIP_PLANNED_ROUTE_SOURCE_ID =
 const MAPBOX_RUNTRIP_PLANNED_ROUTE_LAYER_ID =
   'freeruntrip-runtrip-planned-route-layer';
 
+const MAPBOX_RUNTRIP_NAVIGATION_CASING_LAYER_ID =
+  'freeruntrip-runtrip-navigation-casing-layer';
+
+const MAPBOX_RUNTRIP_NAVIGATION_ROUTE_LAYER_ID =
+  'freeruntrip-runtrip-navigation-route-layer';
+
+const MAPBOX_RUNTRIP_NAVIGATION_ARROW_LAYER_ID =
+  'freeruntrip-runtrip-navigation-arrow-layer';
+
 function initializeMapboxRunTripPlannedRouteLayer() {
   if (!freeRunTripMapboxMainMap) {
     return;
@@ -6076,8 +6365,184 @@ function initializeMapboxRunTripPlannedRouteLayer() {
     });
   }
 
+  /*
+    RunTrip 실행 전 미리보기는 기존 민트 점선을 유지하고,
+    실행 중에는 별도의 굵은 내비게이션 경로와 방향 화살표를 켠다.
+    이렇게 하면 경로 설정 화면과 실제 러닝 화면의 역할이 명확히 구분된다.
+  */
+  if (
+    !freeRunTripMapboxMainMap.getLayer(
+      MAPBOX_RUNTRIP_NAVIGATION_CASING_LAYER_ID
+    )
+  ) {
+    freeRunTripMapboxMainMap.addLayer({
+      id:
+        MAPBOX_RUNTRIP_NAVIGATION_CASING_LAYER_ID,
+
+      type: 'line',
+
+      source:
+        MAPBOX_RUNTRIP_PLANNED_ROUTE_SOURCE_ID,
+
+      layout: {
+        visibility: 'none',
+        'line-cap': 'round',
+        'line-join': 'round'
+      },
+
+      paint: {
+        'line-color': '#0f172a',
+        'line-width': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          16, 11,
+          18, 14,
+          20, 16
+        ],
+        'line-opacity': 0.42
+      }
+    });
+  }
+
+  if (
+    !freeRunTripMapboxMainMap.getLayer(
+      MAPBOX_RUNTRIP_NAVIGATION_ROUTE_LAYER_ID
+    )
+  ) {
+    freeRunTripMapboxMainMap.addLayer({
+      id:
+        MAPBOX_RUNTRIP_NAVIGATION_ROUTE_LAYER_ID,
+
+      type: 'line',
+
+      source:
+        MAPBOX_RUNTRIP_PLANNED_ROUTE_SOURCE_ID,
+
+      layout: {
+        visibility: 'none',
+        'line-cap': 'round',
+        'line-join': 'round'
+      },
+
+      paint: {
+        'line-color': '#76e4d2',
+        'line-width': [
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          16, 8,
+          18, 10,
+          20, 12
+        ],
+        'line-opacity': 0.98
+      }
+    });
+  }
+
+  if (
+    !freeRunTripMapboxMainMap.getLayer(
+      MAPBOX_RUNTRIP_NAVIGATION_ARROW_LAYER_ID
+    )
+  ) {
+    freeRunTripMapboxMainMap.addLayer({
+      id:
+        MAPBOX_RUNTRIP_NAVIGATION_ARROW_LAYER_ID,
+
+      type: 'symbol',
+
+      source:
+        MAPBOX_RUNTRIP_PLANNED_ROUTE_SOURCE_ID,
+
+      layout: {
+        visibility: 'none',
+        'symbol-placement': 'line',
+        'symbol-spacing': 72,
+        'text-field': '➤',
+        'text-size': 15,
+        'text-rotation-alignment': 'map',
+        'text-pitch-alignment': 'map',
+        'text-keep-upright': false,
+        'text-allow-overlap': false,
+        'text-ignore-placement': true
+      },
+
+      paint: {
+        'text-color': '#ffffff',
+        'text-halo-color': '#43cdbb',
+        'text-halo-width': 1.2,
+        'text-opacity': 0.96
+      }
+    });
+  }
+
   mapboxRunTripPlannedRouteSourceReady =
     true;
+}
+
+function setMapboxRunTripNavigationAppearance(
+  isNavigationActive
+) {
+  if (
+    !freeRunTripMapboxMainMap ||
+    !freeRunTripMapboxMainMap.isStyleLoaded()
+  ) {
+    return;
+  }
+
+  initializeMapboxRunTripPlannedRouteLayer();
+
+  const navigationVisibility =
+    isNavigationActive
+      ? 'visible'
+      : 'none';
+
+  const previewVisibility =
+    isNavigationActive
+      ? 'none'
+      : 'visible';
+
+  if (
+    freeRunTripMapboxMainMap.getLayer(
+      MAPBOX_RUNTRIP_PLANNED_ROUTE_LAYER_ID
+    )
+  ) {
+    freeRunTripMapboxMainMap.setLayoutProperty(
+      MAPBOX_RUNTRIP_PLANNED_ROUTE_LAYER_ID,
+      'visibility',
+      previewVisibility
+    );
+  }
+
+  [
+    MAPBOX_RUNTRIP_NAVIGATION_CASING_LAYER_ID,
+    MAPBOX_RUNTRIP_NAVIGATION_ROUTE_LAYER_ID,
+    MAPBOX_RUNTRIP_NAVIGATION_ARROW_LAYER_ID
+  ].forEach(function (layerId) {
+    if (
+      freeRunTripMapboxMainMap.getLayer(
+        layerId
+      )
+    ) {
+      freeRunTripMapboxMainMap.setLayoutProperty(
+        layerId,
+        'visibility',
+        navigationVisibility
+      );
+    }
+  });
+
+  /* 진행 방향 화살표가 실제 이동 경로보다 위에서 보이도록 유지한다. */
+  if (
+    isNavigationActive &&
+    freeRunTripMapboxMainMap.getLayer(
+      MAPBOX_RUNTRIP_NAVIGATION_ARROW_LAYER_ID
+    )
+  ) {
+    freeRunTripMapboxMainMap.moveLayer(
+      MAPBOX_RUNTRIP_NAVIGATION_ARROW_LAYER_ID
+    );
+  }
 }
 function initializeMapboxRunTripActualRouteLayer() {
   if (!freeRunTripMapboxMainMap) {
@@ -6138,6 +6603,16 @@ function initializeMapboxRunTripActualRouteLayer() {
 
   mapboxRunTripActualRouteSourceReady =
     true;
+
+  if (
+    freeRunTripMapboxMainMap.getLayer(
+      MAPBOX_RUNTRIP_NAVIGATION_ARROW_LAYER_ID
+    )
+  ) {
+    freeRunTripMapboxMainMap.moveLayer(
+      MAPBOX_RUNTRIP_NAVIGATION_ARROW_LAYER_ID
+    );
+  }
 }
 function updateMapboxRunTripPlannedRoute(
   coordinates
@@ -7623,6 +8098,8 @@ runTripPanel.classList.add(
   'runtrip-following'
 );
 
+setMapboxRunTripNavigationAppearance(true);
+
   runTripConfirmedSummary.classList.add(
     'hidden'
   );
@@ -8460,6 +8937,8 @@ function stopRunTripFollowing(options = {}) {
     'runtrip-following'
   );
 
+  setMapboxRunTripNavigationAppearance(false);
+
   if (runTripFollowMarker) {
     map.removeLayer(
       runTripFollowMarker
@@ -8893,6 +9372,8 @@ async function startRunTripFollowing() {
     'runtrip-following'
   );
 
+  setMapboxRunTripNavigationAppearance(true);
+
   runTripDashboard.classList.remove(
     'hidden'
   );
@@ -9220,6 +9701,8 @@ function resetRunTripDraftState() {
     'runtrip-confirmed',
     'runtrip-following'
   );
+
+  setMapboxRunTripNavigationAppearance(false);
 
   runTripConfirmedSummary.classList.add(
     'hidden'
