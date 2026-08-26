@@ -7115,6 +7115,17 @@ let runTripNavigationFirstAnnouncementDone = false;
 let runTripNavigationSecondAnnouncementDone = false;
 let runTripNavigationLastRouteProgressMeters = 0;
 let runTripNavigationLastRouteSegmentIndex = 0;
+let runTripNavigationHasJoinedRoute = false;
+
+/*
+  배너 V1 안전장치
+  - RunTrip을 출발지에서 멀리 떨어진 곳에서 시작했을 때
+    가장 가까운 경로 조각으로 강제 투영되어 0m 배너가 뜨는 것을 막는다.
+  - 실제 예정 경로 가까이에 있고, 최초에는 경로 시작점 부근에 들어왔을 때만
+    50% / 75% 진행률 안내를 활성화한다.
+*/
+const RUNTRIP_NAVIGATION_MAX_OFF_ROUTE_METERS = 45;
+const RUNTRIP_NAVIGATION_JOIN_START_RADIUS_METERS = 120;
 
 function getRunTripNavigationDirectionArrow(direction) {
   return direction === 'left' ? '↰' : '↱';
@@ -7132,13 +7143,25 @@ function formatRunTripNavigationDistance(distanceMeters) {
     return `${kilometers.toFixed(kilometers >= 10 ? 0 : 1)}km`;
   }
 
-  const roundedMeters = Math.max(0, Math.round(safeDistance / 5) * 5);
+  /*
+    회전 직전 GPS 오차 때문에 0m가 표시되는 대신
+    실제 안내가 살아 있는 동안에는 최소 5m로 표시한다.
+  */
+  const roundedMeters = safeDistance > 0
+    ? Math.max(5, Math.round(safeDistance / 5) * 5)
+    : 0;
+
   return `${roundedMeters}m`;
 }
 
 function getRunTripNavigationVoiceDistance(distanceMeters) {
   const safeDistance = Math.max(0, Number(distanceMeters) || 0);
-  return Math.max(0, Math.round(safeDistance / 5) * 5);
+
+  if (safeDistance <= 0) {
+    return 0;
+  }
+
+  return Math.max(5, Math.round(safeDistance / 5) * 5);
 }
 
 function hideRunTripNavigationBanners() {
@@ -7451,6 +7474,7 @@ function resetRunTripNavigationGuidance() {
   runTripCurrentNavigationSegmentIndex = 0;
   runTripNavigationLastRouteProgressMeters = 0;
   runTripNavigationLastRouteSegmentIndex = 0;
+  runTripNavigationHasJoinedRoute = false;
   resetRunTripNavigationSegmentAnnouncements();
 }
 
@@ -7535,6 +7559,45 @@ function announceRunTripNavigationSecond(
   requestRunningDynamicVoice(message);
 }
 
+function canJoinRunTripNavigationRoute(
+  latitude,
+  longitude,
+  projection
+) {
+  const metrics = runTripNavigationRouteMetrics;
+
+  if (
+    !metrics ||
+    !projection ||
+    !Array.isArray(metrics.points) ||
+    metrics.points.length === 0
+  ) {
+    return false;
+  }
+
+  if (
+    projection.distanceToRouteMeters >
+    RUNTRIP_NAVIGATION_MAX_OFF_ROUTE_METERS
+  ) {
+    return false;
+  }
+
+  const routeStart = metrics.points[0];
+
+  const distanceToRouteStart = calculateDistance(
+    Number(latitude),
+    Number(longitude),
+    Number(routeStart[0]),
+    Number(routeStart[1])
+  );
+
+  return (
+    Number.isFinite(distanceToRouteStart) &&
+    distanceToRouteStart <=
+      RUNTRIP_NAVIGATION_JOIN_START_RADIUS_METERS
+  );
+}
+
 function updateRunTripNavigationGuidance(
   latitude,
   longitude
@@ -7586,7 +7649,56 @@ function updateRunTripNavigationGuidance(
   }
 
   if (!projection) {
+    hideRunTripNavigationBanners();
     return;
+  }
+
+  /*
+    경로에서 멀리 떨어진 GPS는 내비게이션 진행률에 사용하지 않는다.
+    기존 구현은 이 경우에도 전체 경로에서 가장 가까운 점을 선택해
+    출발 직후 0m / 다음 회전 배너가 표시될 수 있었다.
+  */
+  if (
+    projection.distanceToRouteMeters >
+    RUNTRIP_NAVIGATION_MAX_OFF_ROUTE_METERS
+  ) {
+    hideRunTripNavigationBanners();
+    return;
+  }
+
+  /*
+    새 RunTrip 세션에서는 반드시 예정 경로의 시작점 부근에서 한 번
+    경로에 합류한 뒤에만 진행률 추적을 시작한다.
+    사용자가 선택한 출발지와 실제 현재 위치가 다른 실내 테스트에서도
+    잘못된 첫 회전 배너가 뜨지 않는다.
+  */
+  if (!runTripNavigationHasJoinedRoute) {
+    if (
+      !canJoinRunTripNavigationRoute(
+        latitude,
+        longitude,
+        projection
+      )
+    ) {
+      hideRunTripNavigationBanners();
+      return;
+    }
+
+    runTripNavigationHasJoinedRoute = true;
+    runTripNavigationLastRouteProgressMeters =
+      Math.max(0, projection.routeDistanceMeters);
+    runTripNavigationLastRouteSegmentIndex =
+      projection.routeSegmentIndex;
+
+    console.log(
+      'FreeRunTrip 내비게이션 경로 합류:',
+      {
+        routeProgressMeters:
+          Number(projection.routeDistanceMeters.toFixed(1)),
+        distanceToRouteMeters:
+          Number(projection.distanceToRouteMeters.toFixed(1))
+      }
+    );
   }
 
   runTripNavigationLastRouteSegmentIndex =
