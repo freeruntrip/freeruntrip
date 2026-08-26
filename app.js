@@ -650,7 +650,7 @@ function centerRunTripMapOnPosition(
     return;
   }
 
-  const targetZoom = Math.max(map.getZoom(), 18);
+  const targetZoom = 15;
 
   map.setView(
     latLng,
@@ -751,15 +751,11 @@ function centerMapboxRunTripMapOnPosition(
     );
 
   /*
-    RunTrip 실행 중에는 일반 지도보다 한 단계 더 가까이 확대한다.
-    러너가 다음 교차로와 회전 지점을 빠르게 읽을 수 있도록
-    내비게이션 화면에 가까운 줌을 유지한다.
+    RunTrip 실행 중 Follow 지도는 야외 테스트 기준으로
+    기존 18.2보다 약 3단계 넓게 보이도록 15.2로 고정한다.
+    현재 위치뿐 아니라 다음 경로와 경유지를 함께 읽기 위한 줌이다.
   */
-  const targetZoom =
-    Math.max(
-      freeRunTripMapboxMainMap.getZoom(),
-      18.2
-    );
+  const targetZoom = 15.2;
 
   freeRunTripMapboxMainMap.easeTo({
     center: [
@@ -1770,7 +1766,7 @@ async function requestRunningDynamicVoice(
     ++freeRunTripDynamicVoiceRequestId;
 
   console.log(
-    'FreeRunTrip 일반 러닝 Typecast 요청:',
+    'FreeRunTrip Typecast 요청:',
     message
   );
 
@@ -1949,7 +1945,7 @@ async function requestRunningDynamicVoice(
     }
 
     console.error(
-      'FreeRunTrip 일반 러닝 Typecast 재생 실패:',
+      'FreeRunTrip Typecast 재생 실패:',
       error
     );
 
@@ -2401,7 +2397,7 @@ function announceRunningEnd() {
       'running-end-mood-voice'
     ],
     {
-      gapMs: 300
+      gapMs: 100
     }
   );
 }
@@ -2413,7 +2409,7 @@ function announceRunTripEnd() {
       'runtrip-end-mood-voice'
     ],
     {
-      gapMs: 300
+      gapMs: 100
     }
   );
 }
@@ -2436,7 +2432,7 @@ function announceRunTripDestinationThenEnd() {
       'runtrip-end-mood-voice'
     ],
     {
-      gapMs: 300
+      gapMs: 100
     }
   );
 }
@@ -7078,6 +7074,640 @@ let runTripActualRouteLines = [];
 const RUNTRIP_ACTIVE_STATE_KEY =
   'freeRunTripActiveRunTripV1';
 
+/* ========================================
+   RunTrip 내비게이션 배너 · 음성 V1
+   - 경로 분할: 명확한 좌회전 / 우회전만
+   - 50%: 현재 회전 1차 안내
+   - 75%: 현재 회전 + 다음 회전 2차 안내
+======================================== */
+const runTripNavigationBannerRoot = document.getElementById(
+  'runTripNavigationBannerRoot'
+);
+
+const runTripNavigationPrimaryBanner = document.getElementById(
+  'runTripNavigationPrimaryBanner'
+);
+
+const runTripNavigationSecondaryBanner = document.getElementById(
+  'runTripNavigationSecondaryBanner'
+);
+
+const runTripNavigationPrimaryArrow = document.getElementById(
+  'runTripNavigationPrimaryArrow'
+);
+
+const runTripNavigationSecondaryArrow = document.getElementById(
+  'runTripNavigationSecondaryArrow'
+);
+
+const runTripNavigationPrimaryDistance = document.getElementById(
+  'runTripNavigationPrimaryDistance'
+);
+
+const runTripNavigationSecondaryDistance = document.getElementById(
+  'runTripNavigationSecondaryDistance'
+);
+
+let runTripNavigationRuntimeSegments = [];
+let runTripNavigationRouteMetrics = null;
+let runTripCurrentNavigationSegmentIndex = 0;
+let runTripNavigationFirstAnnouncementDone = false;
+let runTripNavigationSecondAnnouncementDone = false;
+let runTripNavigationLastRouteProgressMeters = 0;
+let runTripNavigationLastRouteSegmentIndex = 0;
+
+function getRunTripNavigationDirectionArrow(direction) {
+  return direction === 'left' ? '↰' : '↱';
+}
+
+function getRunTripNavigationDirectionLabel(direction) {
+  return direction === 'left' ? '좌회전' : '우회전';
+}
+
+function formatRunTripNavigationDistance(distanceMeters) {
+  const safeDistance = Math.max(0, Number(distanceMeters) || 0);
+
+  if (safeDistance >= 1000) {
+    const kilometers = safeDistance / 1000;
+    return `${kilometers.toFixed(kilometers >= 10 ? 0 : 1)}km`;
+  }
+
+  const roundedMeters = Math.max(0, Math.round(safeDistance / 5) * 5);
+  return `${roundedMeters}m`;
+}
+
+function getRunTripNavigationVoiceDistance(distanceMeters) {
+  const safeDistance = Math.max(0, Number(distanceMeters) || 0);
+  return Math.max(0, Math.round(safeDistance / 5) * 5);
+}
+
+function hideRunTripNavigationBanners() {
+  if (runTripNavigationBannerRoot) {
+    runTripNavigationBannerRoot.classList.add('hidden');
+  }
+
+  if (runTripNavigationPrimaryBanner) {
+    runTripNavigationPrimaryBanner.classList.add('hidden');
+  }
+
+  if (runTripNavigationSecondaryBanner) {
+    runTripNavigationSecondaryBanner.classList.add('hidden');
+  }
+}
+
+function positionRunTripNavigationBanners() {
+  if (!runTripNavigationBannerRoot) {
+    return;
+  }
+
+  const executionPanel = document.querySelector(
+    '.runtrip-following .runtrip-editor-card'
+  );
+
+  const panelBottom = executionPanel
+    ? executionPanel.getBoundingClientRect().bottom
+    : 0;
+
+  runTripNavigationBannerRoot.style.top =
+    `${Math.max(12, Math.round(panelBottom + 10))}px`;
+}
+
+function showRunTripNavigationPrimaryBanner(
+  direction,
+  distanceMeters
+) {
+  if (
+    !runTripNavigationBannerRoot ||
+    !runTripNavigationPrimaryBanner ||
+    !runTripNavigationPrimaryArrow ||
+    !runTripNavigationPrimaryDistance
+  ) {
+    return;
+  }
+
+  positionRunTripNavigationBanners();
+
+  runTripNavigationPrimaryArrow.textContent =
+    getRunTripNavigationDirectionArrow(direction);
+
+  runTripNavigationPrimaryDistance.textContent =
+    formatRunTripNavigationDistance(distanceMeters);
+
+  runTripNavigationPrimaryBanner.setAttribute(
+    'aria-label',
+    `${formatRunTripNavigationDistance(distanceMeters)} ${getRunTripNavigationDirectionLabel(direction)}`
+  );
+
+  runTripNavigationBannerRoot.classList.remove('hidden');
+  runTripNavigationPrimaryBanner.classList.remove('hidden');
+}
+
+function showRunTripNavigationSecondaryBanner(
+  direction,
+  distanceMeters
+) {
+  if (
+    !runTripNavigationBannerRoot ||
+    !runTripNavigationSecondaryBanner ||
+    !runTripNavigationSecondaryArrow ||
+    !runTripNavigationSecondaryDistance
+  ) {
+    return;
+  }
+
+  positionRunTripNavigationBanners();
+
+  runTripNavigationSecondaryArrow.textContent =
+    getRunTripNavigationDirectionArrow(direction);
+
+  runTripNavigationSecondaryDistance.textContent =
+    formatRunTripNavigationDistance(distanceMeters);
+
+  runTripNavigationSecondaryBanner.setAttribute(
+    'aria-label',
+    `${formatRunTripNavigationDistance(distanceMeters)} 직진 후 ${getRunTripNavigationDirectionLabel(direction)}`
+  );
+
+  runTripNavigationBannerRoot.classList.remove('hidden');
+  runTripNavigationSecondaryBanner.classList.remove('hidden');
+}
+
+function buildRunTripNavigationRouteMetrics(coordinates) {
+  if (!Array.isArray(coordinates) || coordinates.length < 2) {
+    return null;
+  }
+
+  const points = coordinates
+    .filter(function (point) {
+      return (
+        Array.isArray(point) &&
+        point.length >= 2 &&
+        Number.isFinite(Number(point[0])) &&
+        Number.isFinite(Number(point[1]))
+      );
+    })
+    .map(function (point) {
+      return [Number(point[0]), Number(point[1])];
+    });
+
+  if (points.length < 2) {
+    return null;
+  }
+
+  const cumulativeDistances = [0];
+
+  for (let index = 1; index < points.length; index++) {
+    const previous = points[index - 1];
+    const current = points[index];
+
+    cumulativeDistances[index] =
+      cumulativeDistances[index - 1] +
+      calculateDistance(
+        previous[0],
+        previous[1],
+        current[0],
+        current[1]
+      );
+  }
+
+  return {
+    points: points,
+    cumulativeDistances: cumulativeDistances,
+    totalDistanceMeters: cumulativeDistances[cumulativeDistances.length - 1]
+  };
+}
+
+function projectRunTripPointToRoute(
+  latitude,
+  longitude,
+  options = {}
+) {
+  const metrics = runTripNavigationRouteMetrics;
+
+  if (!metrics || metrics.points.length < 2) {
+    return null;
+  }
+
+  const lat = Number(latitude);
+  const lng = Number(longitude);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+
+  const startIndex = Math.max(
+    0,
+    Math.min(
+      metrics.points.length - 2,
+      Number.isFinite(Number(options.startIndex))
+        ? Math.floor(Number(options.startIndex))
+        : 0
+    )
+  );
+
+  const endIndex = Math.max(
+    startIndex,
+    Math.min(
+      metrics.points.length - 2,
+      Number.isFinite(Number(options.endIndex))
+        ? Math.floor(Number(options.endIndex))
+        : metrics.points.length - 2
+    )
+  );
+
+  const referenceLatitudeRadians = lat * Math.PI / 180;
+  const metersPerDegreeLatitude = 111320;
+  const metersPerDegreeLongitude =
+    111320 * Math.max(0.1, Math.cos(referenceLatitudeRadians));
+
+  let best = null;
+
+  for (let index = startIndex; index <= endIndex; index++) {
+    const first = metrics.points[index];
+    const second = metrics.points[index + 1];
+
+    const ax = (first[1] - lng) * metersPerDegreeLongitude;
+    const ay = (first[0] - lat) * metersPerDegreeLatitude;
+    const bx = (second[1] - lng) * metersPerDegreeLongitude;
+    const by = (second[0] - lat) * metersPerDegreeLatitude;
+
+    const abx = bx - ax;
+    const aby = by - ay;
+    const abLengthSquared = abx * abx + aby * aby;
+
+    const t = abLengthSquared > 0
+      ? Math.max(0, Math.min(1, -(ax * abx + ay * aby) / abLengthSquared))
+      : 0;
+
+    const projectedX = ax + abx * t;
+    const projectedY = ay + aby * t;
+    const distanceToRoute = Math.sqrt(
+      projectedX * projectedX + projectedY * projectedY
+    );
+
+    const segmentLength =
+      metrics.cumulativeDistances[index + 1] -
+      metrics.cumulativeDistances[index];
+
+    const routeDistanceMeters =
+      metrics.cumulativeDistances[index] +
+      segmentLength * t;
+
+    if (
+      !best ||
+      distanceToRoute < best.distanceToRouteMeters
+    ) {
+      best = {
+        routeSegmentIndex: index,
+        routeDistanceMeters: routeDistanceMeters,
+        distanceToRouteMeters: distanceToRoute
+      };
+    }
+  }
+
+  return best;
+}
+
+function buildRunTripNavigationRuntimeSegments(
+  rawSegments,
+  routeCoordinates
+) {
+  runTripNavigationRouteMetrics =
+    buildRunTripNavigationRouteMetrics(routeCoordinates);
+
+  if (
+    !runTripNavigationRouteMetrics ||
+    !Array.isArray(rawSegments)
+  ) {
+    return [];
+  }
+
+  const runtimeSegments = [];
+  let previousEndDistance = 0;
+  let previousRouteIndex = 0;
+
+  rawSegments.forEach(function (segment) {
+    const endLocation = segment?.endLocation;
+
+    if (
+      !Array.isArray(endLocation) ||
+      endLocation.length < 2
+    ) {
+      return;
+    }
+
+    const projection = projectRunTripPointToRoute(
+      Number(endLocation[0]),
+      Number(endLocation[1]),
+      {
+        startIndex: Math.max(0, previousRouteIndex - 2)
+      }
+    );
+
+    if (!projection) {
+      return;
+    }
+
+    const endDistance = Math.max(
+      previousEndDistance,
+      projection.routeDistanceMeters
+    );
+
+    const lengthMeters = Math.max(
+      0,
+      endDistance - previousEndDistance
+    );
+
+    if (lengthMeters < 1) {
+      previousRouteIndex = projection.routeSegmentIndex;
+      previousEndDistance = endDistance;
+      return;
+    }
+
+    runtimeSegments.push({
+      index: runtimeSegments.length,
+      startDistanceMeters: previousEndDistance,
+      endDistanceMeters: endDistance,
+      lengthMeters: lengthMeters,
+      endAction: segment.endAction || null
+    });
+
+    previousRouteIndex = projection.routeSegmentIndex;
+    previousEndDistance = endDistance;
+  });
+
+  return runtimeSegments;
+}
+
+function resetRunTripNavigationSegmentAnnouncements() {
+  runTripNavigationFirstAnnouncementDone = false;
+  runTripNavigationSecondAnnouncementDone = false;
+}
+
+function resetRunTripNavigationGuidance() {
+  hideRunTripNavigationBanners();
+  runTripNavigationRuntimeSegments = [];
+  runTripNavigationRouteMetrics = null;
+  runTripCurrentNavigationSegmentIndex = 0;
+  runTripNavigationLastRouteProgressMeters = 0;
+  runTripNavigationLastRouteSegmentIndex = 0;
+  resetRunTripNavigationSegmentAnnouncements();
+}
+
+function initializeRunTripNavigationGuidance(routeSummary) {
+  resetRunTripNavigationGuidance();
+
+  if (!routeSummary) {
+    return;
+  }
+
+  runTripNavigationRuntimeSegments =
+    buildRunTripNavigationRuntimeSegments(
+      routeSummary.navigationSegments,
+      routeSummary.coordinates
+    );
+
+  positionRunTripNavigationBanners();
+
+  console.log(
+    'FreeRunTrip 내비게이션 구간 준비:',
+    runTripNavigationRuntimeSegments
+  );
+}
+
+function getNextTurnNavigationSegment(currentIndex) {
+  for (
+    let index = currentIndex + 1;
+    index < runTripNavigationRuntimeSegments.length;
+    index++
+  ) {
+    const segment = runTripNavigationRuntimeSegments[index];
+    const direction = segment?.endAction?.direction;
+
+    if (direction === 'left' || direction === 'right') {
+      return segment;
+    }
+  }
+
+  return null;
+}
+
+function announceRunTripNavigationFirst(
+  direction,
+  remainingDistanceMeters
+) {
+  const distance = getRunTripNavigationVoiceDistance(
+    remainingDistanceMeters
+  );
+
+  const message =
+    `${distance}m 앞에서 ` +
+    `${getRunTripNavigationDirectionLabel(direction)}입니다.`;
+
+  requestRunningDynamicVoice(message);
+}
+
+function announceRunTripNavigationSecond(
+  currentDirection,
+  currentRemainingDistanceMeters,
+  nextSegment
+) {
+  const currentDistance = getRunTripNavigationVoiceDistance(
+    currentRemainingDistanceMeters
+  );
+
+  let message =
+    `${currentDistance}m 앞에서 ` +
+    `${getRunTripNavigationDirectionLabel(currentDirection)}입니다.`;
+
+  const nextDirection = nextSegment?.endAction?.direction;
+
+  if (nextDirection === 'left' || nextDirection === 'right') {
+    const nextDistance = getRunTripNavigationVoiceDistance(
+      nextSegment.lengthMeters
+    );
+
+    message +=
+      ` 이어서 ${nextDistance}m 직진 후 ` +
+      `${getRunTripNavigationDirectionLabel(nextDirection)}입니다.`;
+  }
+
+  requestRunningDynamicVoice(message);
+}
+
+function updateRunTripNavigationGuidance(
+  latitude,
+  longitude
+) {
+  if (
+    !isRunTripFollowing ||
+    isRunTripPaused ||
+    activeRunTripCheckpointNotice ||
+    runTripNavigationRuntimeSegments.length === 0
+  ) {
+    if (activeRunTripCheckpointNotice) {
+      hideRunTripNavigationBanners();
+    }
+
+    return;
+  }
+
+  const metrics = runTripNavigationRouteMetrics;
+
+  if (!metrics) {
+    return;
+  }
+
+  const localProjection = projectRunTripPointToRoute(
+    latitude,
+    longitude,
+    {
+      startIndex: Math.max(
+        0,
+        runTripNavigationLastRouteSegmentIndex - 5
+      ),
+      endIndex: Math.min(
+        metrics.points.length - 2,
+        runTripNavigationLastRouteSegmentIndex + 90
+      )
+    }
+  );
+
+  let projection = localProjection;
+
+  if (
+    !projection ||
+    projection.distanceToRouteMeters > 80
+  ) {
+    projection = projectRunTripPointToRoute(
+      latitude,
+      longitude
+    );
+  }
+
+  if (!projection) {
+    return;
+  }
+
+  runTripNavigationLastRouteSegmentIndex =
+    projection.routeSegmentIndex;
+
+  const routeProgressMeters = Math.max(
+    runTripNavigationLastRouteProgressMeters - 15,
+    projection.routeDistanceMeters
+  );
+
+  runTripNavigationLastRouteProgressMeters = Math.max(
+    runTripNavigationLastRouteProgressMeters,
+    routeProgressMeters
+  );
+
+  while (
+    runTripCurrentNavigationSegmentIndex <
+      runTripNavigationRuntimeSegments.length - 1 &&
+    routeProgressMeters >=
+      runTripNavigationRuntimeSegments[
+        runTripCurrentNavigationSegmentIndex
+      ].endDistanceMeters + 6
+  ) {
+    runTripCurrentNavigationSegmentIndex++;
+    resetRunTripNavigationSegmentAnnouncements();
+    hideRunTripNavigationBanners();
+  }
+
+  const currentSegment =
+    runTripNavigationRuntimeSegments[
+      runTripCurrentNavigationSegmentIndex
+    ];
+
+  if (!currentSegment || currentSegment.lengthMeters <= 0) {
+    return;
+  }
+
+  const currentDirection =
+    currentSegment?.endAction?.direction;
+
+  if (
+    currentDirection !== 'left' &&
+    currentDirection !== 'right'
+  ) {
+    hideRunTripNavigationBanners();
+    return;
+  }
+
+  const segmentProgress = Math.max(
+    0,
+    Math.min(
+      1,
+      (routeProgressMeters - currentSegment.startDistanceMeters) /
+        currentSegment.lengthMeters
+    )
+  );
+
+  const remainingDistanceMeters = Math.max(
+    0,
+    currentSegment.endDistanceMeters - routeProgressMeters
+  );
+
+  if (segmentProgress < 0.5) {
+    hideRunTripNavigationBanners();
+    return;
+  }
+
+  showRunTripNavigationPrimaryBanner(
+    currentDirection,
+    remainingDistanceMeters
+  );
+
+  if (
+    segmentProgress >= 0.5 &&
+    !runTripNavigationFirstAnnouncementDone &&
+    segmentProgress < 0.75
+  ) {
+    runTripNavigationFirstAnnouncementDone = true;
+
+    announceRunTripNavigationFirst(
+      currentDirection,
+      remainingDistanceMeters
+    );
+  }
+
+  const nextTurnSegment =
+    getNextTurnNavigationSegment(
+      runTripCurrentNavigationSegmentIndex
+    );
+
+  if (segmentProgress >= 0.75) {
+    if (nextTurnSegment) {
+      showRunTripNavigationSecondaryBanner(
+        nextTurnSegment.endAction.direction,
+        nextTurnSegment.lengthMeters
+      );
+    } else if (runTripNavigationSecondaryBanner) {
+      runTripNavigationSecondaryBanner.classList.add('hidden');
+    }
+
+    if (!runTripNavigationSecondAnnouncementDone) {
+      runTripNavigationFirstAnnouncementDone = true;
+      runTripNavigationSecondAnnouncementDone = true;
+
+      announceRunTripNavigationSecond(
+        currentDirection,
+        remainingDistanceMeters,
+        nextTurnSegment
+      );
+    }
+  } else if (runTripNavigationSecondaryBanner) {
+    runTripNavigationSecondaryBanner.classList.add('hidden');
+  }
+}
+
+window.addEventListener('resize', function () {
+  if (isRunTripFollowing) {
+    positionRunTripNavigationBanners();
+  }
+});
+
 
 function getWeightedSmoothedRunTripPosition(
   latitude,
@@ -7223,6 +7853,7 @@ function openRunTripCheckpointCamera() {
 
 function showRunTripCheckpointNotice(options = {}) {
   removeRunTripCheckpointNotice();
+  hideRunTripNavigationBanners();
 
   const isWaypoint =
     options.type === 'waypoint';
@@ -7522,6 +8153,32 @@ function createRunTripRecoveryState() {
     photoIds:
       activeRunTripPhotoIds.slice(),
 
+    navigationState: {
+      currentSegmentIndex:
+        Math.max(
+          0,
+          Number(runTripCurrentNavigationSegmentIndex) || 0
+        ),
+
+      lastRouteProgressMeters:
+        Math.max(
+          0,
+          Number(runTripNavigationLastRouteProgressMeters) || 0
+        ),
+
+      lastRouteSegmentIndex:
+        Math.max(
+          0,
+          Number(runTripNavigationLastRouteSegmentIndex) || 0
+        ),
+
+      firstAnnouncementDone:
+        Boolean(runTripNavigationFirstAnnouncementDone),
+
+      secondAnnouncementDone:
+        Boolean(runTripNavigationSecondAnnouncementDone)
+    },
+
     actualRouteCoordinates:
       runTripActualRouteCoordinates
         .filter(function (point) {
@@ -7568,6 +8225,21 @@ function createRunTripRecoveryState() {
                   Number(point[1])
                 ];
               })
+          : [],
+
+      provider:
+        latestRunTripRouteSummary.provider ||
+        'mapbox',
+
+      navigationSegments:
+        Array.isArray(
+          latestRunTripRouteSummary.navigationSegments
+        )
+          ? latestRunTripRouteSummary.navigationSegments.map(
+              function (segment) {
+                return JSON.parse(JSON.stringify(segment));
+              }
+            )
           : []
     },
 
@@ -7832,6 +8504,21 @@ function restoreActiveRunTripState(
     coordinates:
       plannedCoordinates,
 
+    provider:
+      plannedSummary.provider ||
+      'mapbox',
+
+    navigationSegments:
+      Array.isArray(
+        plannedSummary.navigationSegments
+      )
+        ? plannedSummary.navigationSegments.map(
+            function (segment) {
+              return JSON.parse(JSON.stringify(segment));
+            }
+          )
+        : [],
+
     bounds:
       restoredBounds
   };
@@ -8084,6 +8771,39 @@ restoredActualSegments.forEach(
 );
 
 updateMapboxRunTripActualRoute();
+
+  initializeRunTripNavigationGuidance(
+    latestRunTripRouteSummary
+  );
+
+  if (savedState.navigationState) {
+    runTripCurrentNavigationSegmentIndex =
+      Math.max(
+        0,
+        Math.min(
+          runTripNavigationRuntimeSegments.length - 1,
+          Number(savedState.navigationState.currentSegmentIndex) || 0
+        )
+      );
+
+    runTripNavigationLastRouteProgressMeters =
+      Math.max(
+        0,
+        Number(savedState.navigationState.lastRouteProgressMeters) || 0
+      );
+
+    runTripNavigationLastRouteSegmentIndex =
+      Math.max(
+        0,
+        Number(savedState.navigationState.lastRouteSegmentIndex) || 0
+      );
+
+    runTripNavigationFirstAnnouncementDone =
+      Boolean(savedState.navigationState.firstAnnouncementDone);
+
+    runTripNavigationSecondAnnouncementDone =
+      Boolean(savedState.navigationState.secondAnnouncementDone);
+  }
 
   isRunTripConfirmed = true;
 
@@ -8697,6 +9417,8 @@ runTripDashboardCadence.textContent =
 }
 
 function resetRunTripDashboard() {
+  hideRunTripNavigationBanners();
+
   clearInterval(
     runTripTimerInterval
   );
@@ -8904,6 +9626,7 @@ function stopRunTripFollowing(options = {}) {
     options.restoreRoute !== false;
 
   cancelFreeRunTripVoiceGuidance();
+  resetRunTripNavigationGuidance();
 
   if (
     runTripFollowWatchId !== null &&
@@ -9194,6 +9917,11 @@ function startRunTripLocationWatch() {
           accuracy
         );
 
+        updateRunTripNavigationGuidance(
+          currentPosition.latitude,
+          currentPosition.longitude
+        );
+
         if (
           !runTripLastValidPosition ||
           shouldAcceptPoint
@@ -9373,6 +10101,10 @@ async function startRunTripFollowing() {
   );
 
   setMapboxRunTripNavigationAppearance(true);
+
+  initializeRunTripNavigationGuidance(
+    latestRunTripRouteSummary
+  );
 
   runTripDashboard.classList.remove(
     'hidden'
@@ -9580,6 +10312,20 @@ routeSegments:
 
 plannedRouteCoordinates:
   plannedRoute,
+
+plannedNavigationSegments:
+  latestRunTripRouteSummary &&
+  Array.isArray(latestRunTripRouteSummary.navigationSegments)
+    ? latestRunTripRouteSummary.navigationSegments.map(
+        function (segment) {
+          return JSON.parse(JSON.stringify(segment));
+        }
+      )
+    : [],
+
+routeProvider:
+  latestRunTripRouteSummary?.provider ||
+  'mapbox',
 
     photoIds:
       activeRunTripPhotoIds.slice(),
@@ -11660,6 +12406,17 @@ latestRunTripRouteSummary = {
   distanceKm: distanceKm,
   durationMinutes: durationMinutes,
   bounds: routeBounds,
+  provider:
+    outwardRoute.provider ||
+    'mapbox',
+  navigationSegments:
+    Array.isArray(outwardRoute.navigationSegments)
+      ? outwardRoute.navigationSegments
+      : [],
+  steps:
+    Array.isArray(outwardRoute.steps)
+      ? outwardRoute.steps
+      : [],
   coordinates: routeCoordinates.map(function (point) {
     return [point[0], point[1]];
   })
@@ -12629,6 +13386,7 @@ pauseRunTripBtn.addEventListener(
     isRunTripPaused = true;
 
     cancelFreeRunTripVoiceGuidance();
+    hideRunTripNavigationBanners();
 
     clearInterval(
       runTripTimerInterval

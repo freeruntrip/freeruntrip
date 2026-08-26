@@ -258,6 +258,41 @@
     id="mapboxMainMap"
     style="display:none;"
    ></div>
+
+  <!-- RunTrip 내비게이션 2단 배너 V1 -->
+  <div
+    id="runTripNavigationBannerRoot"
+    class="runtrip-navigation-banner-root hidden"
+    aria-live="polite"
+  >
+    <div class="runtrip-navigation-banner-stack">
+      <div
+        id="runTripNavigationPrimaryBanner"
+        class="runtrip-navigation-banner runtrip-navigation-primary-banner hidden"
+      >
+        <span class="runtrip-navigation-banner-number">1</span>
+        <span
+          id="runTripNavigationPrimaryArrow"
+          class="runtrip-navigation-banner-arrow"
+          aria-hidden="true"
+        >↱</span>
+        <strong id="runTripNavigationPrimaryDistance">25m</strong>
+      </div>
+
+      <div
+        id="runTripNavigationSecondaryBanner"
+        class="runtrip-navigation-banner runtrip-navigation-secondary-banner hidden"
+      >
+        <span class="runtrip-navigation-banner-number">2</span>
+        <span
+          id="runTripNavigationSecondaryArrow"
+          class="runtrip-navigation-banner-arrow"
+          aria-hidden="true"
+        >↰</span>
+        <strong id="runTripNavigationSecondaryDistance">150m</strong>
+      </div>
+    </div>
+  </div>
    
   <div
    id="mapboxMigrationTest"
