@@ -1,6 +1,9 @@
 const MAPBOX_SEARCHBOX_BASE_URL =
   'https://api.mapbox.com/search/searchbox/v1';
 
+const MAPBOX_GEOCODING_BASE_URL =
+  'https://api.mapbox.com/search/geocode/v6';
+
 const PUBLIC_MAPBOX_FALLBACK_TOKEN = [
   'pk.',
   'eyJ1IjoiZnJlZXJ1bnRyaXAiLCJhIjoiY21zbXN1MW52MG82ZjM0cHZuaDV1ZGduZSJ9',
@@ -31,16 +34,28 @@ function normalizeLanguage(value) {
     .trim()
     .toLowerCase();
 
-  if (!language) {
-    return 'ko';
-  }
-
+  if (!language) return 'ko';
   if (language.startsWith('ko')) return 'ko';
   if (language.startsWith('en')) return 'en';
   if (language.startsWith('ja')) return 'ja';
   if (language.startsWith('de')) return 'de';
 
   return language.slice(0, 2) || 'en';
+}
+
+function normalizeSearchText(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .trim()
+    .toLowerCase()
+    .replace(/[\p{P}\p{S}]+/gu, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+function tokenizeSearchText(value) {
+  return normalizeSearchText(value)
+    .split(' ')
+    .filter(Boolean);
 }
 
 function getFeatureCoordinates(feature) {
@@ -64,10 +79,7 @@ function getFeatureCoordinates(feature) {
     return null;
   }
 
-  return {
-    latitude,
-    longitude,
-  };
+  return { latitude, longitude };
 }
 
 function getContextText(context = {}) {
@@ -90,10 +102,9 @@ function getMapboxFeatureAddress(properties = {}) {
   return (
     properties.full_address ||
     properties.address ||
-    [
-      properties.name,
-      properties.place_formatted,
-    ].filter(Boolean).join(', ') ||
+    [properties.name, properties.place_formatted]
+      .filter(Boolean)
+      .join(', ') ||
     ''
   );
 }
@@ -120,7 +131,7 @@ function getSecondaryText(properties = {}) {
   );
 }
 
-function normalizeMapboxFeature(feature) {
+function normalizeMapboxSearchFeature(feature) {
   if (!feature || feature.type !== 'Feature') {
     return null;
   }
@@ -128,9 +139,7 @@ function normalizeMapboxFeature(feature) {
   const properties = feature.properties || {};
   const coordinates = getFeatureCoordinates(feature);
 
-  if (!coordinates) {
-    return null;
-  }
+  if (!coordinates) return null;
 
   const name = String(
     properties.name_preferred ||
@@ -147,9 +156,7 @@ function normalizeMapboxFeature(feature) {
     properties.feature_type || ''
   ).trim();
 
-  const poiCategories = Array.isArray(
-    properties.poi_category
-  )
+  const poiCategories = Array.isArray(properties.poi_category)
     ? properties.poi_category.filter(Boolean)
     : [];
 
@@ -172,47 +179,28 @@ function normalizeMapboxFeature(feature) {
       feature.id ||
       `${coordinates.longitude}-${coordinates.latitude}`
     ),
-
     name: primaryText,
     displayName: primaryText,
     primaryText,
     secondaryText:
-      secondaryText === primaryText
-        ? ''
-        : secondaryText,
-
+      secondaryText === primaryText ? '' : secondaryText,
     address,
-
-    /*
-      기존 앱/저장 데이터와의 하위 호환성을 위해 필드를 유지한다.
-      Mapbox는 한국 Kakao식 도로명/지번을 별도 필드로 보장하지 않으므로
-      새 검색 결과에서는 공통 address를 사용한다.
-    */
     roadAddress: address,
     lotAddress: '',
     buildingName:
-      featureType === 'poi'
-        ? primaryText
-        : '',
-
+      featureType === 'poi' ? primaryText : '',
     latitude: coordinates.latitude,
     longitude: coordinates.longitude,
-
     category:
-      poiCategories.join(' · ') ||
-      featureType,
-
+      poiCategories.join(' · ') || featureType,
     categoryGroupCode: '',
     categoryGroupName: '',
-
     resultType: featureType || 'place',
     source: 'mapbox-searchbox',
-
     language: String(properties.language || ''),
     countryCode,
     regionCode,
     maki: String(properties.maki || ''),
-
     mapboxId: String(properties.mapbox_id || ''),
     routablePoints:
       Array.isArray(properties.coordinates?.routable_points)
@@ -221,13 +209,242 @@ function normalizeMapboxFeature(feature) {
   };
 }
 
-function normalizeMapboxFeatures(features = []) {
-  return features
-    .map(normalizeMapboxFeature)
+function normalizeGeocodingFeature(feature) {
+  if (!feature || feature.type !== 'Feature') {
+    return null;
+  }
+
+  const properties = feature.properties || {};
+  const coordinates = getFeatureCoordinates(feature);
+
+  if (!coordinates) return null;
+
+  const featureType = String(
+    properties.feature_type || feature.id?.split('.')?.[0] || ''
+  ).trim();
+
+  const context = properties.context || {};
+  const name = String(
+    properties.name_preferred ||
+    properties.name ||
+    properties.full_address ||
+    ''
+  ).trim();
+
+  const address = String(
+    properties.full_address ||
+    properties.place_formatted ||
+    name ||
+    ''
+  ).trim();
+
+  const primaryText = name || address;
+  const secondaryText = String(
+    properties.place_formatted ||
+    getContextText(context) ||
+    properties.full_address ||
+    ''
+  ).trim();
+
+  return {
+    id: String(
+      properties.mapbox_id ||
+      feature.id ||
+      `geocode-${coordinates.longitude}-${coordinates.latitude}`
+    ),
+    name: primaryText,
+    displayName: primaryText,
+    primaryText,
+    secondaryText:
+      secondaryText === primaryText ? '' : secondaryText,
+    address,
+    roadAddress: address,
+    lotAddress: '',
+    buildingName: '',
+    latitude: coordinates.latitude,
+    longitude: coordinates.longitude,
+    category: featureType || 'geocode',
+    categoryGroupCode: '',
+    categoryGroupName: '',
+    resultType: featureType || 'place',
+    source: 'mapbox-geocoding',
+    language: String(properties.language || ''),
+    countryCode: String(
+      context.country?.country_code || ''
+    ).toUpperCase(),
+    regionCode: String(
+      context.region?.region_code || ''
+    ),
+    maki: '',
+    mapboxId: String(properties.mapbox_id || ''),
+    routablePoints:
+      Array.isArray(properties.coordinates?.routable_points)
+        ? properties.coordinates.routable_points
+        : [],
+  };
+}
+
+function normalizeFeatures(features, normalizer) {
+  return (Array.isArray(features) ? features : [])
+    .map(normalizer)
     .filter(Boolean);
 }
 
-async function requestMapboxForwardSearch({
+function getDistanceMeters(first, second) {
+  if (!first || !second) return Infinity;
+
+  const lat1 = Number(first.latitude);
+  const lon1 = Number(first.longitude);
+  const lat2 = Number(second.latitude);
+  const lon2 = Number(second.longitude);
+
+  if (
+    !Number.isFinite(lat1) ||
+    !Number.isFinite(lon1) ||
+    !Number.isFinite(lat2) ||
+    !Number.isFinite(lon2)
+  ) {
+    return Infinity;
+  }
+
+  const radius = 6371000;
+  const toRadians = (value) => value * Math.PI / 180;
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(lat1)) *
+      Math.cos(toRadians(lat2)) *
+      Math.sin(dLon / 2) ** 2;
+
+  return 2 * radius * Math.atan2(
+    Math.sqrt(a),
+    Math.sqrt(1 - a)
+  );
+}
+
+function getTextMatchScore(query, place) {
+  const normalizedQuery = normalizeSearchText(query);
+  const queryTokens = tokenizeSearchText(query);
+  const primary = normalizeSearchText(place?.primaryText);
+  const secondary = normalizeSearchText(place?.secondaryText);
+  const address = normalizeSearchText(place?.address);
+  const combined = `${primary} ${secondary} ${address}`.trim();
+
+  if (!normalizedQuery || !combined) return 0;
+
+  let score = 0;
+
+  if (primary === normalizedQuery) score += 5000;
+  if (combined.includes(normalizedQuery)) score += 2200;
+  if (primary.startsWith(normalizedQuery)) score += 1400;
+
+  let matchedTokens = 0;
+  queryTokens.forEach((token) => {
+    if (combined.includes(token)) matchedTokens += 1;
+  });
+
+  score += matchedTokens * 420;
+
+  if (
+    queryTokens.length > 0 &&
+    matchedTokens === queryTokens.length
+  ) {
+    score += 900;
+  }
+
+  if (place?.resultType === 'poi') score += 250;
+  if (place?.source === 'mapbox-searchbox') score += 120;
+
+  return score;
+}
+
+function mergeAndRankPlaces({
+  query,
+  groups,
+  anchorPlace,
+  proximity,
+  limit = 10,
+}) {
+  const deduped = new Map();
+
+  groups.flat().forEach((place) => {
+    if (!place) return;
+
+    const key = place.mapboxId
+      ? `id:${place.mapboxId}`
+      : [
+          normalizeSearchText(place.primaryText),
+          Number(place.latitude).toFixed(5),
+          Number(place.longitude).toFixed(5),
+        ].join('|');
+
+    const existing = deduped.get(key);
+    if (!existing) {
+      deduped.set(key, place);
+      return;
+    }
+
+    if (
+      getTextMatchScore(query, place) >
+      getTextMatchScore(query, existing)
+    ) {
+      deduped.set(key, place);
+    }
+  });
+
+  return Array.from(deduped.values())
+    .map((place) => {
+      let score = getTextMatchScore(query, place);
+
+      if (anchorPlace) {
+        const anchorDistance = getDistanceMeters(
+          place,
+          anchorPlace
+        );
+
+        if (Number.isFinite(anchorDistance)) {
+          if (anchorDistance <= 5000) score += 1200;
+          else if (anchorDistance <= 30000) score += 700;
+          else if (anchorDistance <= 150000) score += 250;
+        }
+      }
+
+      if (proximity) {
+        const proximityDistance = getDistanceMeters(
+          place,
+          proximity
+        );
+
+        if (Number.isFinite(proximityDistance)) {
+          if (proximityDistance <= 5000) score += 350;
+          else if (proximityDistance <= 30000) score += 180;
+        }
+      }
+
+      return { place, score };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((item) => item.place);
+}
+
+async function fetchJson(url) {
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  return {
+    ok: response.ok,
+    status: response.status,
+    data,
+  };
+}
+
+async function requestSearchBoxForward({
   query,
   language,
   accessToken,
@@ -238,98 +455,98 @@ async function requestMapboxForwardSearch({
   );
 
   mapboxUrl.searchParams.set('q', query);
-  mapboxUrl.searchParams.set(
-    'access_token',
-    accessToken
-  );
-  mapboxUrl.searchParams.set(
-    'language',
-    normalizeLanguage(language)
-  );
+  mapboxUrl.searchParams.set('access_token', accessToken);
+  mapboxUrl.searchParams.set('language', normalizeLanguage(language));
   mapboxUrl.searchParams.set('limit', '10');
-  mapboxUrl.searchParams.set(
-    'auto_complete',
-    'true'
-  );
+  mapboxUrl.searchParams.set('auto_complete', 'true');
 
-  /*
-    글로벌 검색을 국가 하나로 제한하지 않는다.
-    GPS/지도 중심 좌표가 프런트에서 넘어오면 가까운 결과를 우선하고,
-    없으면 Mapbox 기본 proximity(IP 기반)를 사용한다.
-  */
   if (
     proximity &&
-    Number.isFinite(proximity.longitude) &&
-    Number.isFinite(proximity.latitude)
+    Number.isFinite(Number(proximity.longitude)) &&
+    Number.isFinite(Number(proximity.latitude))
   ) {
     mapboxUrl.searchParams.set(
       'proximity',
-      `${proximity.longitude},${proximity.latitude}`
+      `${Number(proximity.longitude)},${Number(proximity.latitude)}`
     );
   }
 
-  const response = await fetch(mapboxUrl, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-    },
-  });
-
-  const data = await response
-    .json()
-    .catch(() => ({}));
-
-  return {
-    ok: response.ok,
-    status: response.status,
-    data,
-  };
+  return fetchJson(mapboxUrl);
 }
 
-async function requestMapboxReverseSearch({
+async function requestGeocodingForward({
+  query,
+  language,
+  accessToken,
+  proximity,
+}) {
+  const mapboxUrl = new URL(
+    `${MAPBOX_GEOCODING_BASE_URL}/forward`
+  );
+
+  mapboxUrl.searchParams.set('q', query);
+  mapboxUrl.searchParams.set('access_token', accessToken);
+  mapboxUrl.searchParams.set('language', normalizeLanguage(language));
+  mapboxUrl.searchParams.set('limit', '10');
+  mapboxUrl.searchParams.set('autocomplete', 'false');
+  mapboxUrl.searchParams.set('permanent', 'false');
+
+  if (
+    proximity &&
+    Number.isFinite(Number(proximity.longitude)) &&
+    Number.isFinite(Number(proximity.latitude))
+  ) {
+    mapboxUrl.searchParams.set(
+      'proximity',
+      `${Number(proximity.longitude)},${Number(proximity.latitude)}`
+    );
+  }
+
+  return fetchJson(mapboxUrl);
+}
+
+async function requestGeocodingReverse({
   latitude,
   longitude,
   language,
   accessToken,
 }) {
   const mapboxUrl = new URL(
-    `${MAPBOX_SEARCHBOX_BASE_URL}/reverse`
+    `${MAPBOX_GEOCODING_BASE_URL}/reverse`
   );
 
-  mapboxUrl.searchParams.set(
-    'longitude',
-    String(longitude)
-  );
-  mapboxUrl.searchParams.set(
-    'latitude',
-    String(latitude)
-  );
-  mapboxUrl.searchParams.set(
-    'access_token',
-    accessToken
-  );
-  mapboxUrl.searchParams.set(
-    'language',
-    normalizeLanguage(language)
-  );
+  mapboxUrl.searchParams.set('longitude', String(longitude));
+  mapboxUrl.searchParams.set('latitude', String(latitude));
+  mapboxUrl.searchParams.set('access_token', accessToken);
+  mapboxUrl.searchParams.set('language', normalizeLanguage(language));
   mapboxUrl.searchParams.set('limit', '5');
+  mapboxUrl.searchParams.set('permanent', 'false');
 
-  const response = await fetch(mapboxUrl, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-    },
-  });
+  return fetchJson(mapboxUrl);
+}
 
-  const data = await response
-    .json()
-    .catch(() => ({}));
+function chooseAnchorPlace(query, geocodingPlaces) {
+  if (!Array.isArray(geocodingPlaces)) return null;
 
-  return {
-    ok: response.ok,
-    status: response.status,
-    data,
-  };
+  const ranked = geocodingPlaces
+    .map((place) => ({
+      place,
+      score: getTextMatchScore(query, place),
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  return ranked[0]?.place || null;
+}
+
+function getSearchLanguages(requestedLanguage) {
+  const languages = [
+    normalizeLanguage(requestedLanguage),
+    'en',
+    'ja',
+    'de',
+  ];
+
+  return [...new Set(languages)];
 }
 
 function getBestReversePlace(places) {
@@ -339,7 +556,6 @@ function getBestReversePlace(places) {
 
   const priority = [
     'address',
-    'poi',
     'street',
     'neighborhood',
     'locality',
@@ -353,10 +569,12 @@ function getBestReversePlace(places) {
   return (
     places
       .slice()
-      .sort(function (a, b) {
+      .sort((a, b) => {
+        const aIndex = priority.indexOf(a.resultType);
+        const bIndex = priority.indexOf(b.resultType);
         return (
-          priority.indexOf(a.resultType) -
-          priority.indexOf(b.resultType)
+          (aIndex === -1 ? 999 : aIndex) -
+          (bIndex === -1 ? 999 : bIndex)
         );
       })[0] ||
     places[0]
@@ -386,9 +604,7 @@ async function handleFetchRequest(request) {
   }
 
   const url = new URL(request.url);
-
-  const query =
-    url.searchParams.get('q')?.trim() || '';
+  const query = url.searchParams.get('q')?.trim() || '';
 
   const language = normalizeLanguage(
     url.searchParams.get('language') ||
@@ -396,17 +612,10 @@ async function handleFetchRequest(request) {
     'ko'
   );
 
-  const latitudeParam =
-    url.searchParams.get('lat');
-
-  const longitudeParam =
-    url.searchParams.get('lng');
-
-  const proximityLatitudeParam =
-    url.searchParams.get('proximityLat');
-
-  const proximityLongitudeParam =
-    url.searchParams.get('proximityLng');
+  const latitudeParam = url.searchParams.get('lat');
+  const longitudeParam = url.searchParams.get('lng');
+  const proximityLatitudeParam = url.searchParams.get('proximityLat');
+  const proximityLongitudeParam = url.searchParams.get('proximityLng');
 
   const hasReverseGeocodeParams =
     latitudeParam !== null &&
@@ -461,22 +670,18 @@ async function handleFetchRequest(request) {
 
   if (isReverseGeocodeRequest) {
     try {
-      const reverseResult =
-        await requestMapboxReverseSearch({
-          latitude,
-          longitude,
-          language,
-          accessToken,
-        });
+      const reverseResult = await requestGeocodingReverse({
+        latitude,
+        longitude,
+        language,
+        accessToken,
+      });
 
       if (!reverseResult.ok) {
-        console.error(
-          'Mapbox reverse search error:',
-          {
-            status: reverseResult.status,
-            data: reverseResult.data,
-          }
-        );
+        console.error('Mapbox Geocoding reverse error:', {
+          status: reverseResult.status,
+          data: reverseResult.data,
+        });
 
         return jsonResponse(
           {
@@ -488,33 +693,28 @@ async function handleFetchRequest(request) {
         );
       }
 
-      const places = normalizeMapboxFeatures(
-        Array.isArray(reverseResult.data?.features)
-          ? reverseResult.data.features
-          : []
+      const places = normalizeFeatures(
+        reverseResult.data?.features,
+        normalizeGeocodingFeature
       );
 
-      const normalizedPlace =
-        getBestReversePlace(places);
+      const normalizedPlace = getBestReversePlace(places);
 
       if (!normalizedPlace) {
-        return jsonResponse({
-          place: null,
-        });
+        return jsonResponse({ place: null });
       }
 
-      /* 실제 GPS 좌표를 출발 좌표로 사용한다. */
       normalizedPlace.latitude = latitude;
       normalizedPlace.longitude = longitude;
       normalizedPlace.isCurrentLocation = true;
 
       return jsonResponse({
         place: normalizedPlace,
-        provider: 'mapbox-searchbox',
+        provider: 'mapbox-geocoding',
       });
     } catch (error) {
       console.error(
-        'Mapbox reverse search server error:',
+        'Mapbox reverse geocoding server error:',
         error
       );
 
@@ -529,70 +729,132 @@ async function handleFetchRequest(request) {
   }
 
   try {
-    const proximityLatitude = Number(
-      proximityLatitudeParam
+    const proximityLatitude = Number(proximityLatitudeParam);
+    const proximityLongitude = Number(proximityLongitudeParam);
+
+    const proximity =
+      Number.isFinite(proximityLatitude) &&
+      Number.isFinite(proximityLongitude)
+        ? {
+            latitude: proximityLatitude,
+            longitude: proximityLongitude,
+          }
+        : null;
+
+    /*
+      1) Temporary Geocoding으로 주소/도시/행정구역 문맥을 먼저 찾는다.
+      2) 그 결과를 anchor로 사용해 Search Box POI 검색을 한 번 더 수행한다.
+      3) 요청 언어 + en/ja/de 결과를 합치고 텍스트 일치도/anchor 거리로 재정렬한다.
+      이 방식은 특정 국가를 하드코딩하지 않고도 글로벌 검색 랭킹을 보완한다.
+    */
+    const geocodingLanguageResults = await Promise.all(
+      getSearchLanguages(language).map((searchLanguage) =>
+        requestGeocodingForward({
+          query,
+          language: searchLanguage,
+          accessToken,
+          proximity,
+        })
+      )
     );
 
-    const proximityLongitude = Number(
-      proximityLongitudeParam
+    const geocodingGroups = geocodingLanguageResults.map((result) =>
+      result.ok
+        ? normalizeFeatures(
+            result.data?.features,
+            normalizeGeocodingFeature
+          )
+        : []
     );
 
-    const searchResult =
-      await requestMapboxForwardSearch({
-        query,
-        language,
-        accessToken,
-        proximity:
-          Number.isFinite(proximityLatitude) &&
-          Number.isFinite(proximityLongitude)
-            ? {
-                latitude: proximityLatitude,
-                longitude: proximityLongitude,
-              }
-            : null,
-      });
+    const geocodingPlaces = geocodingGroups.flat();
+    const anchorPlace = chooseAnchorPlace(query, geocodingPlaces);
 
-    if (!searchResult.ok) {
-      console.error(
-        'Mapbox place search error:',
-        {
-          status: searchResult.status,
-          data: searchResult.data,
-        }
+    const searchLanguages = getSearchLanguages(language);
+
+    const searchBoxBaseResults = await Promise.all(
+      searchLanguages.map((searchLanguage) =>
+        requestSearchBoxForward({
+          query,
+          language: searchLanguage,
+          accessToken,
+          proximity,
+        })
+      )
+    );
+
+    const searchBoxBaseGroups = searchBoxBaseResults.map((result) =>
+      result.ok
+        ? normalizeFeatures(
+            result.data?.features,
+            normalizeMapboxSearchFeature
+          )
+        : []
+    );
+
+    let anchoredSearchBoxGroups = [];
+
+    if (anchorPlace) {
+      const anchorProximity = {
+        latitude: anchorPlace.latitude,
+        longitude: anchorPlace.longitude,
+      };
+
+      const anchoredResults = await Promise.all(
+        searchLanguages.map((searchLanguage) =>
+          requestSearchBoxForward({
+            query,
+            language: searchLanguage,
+            accessToken,
+            proximity: anchorProximity,
+          })
+        )
       );
 
-      return jsonResponse(
-        {
-          error: 'Mapbox 장소 검색에 실패했어요.',
-          mapboxStatus: searchResult.status,
-          mapboxMessage:
-            searchResult.data?.message ||
-            'Mapbox에서 자세한 오류 메시지를 보내지 않았어요.',
-          places: [],
-        },
-        searchResult.status || 500
+      anchoredSearchBoxGroups = anchoredResults.map((result) =>
+        result.ok
+          ? normalizeFeatures(
+              result.data?.features,
+              normalizeMapboxSearchFeature
+            )
+          : []
       );
     }
 
-    const places = normalizeMapboxFeatures(
-      Array.isArray(searchResult.data?.features)
-        ? searchResult.data.features
-        : []
-    ).slice(0, 10);
+    const places = mergeAndRankPlaces({
+      query,
+      groups: [
+        ...searchBoxBaseGroups,
+        ...anchoredSearchBoxGroups,
+        geocodingPlaces,
+      ],
+      anchorPlace,
+      proximity,
+      limit: 10,
+    });
 
     return jsonResponse({
       places,
-      provider: 'mapbox-searchbox',
+      provider: 'mapbox-hybrid-search-v2',
       language,
       searchSources: {
         mapboxSearchBox: true,
+        mapboxTemporaryGeocoding: true,
+      },
+      debug: {
+        anchor:
+          anchorPlace
+            ? {
+                primaryText: anchorPlace.primaryText,
+                countryCode: anchorPlace.countryCode,
+                latitude: anchorPlace.latitude,
+                longitude: anchorPlace.longitude,
+              }
+            : null,
       },
     });
   } catch (error) {
-    console.error(
-      'Mapbox place search server error:',
-      error
-    );
+    console.error('Mapbox hybrid place search server error:', error);
 
     return jsonResponse(
       {
@@ -604,11 +866,7 @@ async function handleFetchRequest(request) {
   }
 }
 
-export default async function handler(
-  request,
-  response
-) {
-  /* Vercel Node API와 Web Fetch 런타임을 모두 지원한다. */
+export default async function handler(request, response) {
   if (
     !response &&
     typeof Request !== 'undefined' &&
@@ -635,16 +893,12 @@ export default async function handler(
     headers: request.headers || {},
   });
 
-  const webResponse =
-    await handleFetchRequest(webRequest);
-
+  const webResponse = await handleFetchRequest(webRequest);
   const body = await webResponse.text();
 
-  webResponse.headers.forEach(
-    function (value, key) {
-      response.setHeader(key, value);
-    }
-  );
+  webResponse.headers.forEach((value, key) => {
+    response.setHeader(key, value);
+  });
 
   response.status(webResponse.status);
   response.send(body);
