@@ -2,11 +2,11 @@ const MAPBOX_DIRECTIONS_BASE_URL =
   "https://api.mapbox.com/directions/v5/mapbox/walking";
 
 /*
-  FreeRunTrip 글로벌 RunTrip 라우팅 V1
-  - TMAP 의존성을 제거하고 Mapbox Directions API의 walking profile 사용
-  - 전체 경로 좌표 + turn-by-turn step + FreeRunTrip용 좌/우회전 구간을 반환
-  - V1 경로 분할 기준은 명확한 modifier "left" / "right"만 사용
-  - slight/sharp/uturn/roundabout/fork 등은 후속 야외 테스트 뒤 별도 규칙으로 확장
+  FreeRunTrip 글로벌 RunTrip 라우팅 V2
+  - Mapbox Directions API walking profile 사용
+  - 전체 경로 좌표 + turn-by-turn step + FreeRunTrip용 좌/우회전 구간 반환
+  - 클라이언트 언어를 받을 수 있도록 language 파라미터를 글로벌화
+  - 기본 언어는 현재 한국어 UI 호환을 위해 ko
 */
 
 const PUBLIC_MAPBOX_FALLBACK_TOKEN = [
@@ -19,6 +19,20 @@ function setCorsHeaders(response) {
   response.setHeader("Access-Control-Allow-Origin", "*");
   response.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+function normalizeMapboxLanguage(value) {
+  const language = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  if (!language) return "ko";
+  if (language.startsWith("ko")) return "ko";
+  if (language.startsWith("en")) return "en";
+  if (language.startsWith("ja")) return "ja";
+  if (language.startsWith("de")) return "de";
+
+  return language.slice(0, 2) || "en";
 }
 
 function isValidCoordinate(point) {
@@ -103,11 +117,6 @@ function isFreeRunTripLeftRightTurn(step) {
     step?.maneuver?.modifier || ""
   ).toLowerCase();
 
-  /*
-    테스트 V1은 사용자가 정한 원칙대로 Mapbox의 명확한 turn maneuver 중
-    정확히 left / right만 경로 분할점으로 사용한다.
-    depart/arrive, slight/sharp, fork, uturn, roundabout는 의도적으로 제외한다.
-  */
   return (
     maneuverType === "turn" &&
     (modifier === "left" || modifier === "right")
@@ -127,14 +136,6 @@ function createFreeRunTripNavigationSegments(steps) {
   let accumulatedDistance = 0;
 
   steps.forEach((step) => {
-    /*
-      Mapbox step.distance는 해당 step의 시작 maneuver 지점에서
-      다음 maneuver 지점까지 이동하는 거리다.
-
-      따라서 현재 step의 maneuver가 좌/우회전이면 그 지점이
-      직전 FreeRunTrip 구간의 끝이다. 회전 이후의 step.distance는
-      다음 구간에 포함되어야 하므로 먼저 구간을 닫고 누적한다.
-    */
     if (isFreeRunTripLeftRightTurn(step)) {
       const endLocation = step?.maneuver?.location || null;
 
@@ -219,6 +220,7 @@ module.exports = async function handler(request, response) {
     origin,
     destination,
     waypoints = [],
+    language = "ko",
   } = request.body || {};
 
   if (!isValidCoordinate(origin) || !isValidCoordinate(destination)) {
@@ -259,7 +261,10 @@ module.exports = async function handler(request, response) {
   mapboxUrl.searchParams.set("steps", "true");
   mapboxUrl.searchParams.set("geometries", "geojson");
   mapboxUrl.searchParams.set("overview", "full");
-  mapboxUrl.searchParams.set("language", "ko");
+  mapboxUrl.searchParams.set(
+    "language",
+    normalizeMapboxLanguage(language)
+  );
   mapboxUrl.searchParams.set("roundabout_exits", "false");
 
   try {
@@ -308,6 +313,7 @@ module.exports = async function handler(request, response) {
     return response.status(200).json({
       provider: "mapbox",
       profile: "mapbox/walking",
+      language: normalizeMapboxLanguage(language),
       coordinates: routeCoordinates,
       distanceMeters: Math.max(0, Number(route?.distance) || 0),
       durationSeconds: Math.max(0, Number(route?.duration) || 0),
