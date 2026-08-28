@@ -55,7 +55,7 @@ function getRunTripIncludedTypeHint(query, language) {
   const compact = text.replace(/\s+/g, '');
 
   if (/역$/.test(compact)) {
-    return 'train_station';
+    return 'transit_station';
   }
 
   if (/공원$/.test(compact)) {
@@ -361,6 +361,72 @@ function rankGooglePlacesForRunTrip(places, query) {
     });
 }
 
+function normalizeKoreanPlaceDisplayNames(
+  places,
+  query,
+  language
+) {
+  if (normalizeLanguage(language) !== 'ko') {
+    return places;
+  }
+
+  const text = String(query || '').trim();
+  const compact = text.replace(/\s+/g, '');
+
+  if (!/역$/.test(compact)) {
+    return places;
+  }
+
+  const baseQuery = normalizePlaceSearchText(
+    compact.replace(/역$/, '')
+  );
+
+  const stationTypes = new Set([
+    'train_station',
+    'subway_station',
+    'transit_station',
+    'light_rail_station',
+  ]);
+
+  return (Array.isArray(places) ? places : []).map(
+    function (place) {
+      const types = Array.isArray(place?.types)
+        ? place.types
+        : [];
+
+      const isStation = types.some(function (type) {
+        return stationTypes.has(type);
+      });
+
+      if (!isStation) {
+        return place;
+      }
+
+      const currentName = normalizePlaceSearchText(
+        place?.primaryText ||
+        place?.displayName ||
+        place?.name
+      );
+
+      if (
+        baseQuery &&
+        currentName === baseQuery &&
+        !String(place?.primaryText || '').trim().endsWith('역')
+      ) {
+        return {
+          ...place,
+          name: text,
+          displayName: text,
+          primaryText: text,
+          buildingName: text,
+        };
+      }
+
+      return place;
+    }
+  );
+}
+
 function getGoogleGeocodeCountryCode(result) {
   const components = Array.isArray(result?.address_components)
     ? result.address_components
@@ -546,6 +612,7 @@ async function requestGooglePlacesTextSearch({
   regionCode,
   locationBias,
   includedType,
+  strictTypeFiltering = false,
   apiKey,
 }) {
   const body = {
@@ -556,7 +623,10 @@ async function requestGooglePlacesTextSearch({
 
   if (includedType) {
     body.includedType = includedType;
-    body.strictTypeFiltering = true;
+
+    if (strictTypeFiltering) {
+      body.strictTypeFiltering = true;
+    }
   }
 
   if (
@@ -859,14 +929,37 @@ async function handleFetchRequest(request) {
       language
     );
 
-    const searchResult = await requestGooglePlacesTextSearch({
+    let searchResult = await requestGooglePlacesTextSearch({
       query,
       language,
       regionCode: searchRegionCode,
       locationBias,
       includedType,
+      strictTypeFiltering: Boolean(includedType),
       apiKey,
     });
+
+    const strictPlaces = Array.isArray(
+      searchResult.data?.places
+    )
+      ? searchResult.data.places
+      : [];
+
+    if (
+      searchResult.ok &&
+      includedType &&
+      strictPlaces.length === 0
+    ) {
+      searchResult = await requestGooglePlacesTextSearch({
+        query,
+        language,
+        regionCode: searchRegionCode,
+        locationBias,
+        includedType: '',
+        strictTypeFiltering: false,
+        apiKey,
+      });
+    }
 
     if (!searchResult.ok) {
       console.error(
@@ -892,10 +985,17 @@ async function handleFetchRequest(request) {
       );
     }
 
+    const normalizedPlaces =
+      normalizeKoreanPlaceDisplayNames(
+        normalizeGooglePlaces(
+          searchResult.data?.places
+        ),
+        query,
+        language
+      );
+
     const places = rankGooglePlacesForRunTrip(
-      normalizeGooglePlaces(
-        searchResult.data?.places
-      ),
+      normalizedPlaces,
       query
     ).slice(0, 10);
 
