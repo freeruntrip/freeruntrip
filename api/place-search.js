@@ -45,6 +45,46 @@ function normalizeCountryCode(value) {
     : '';
 }
 
+function getRunTripIncludedTypeHint(query, language) {
+  const text = String(query || '').trim();
+
+  if (!text || normalizeLanguage(language) !== 'ko') {
+    return '';
+  }
+
+  const compact = text.replace(/\s+/g, '');
+
+  if (/역$/.test(compact)) {
+    return 'train_station';
+  }
+
+  if (/공원$/.test(compact)) {
+    return 'park';
+  }
+
+  if (/공항$/.test(compact)) {
+    return 'airport';
+  }
+
+  if (/병원$/.test(compact)) {
+    return 'hospital';
+  }
+
+  if (/(대학교|대학)$/.test(compact)) {
+    return 'university';
+  }
+
+  if (/박물관$/.test(compact)) {
+    return 'museum';
+  }
+
+  if (/미술관$/.test(compact)) {
+    return 'art_gallery';
+  }
+
+  return '';
+}
+
 function getHeader(request, name) {
   if (!request?.headers) {
     return '';
@@ -505,6 +545,7 @@ async function requestGooglePlacesTextSearch({
   language,
   regionCode,
   locationBias,
+  includedType,
   apiKey,
 }) {
   const body = {
@@ -512,6 +553,11 @@ async function requestGooglePlacesTextSearch({
     languageCode: normalizeLanguage(language),
     pageSize: 10,
   };
+
+  if (includedType) {
+    body.includedType = includedType;
+    body.strictTypeFiltering = true;
+  }
 
   if (
     locationBias &&
@@ -808,11 +854,17 @@ async function handleFetchRequest(request) {
     const searchRegionCode = '';
     const locationBias = getExplicitProximity(url);
 
+    const includedType = getRunTripIncludedTypeHint(
+      query,
+      language
+    );
+
     const searchResult = await requestGooglePlacesTextSearch({
       query,
       language,
       regionCode: searchRegionCode,
       locationBias,
+      includedType,
       apiKey,
     });
 
@@ -852,6 +904,7 @@ async function handleFetchRequest(request) {
       provider: 'google-places-new',
       language,
       regionCode: searchRegionCode,
+      includedType,
       searchSources: {
         googlePlacesNew: true,
         googleGeocoding: false,
