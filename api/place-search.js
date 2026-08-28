@@ -197,6 +197,130 @@ function normalizeGooglePlaces(places) {
     .filter(Boolean);
 }
 
+function normalizePlaceSearchText(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/[\s\-_.·•'",(){}\[\]/\\]+/g, '');
+}
+
+function isAdministrativePlace(place) {
+  const types = Array.isArray(place?.types)
+    ? place.types
+    : [];
+
+  const administrativeTypes = new Set([
+    'country',
+    'administrative_area_level_1',
+    'administrative_area_level_2',
+    'administrative_area_level_3',
+    'locality',
+    'postal_town',
+    'sublocality',
+    'neighborhood',
+  ]);
+
+  return types.some(function (type) {
+    return administrativeTypes.has(type);
+  });
+}
+
+function isRunTripPoi(place) {
+  const types = Array.isArray(place?.types)
+    ? place.types
+    : [];
+
+  const poiTypes = new Set([
+    'train_station',
+    'subway_station',
+    'transit_station',
+    'bus_station',
+    'airport',
+    'park',
+    'tourist_attraction',
+    'museum',
+    'art_gallery',
+    'university',
+    'school',
+    'hospital',
+    'stadium',
+    'shopping_mall',
+    'restaurant',
+    'cafe',
+    'lodging',
+    'place_of_worship',
+    'premise',
+    'establishment',
+    'point_of_interest',
+  ]);
+
+  return types.some(function (type) {
+    return poiTypes.has(type);
+  });
+}
+
+function rankGooglePlacesForRunTrip(places, query) {
+  const normalizedQuery = normalizePlaceSearchText(query);
+
+  return (Array.isArray(places) ? places : [])
+    .map(function (place, index) {
+      const primaryText = normalizePlaceSearchText(
+        place?.primaryText ||
+        place?.displayName ||
+        place?.name
+      );
+
+      let score = 0;
+
+      if (normalizedQuery && primaryText === normalizedQuery) {
+        score += 1200;
+      } else if (
+        normalizedQuery &&
+        primaryText.startsWith(normalizedQuery)
+      ) {
+        score += 700;
+      } else if (
+        normalizedQuery &&
+        primaryText.includes(normalizedQuery)
+      ) {
+        score += 400;
+      } else if (
+        normalizedQuery &&
+        normalizedQuery.includes(primaryText) &&
+        primaryText.length >= 2
+      ) {
+        score += 150;
+      }
+
+      if (isRunTripPoi(place)) {
+        score += 250;
+      }
+
+      if (isAdministrativePlace(place)) {
+        score -= 350;
+      }
+
+      // Preserve Google's relevance ranking as a tie-breaker.
+      score -= index;
+
+      return {
+        place,
+        score,
+        index,
+      };
+    })
+    .sort(function (a, b) {
+      if (b.score !== a.score) {
+        return b.score - a.score;
+      }
+
+      return a.index - b.index;
+    })
+    .map(function (item) {
+      return item.place;
+    });
+}
+
 function getGoogleGeocodeCountryCode(result) {
   const components = Array.isArray(result?.address_components)
     ? result.address_components
@@ -678,15 +802,16 @@ async function handleFetchRequest(request) {
   }
 
   try {
-    const locationBias = getLocationBias(
-      request,
-      url
-    );
+    // Global text search must not be silently biased by the runner's
+    // current IP country/location. Only an explicit proximity supplied
+    // by the client is allowed to influence place-name search.
+    const searchRegionCode = '';
+    const locationBias = getExplicitProximity(url);
 
     const searchResult = await requestGooglePlacesTextSearch({
       query,
       language,
-      regionCode,
+      regionCode: searchRegionCode,
       locationBias,
       apiKey,
     });
@@ -715,15 +840,18 @@ async function handleFetchRequest(request) {
       );
     }
 
-    const places = normalizeGooglePlaces(
-      searchResult.data?.places
+    const places = rankGooglePlacesForRunTrip(
+      normalizeGooglePlaces(
+        searchResult.data?.places
+      ),
+      query
     ).slice(0, 10);
 
     return jsonResponse({
       places,
       provider: 'google-places-new',
       language,
-      regionCode,
+      regionCode: searchRegionCode,
       searchSources: {
         googlePlacesNew: true,
         googleGeocoding: false,

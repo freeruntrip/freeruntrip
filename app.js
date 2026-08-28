@@ -1,4 +1,4 @@
-const FREERUNTRIP_MAPBOX_ACCESS_TOKEN =
+﻿const FREERUNTRIP_MAPBOX_ACCESS_TOKEN =
   [
     'pk.',
     'eyJ1IjoiZnJlZXJ1bnRyaXAiLCJhIjoiY21zbXN1MW52MG82ZjM0cHZuaDV1ZGduZSJ9',
@@ -10804,6 +10804,45 @@ function completeRunTrip(
   return savedRecord;
 }
 
+function detectPlaceSearchLanguage(query) {
+  const text = String(query || '').trim();
+
+  if (!text) {
+    return 'en';
+  }
+
+  // Korean
+  if (/[\uAC00-\uD7AF\u1100-\u11FF]/.test(text)) {
+    return 'ko';
+  }
+
+  // Japanese Hiragana / Katakana
+  if (/[\u3040-\u30FF]/.test(text)) {
+    return 'ja';
+  }
+
+  // Japanese place names written mainly with Kanji
+  if (
+    /[\u4E00-\u9FFF]/.test(text) &&
+    /(駅|公園|神社|寺|城|橋|通り|丁目|空港|大学|病院|美術館|博物館)/.test(text)
+  ) {
+    return 'ja';
+  }
+
+  // German-specific characters or common place-name words
+  if (
+    /[äöüßÄÖÜ]/.test(text) ||
+    /\b(tor|platz|strasse|straße|bahnhof|hauptbahnhof|schloss|kirche|rathaus|flughafen)\b/i.test(
+      text
+    )
+  ) {
+    return 'de';
+  }
+
+  // Latin alphabet defaults to English until app-level language selection exists.
+  return 'en';
+}
+
 function getPlaceSearchUrl(query) {
   const baseUrl =
     window.location.hostname === 'localhost' ||
@@ -10811,7 +10850,12 @@ function getPlaceSearchUrl(query) {
       ? 'https://freeruntrip.vercel.app/api/place-search'
       : '/api/place-search';
 
-  return `${baseUrl}?q=${encodeURIComponent(query)}`;
+  const language = detectPlaceSearchLanguage(query);
+
+  return (
+    `${baseUrl}?q=${encodeURIComponent(query)}` +
+    `&language=${encodeURIComponent(language)}`
+  );
 }
 
 
