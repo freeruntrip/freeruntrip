@@ -11143,6 +11143,33 @@ function getRunTripPlaceEnglishAddress(place) {
 
   return englishAddress;
 }
+
+function getRunTripPlaceLanguageLabel(place) {
+  const language =
+    String(
+      place?.language || ''
+    )
+      .trim()
+      .toLowerCase();
+
+  if (language.startsWith('ko')) {
+    return '한국어';
+  }
+
+  if (language.startsWith('ja')) {
+    return '日本語';
+  }
+
+  if (language.startsWith('de')) {
+    return 'DE';
+  }
+
+  if (language.startsWith('en')) {
+    return 'EN';
+  }
+
+  return '';
+}
 function hidePlaceSearchResults(resultsElement) {
   resultsElement.innerHTML = '';
   resultsElement.classList.add('hidden');
@@ -11187,7 +11214,31 @@ function renderPlaceSearchResults(
 ${
   getRunTripPlaceSecondaryText(place)
     ? `
-      <span class="runtrip-place-search-address">
+      <span
+        class="runtrip-place-search-address"
+        style="display:block;"
+      >
+        ${
+          getRunTripPlaceLanguageLabel(place)
+            ? `
+              <small
+                style="
+                  display:inline-block;
+                  margin-right:7px;
+                  font-size:0.72em;
+                  font-weight:700;
+                  letter-spacing:0.02em;
+                  color:#94A3B8;
+                  vertical-align:0.05em;
+                "
+              >
+                ${escapePlaceSearchText(
+                  getRunTripPlaceLanguageLabel(place)
+                )}
+              </small>
+            `
+            : ''
+        }
         ${escapePlaceSearchText(
           getRunTripPlaceSecondaryText(place)
         )}
@@ -11199,7 +11250,28 @@ ${
 ${
   getRunTripPlaceEnglishAddress(place)
     ? `
-      <span class="runtrip-place-search-address runtrip-place-search-english-address">
+      <span
+        class="runtrip-place-search-address runtrip-place-search-english-address"
+        style="
+          display:block;
+          margin-top:4px;
+          color:#7F8DA3;
+          font-size:0.94em;
+        "
+      >
+        <small
+          style="
+            display:inline-block;
+            margin-right:7px;
+            font-size:0.72em;
+            font-weight:700;
+            letter-spacing:0.05em;
+            color:#94A3B8;
+            vertical-align:0.05em;
+          "
+        >
+          EN
+        </small>
         ${escapePlaceSearchText(
           getRunTripPlaceEnglishAddress(place)
         )}
