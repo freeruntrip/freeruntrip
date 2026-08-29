@@ -6270,6 +6270,7 @@ const runTripSearchResults = document.getElementById(
 let activeRunTripSearchTarget = null;
 let runTripSearchTimer = null;
 let runTripSearchRequestId = 0;
+let pendingRunTripPreviewFocusLatLng = null;
 let selectedRunTripOrigin = null;
 let selectedRunTripDestination = null;
 let isRunTripDestinationAutoSetFromOrigin = false;
@@ -11167,6 +11168,11 @@ ${
       const selectedPlace = places[placeIndex];
 
       if (selectedPlace) {
+        pendingRunTripPreviewFocusLatLng =
+          getRunTripPlaceLatLng(
+            selectedPlace
+          );
+
         onPlaceSelect(selectedPlace);
       }
     });
@@ -11233,6 +11239,10 @@ if (mapboxMainContainer) {
 if (freeRunTripMapboxMainMap) {
   requestAnimationFrame(function () {
     freeRunTripMapboxMainMap.resize();
+
+    requestAnimationFrame(function () {
+      restoreRunTripPreviewCameraAfterSearch();
+    });
   });
 }
 
@@ -12208,6 +12218,217 @@ function clearRunTripVisualState() {
   mapboxRunTripFollowMarker = null;
 }
 }
+function getRunTripPreviewVisibleMapGeometry() {
+  if (!freeRunTripMapboxMainMap) {
+    return null;
+  }
+
+  const mapboxContainer =
+    freeRunTripMapboxMainMap.getContainer();
+
+  if (!mapboxContainer) {
+    return null;
+  }
+
+  const mapRect =
+    mapboxContainer.getBoundingClientRect();
+
+  if (
+    !Number.isFinite(mapRect.width) ||
+    !Number.isFinite(mapRect.height) ||
+    mapRect.width <= 0 ||
+    mapRect.height <= 0
+  ) {
+    return null;
+  }
+
+  let visibleTop = mapRect.top;
+  let visibleBottom = mapRect.bottom;
+
+  if (
+    runTripEditorCard &&
+    !runTripEditorCard.classList.contains('hidden')
+  ) {
+    const editorRect =
+      runTripEditorCard.getBoundingClientRect();
+
+    if (
+      editorRect.bottom > mapRect.top &&
+      editorRect.top < mapRect.bottom
+    ) {
+      visibleTop = Math.min(
+        mapRect.bottom,
+        Math.max(
+          mapRect.top,
+          editorRect.bottom + 12
+        )
+      );
+    }
+  }
+
+  if (
+    appBottomNavigation &&
+    !appBottomNavigation.classList.contains('hidden')
+  ) {
+    const navigationRect =
+      appBottomNavigation.getBoundingClientRect();
+
+    if (
+      navigationRect.bottom > mapRect.top &&
+      navigationRect.top < mapRect.bottom
+    ) {
+      visibleBottom = Math.max(
+        mapRect.top,
+        Math.min(
+          mapRect.bottom,
+          navigationRect.top - 12
+        )
+      );
+    }
+  }
+
+  if (visibleBottom <= visibleTop) {
+    return null;
+  }
+
+  const fullCenterY =
+    (mapRect.top + mapRect.bottom) / 2;
+
+  const visibleCenterY =
+    (visibleTop + visibleBottom) / 2;
+
+  return {
+    mapRect: mapRect,
+    visibleTop: visibleTop,
+    visibleBottom: visibleBottom,
+    verticalOffset:
+      Math.round(
+        visibleCenterY - fullCenterY
+      ),
+    topPadding:
+      Math.max(
+        24,
+        Math.round(
+          visibleTop - mapRect.top + 24
+        )
+      ),
+    bottomPadding:
+      Math.max(
+        24,
+        Math.round(
+          mapRect.bottom - visibleBottom + 24
+        )
+      )
+  };
+}
+
+function centerRunTripPreviewMapOnPlace(
+  latLng,
+  options = {}
+) {
+  if (
+    !freeRunTripMapboxMainMap ||
+    !Array.isArray(latLng) ||
+    latLng.length < 2
+  ) {
+    return false;
+  }
+
+  const latitude = Number(latLng[0]);
+  const longitude = Number(latLng[1]);
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return false;
+  }
+
+  freeRunTripMapboxMainMap.resize();
+
+  const geometry =
+    getRunTripPreviewVisibleMapGeometry();
+
+  if (!geometry) {
+    return false;
+  }
+
+  const currentZoom =
+    Number(freeRunTripMapboxMainMap.getZoom());
+
+  const targetZoom =
+    Number.isFinite(Number(options.zoom))
+      ? Number(options.zoom)
+      : Math.max(
+          15,
+          Math.min(
+            16,
+            Number.isFinite(currentZoom)
+              ? currentZoom
+              : 15
+          )
+        );
+
+  freeRunTripMapboxMainMap.easeTo({
+    center: [
+      longitude,
+      latitude
+    ],
+    zoom: targetZoom,
+    offset: [
+      0,
+      geometry.verticalOffset
+    ],
+    duration:
+      options.animate === true
+        ? 350
+        : 0
+  });
+
+  return true;
+}
+
+function restoreRunTripPreviewCameraAfterSearch() {
+  if (!freeRunTripMapboxMainMap) {
+    pendingRunTripPreviewFocusLatLng = null;
+    return;
+  }
+
+  freeRunTripMapboxMainMap.resize();
+
+  /*
+    검색창은 Mapbox 컨테이너를 display:none 상태로 만든다.
+    그 상태에서 실행된 fitBounds/easeTo는 iPhone Safari에서
+    이전 손가락 이동 카메라를 그대로 남길 수 있다.
+
+    검색 화면이 닫혀 실제 지도 크기가 복구된 다음 카메라를 다시
+    적용해, 사용자가 지도를 움직였더라도 다음 장소 선택 시 항상
+    새 장소/새 경로로 이동하도록 한다.
+  */
+  if (
+    latestRunTripRouteSummary &&
+    latestRunTripRouteSummary.bounds
+  ) {
+    fitRunTripMapBounds(
+      latestRunTripRouteSummary.bounds
+    );
+
+    pendingRunTripPreviewFocusLatLng = null;
+    return;
+  }
+
+  if (pendingRunTripPreviewFocusLatLng) {
+    centerRunTripPreviewMapOnPlace(
+      pendingRunTripPreviewFocusLatLng,
+      {
+        animate: false
+      }
+    );
+  }
+
+  pendingRunTripPreviewFocusLatLng = null;
+}
+
 function getRunTripMapFitOptions() {
   const mapContainer = map.getContainer();
 
@@ -12283,46 +12504,19 @@ function fitRunTripMapBounds(bounds) {
     return;
   }
 
-  const mapboxContainer =
-    freeRunTripMapboxMainMap.getContainer();
+  const visibleGeometry =
+    getRunTripPreviewVisibleMapGeometry();
 
-  const mapRect =
-    mapboxContainer.getBoundingClientRect();
-
-  const routeEditor =
-    runTripEditorCard;
-
-  let coveredTopHeight = 0;
-
-  if (routeEditor) {
-    const editorRect =
-      routeEditor.getBoundingClientRect();
-
-    coveredTopHeight =
-      Math.max(
-        0,
-        Math.min(
-          editorRect.bottom,
-          mapRect.bottom
-        ) -
-          Math.max(
-            editorRect.top,
-            mapRect.top
-          )
-      );
+  /*
+    검색 화면에서 Mapbox가 display:none이면 실제 크기가 0이므로
+    여기서 억지로 fitBounds하지 않는다. 검색 화면이 닫힐 때
+    restoreRunTripPreviewCameraAfterSearch()가 다시 적용한다.
+  */
+  if (!visibleGeometry) {
+    return;
   }
 
   const horizontalPadding = 36;
-  const markerPadding = 48;
-
-  const topPadding =
-    Math.max(
-      120,
-      Math.round(
-        coveredTopHeight +
-        markerPadding
-      )
-    );
 
   freeRunTripMapboxMainMap.fitBounds(
     [
@@ -12339,10 +12533,10 @@ function fitRunTripMapBounds(bounds) {
     {
       padding: {
         top:
-          topPadding,
+          visibleGeometry.topPadding,
 
         bottom:
-          110,
+          visibleGeometry.bottomPadding,
 
         left:
           horizontalPadding,
