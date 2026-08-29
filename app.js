@@ -11099,6 +11099,50 @@ function getRunTripPlaceSecondaryText(place) {
     ''
   );
 }
+
+function getRunTripPlaceEnglishAddress(place) {
+  if (!place) {
+    return '';
+  }
+
+  const englishAddress =
+    String(
+      place.englishAddress || ''
+    ).trim();
+
+  if (!englishAddress) {
+    return '';
+  }
+
+  const localizedAddress =
+    String(
+      getRunTripPlaceSecondaryText(
+        place
+      ) || ''
+    ).trim();
+
+  const normalizeForComparison =
+    function (value) {
+      return String(value || '')
+        .normalize('NFKC')
+        .toLocaleLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
+
+  if (
+    normalizeForComparison(
+      englishAddress
+    ) ===
+    normalizeForComparison(
+      localizedAddress
+    )
+  ) {
+    return '';
+  }
+
+  return englishAddress;
+}
 function hidePlaceSearchResults(resultsElement) {
   resultsElement.innerHTML = '';
   resultsElement.classList.add('hidden');
@@ -11146,6 +11190,18 @@ ${
       <span class="runtrip-place-search-address">
         ${escapePlaceSearchText(
           getRunTripPlaceSecondaryText(place)
+        )}
+      </span>
+    `
+    : ''
+}
+
+${
+  getRunTripPlaceEnglishAddress(place)
+    ? `
+      <span class="runtrip-place-search-address runtrip-place-search-english-address">
+        ${escapePlaceSearchText(
+          getRunTripPlaceEnglishAddress(place)
         )}
       </span>
     `
@@ -11980,6 +12036,16 @@ function createRunTripPlaceRecord(place) {
 
     secondaryText:
       getRunTripPlaceSecondaryText(place),
+
+    englishAddress:
+      String(
+        place.englishAddress || ''
+      ).trim(),
+
+    englishDisplayName:
+      String(
+        place.englishDisplayName || ''
+      ).trim(),
 
     name:
       place.name || '',

@@ -237,6 +237,93 @@ function normalizeGooglePlaces(places) {
     .filter(Boolean);
 }
 
+function attachEnglishGooglePlaceAddresses(
+  places,
+  englishPlaces
+) {
+  const englishByPlaceId = new Map();
+
+  (Array.isArray(englishPlaces)
+    ? englishPlaces
+    : []
+  ).forEach(function (place) {
+    const placeId = String(
+      place?.googlePlaceId ||
+      place?.id ||
+      ''
+    ).trim();
+
+    if (placeId) {
+      englishByPlaceId.set(
+        placeId,
+        place
+      );
+    }
+  });
+
+  return (Array.isArray(places)
+    ? places
+    : []
+  ).map(function (place) {
+    const placeId = String(
+      place?.googlePlaceId ||
+      place?.id ||
+      ''
+    ).trim();
+
+    const englishPlace =
+      placeId
+        ? englishByPlaceId.get(
+            placeId
+          )
+        : null;
+
+    const englishAddress = String(
+      englishPlace?.address ||
+      englishPlace?.secondaryText ||
+      ''
+    ).trim();
+
+    const englishDisplayName = String(
+      englishPlace?.primaryText ||
+      englishPlace?.displayName ||
+      englishPlace?.name ||
+      ''
+    ).trim();
+
+    return {
+      ...place,
+
+      englishAddress:
+        englishAddress ||
+        (
+          normalizeLanguage(
+            place?.language
+          ) === 'en'
+            ? String(
+                place?.address || ''
+              ).trim()
+            : ''
+        ),
+
+      englishDisplayName:
+        englishDisplayName ||
+        (
+          normalizeLanguage(
+            place?.language
+          ) === 'en'
+            ? String(
+                place?.primaryText ||
+                place?.displayName ||
+                place?.name ||
+                ''
+              ).trim()
+            : ''
+        ),
+    };
+  });
+}
+
 function normalizePlaceSearchText(value) {
   return String(value || '')
     .normalize('NFKC')
@@ -994,8 +1081,75 @@ async function handleFetchRequest(request) {
         language
       );
 
+    let englishPlaces = [];
+
+    if (
+      normalizeLanguage(language) === 'en'
+    ) {
+      englishPlaces =
+        normalizeGooglePlaces(
+          searchResult.data?.places
+        );
+    } else {
+      let englishSearchResult =
+        await requestGooglePlacesTextSearch({
+          query,
+          language: 'en',
+          regionCode: searchRegionCode,
+          locationBias,
+          includedType,
+          strictTypeFiltering:
+            Boolean(includedType),
+          apiKey,
+        });
+
+      const strictEnglishPlaces =
+        Array.isArray(
+          englishSearchResult.data?.places
+        )
+          ? englishSearchResult.data.places
+          : [];
+
+      if (
+        englishSearchResult.ok &&
+        includedType &&
+        strictEnglishPlaces.length === 0
+      ) {
+        englishSearchResult =
+          await requestGooglePlacesTextSearch({
+            query,
+            language: 'en',
+            regionCode: searchRegionCode,
+            locationBias,
+            includedType: '',
+            strictTypeFiltering: false,
+            apiKey,
+          });
+      }
+
+      if (englishSearchResult.ok) {
+        englishPlaces =
+          normalizeGooglePlaces(
+            englishSearchResult.data?.places
+          );
+      } else {
+        console.warn(
+          'Google Places English address lookup failed:',
+          {
+            status:
+              englishSearchResult.status,
+            data:
+              englishSearchResult.data,
+          }
+        );
+      }
+    }
+
     const places = rankGooglePlacesForRunTrip(
-      normalizedPlaces,
+      attachEnglishGooglePlaceAddresses(
+        normalizedPlaces,
+        englishPlaces
+      ),
       query
     ).slice(0, 10);
 
