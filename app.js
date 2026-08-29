@@ -7128,12 +7128,275 @@ let runTripNavigationHasJoinedRoute = false;
 const RUNTRIP_NAVIGATION_MAX_OFF_ROUTE_METERS = 45;
 const RUNTRIP_NAVIGATION_JOIN_START_RADIUS_METERS = 120;
 
+/*
+  한국어 내비게이션 V1 - 경로 이탈 복귀 원칙
+  - 예정 경로는 재탐색하지 않는다.
+  - GPS 한 번 튄 것으로 오탐하지 않도록 연속 샘플로 확정한다.
+  - 기본 안내는 무조건 U턴이 아니라 "원래 경로로 돌아가세요."이다.
+*/
+const RUNTRIP_OFF_ROUTE_TRIGGER_METERS = 20;
+const RUNTRIP_OFF_ROUTE_RECOVERY_METERS = 15;
+const RUNTRIP_OFF_ROUTE_REQUIRED_HITS = 3;
+const RUNTRIP_ROUTE_RECOVERY_REQUIRED_HITS = 2;
+
+let runTripOffRouteHits = 0;
+let runTripRouteRecoveryHits = 0;
+let runTripIsOffRoute = false;
+let runTripOffRouteAnnouncementDone = false;
+let runTripOffRouteBanner = null;
+
 function getRunTripNavigationDirectionArrow(direction) {
   return direction === 'left' ? '↰' : '↱';
 }
 
 function getRunTripNavigationDirectionLabel(direction) {
   return direction === 'left' ? '좌회전' : '우회전';
+}
+
+function buildRunTripNavigationFirstMessage(
+  direction,
+  remainingDistanceMeters
+) {
+  const distance =
+    getRunTripNavigationVoiceDistance(
+      remainingDistanceMeters
+    );
+
+  return (
+    `${distance}미터 앞에서 ` +
+    `${getRunTripNavigationDirectionLabel(direction)}입니다.`
+  );
+}
+
+function buildRunTripNavigationSecondMessage(
+  currentDirection,
+  currentRemainingDistanceMeters,
+  nextSegment
+) {
+  const currentDistance =
+    getRunTripNavigationVoiceDistance(
+      currentRemainingDistanceMeters
+    );
+
+  let message =
+    `${currentDistance}미터 앞에서 ` +
+    `${getRunTripNavigationDirectionLabel(currentDirection)}입니다.`;
+
+  const nextDirection =
+    nextSegment?.endAction?.direction;
+
+  if (
+    nextDirection === 'left' ||
+    nextDirection === 'right'
+  ) {
+    const nextDistance =
+      getRunTripNavigationVoiceDistance(
+        nextSegment.lengthMeters
+      );
+
+    message +=
+      ` ${nextDistance}미터 직진 후 ` +
+      `${getRunTripNavigationDirectionLabel(nextDirection)}입니다.`;
+  }
+
+  return message;
+}
+
+function ensureRunTripOffRouteBanner() {
+  if (runTripOffRouteBanner) {
+    return runTripOffRouteBanner;
+  }
+
+  const banner =
+    document.createElement('div');
+
+  banner.className =
+    'runtrip-off-route-banner hidden';
+
+  banner.setAttribute(
+    'role',
+    'alert'
+  );
+
+  banner.setAttribute(
+    'aria-live',
+    'assertive'
+  );
+
+  banner.style.position = 'fixed';
+  banner.style.left = '50%';
+  banner.style.transform = 'translateX(-50%)';
+  banner.style.zIndex = '1400';
+  banner.style.width = 'calc(100% - 32px)';
+  banner.style.maxWidth = '398px';
+  banner.style.boxSizing = 'border-box';
+  banner.style.padding = '12px 14px';
+  banner.style.borderRadius = '14px';
+  banner.style.background = '#0f172a';
+  banner.style.border = '1px solid rgba(118, 228, 210, 0.55)';
+  banner.style.boxShadow = '0 8px 24px rgba(15, 23, 42, 0.24)';
+  banner.style.color = '#f8fafc';
+  banner.style.fontSize = '14px';
+  banner.style.fontWeight = '700';
+  banner.style.lineHeight = '1.45';
+  banner.style.textAlign = 'center';
+  banner.style.pointerEvents = 'none';
+
+  banner.innerHTML = `
+    <span
+      aria-hidden="true"
+      style="
+        display:inline-block;
+        margin-right:6px;
+        color:#76e4d2;
+      "
+    >
+      ↩
+    </span>
+    경로를 이탈했습니다. 원래 경로로 돌아가세요.
+  `;
+
+  document.body.appendChild(
+    banner
+  );
+
+  runTripOffRouteBanner =
+    banner;
+
+  return banner;
+}
+
+function positionRunTripOffRouteBanner() {
+  const banner =
+    ensureRunTripOffRouteBanner();
+
+  const executionPanel =
+    document.querySelector(
+      '.runtrip-following .runtrip-editor-card'
+    );
+
+  const panelBottom =
+    executionPanel
+      ? executionPanel.getBoundingClientRect().bottom
+      : 0;
+
+  banner.style.top =
+    `${Math.max(12, Math.round(panelBottom + 10))}px`;
+}
+
+function showRunTripOffRouteBanner() {
+  hideRunTripNavigationBanners();
+
+  const banner =
+    ensureRunTripOffRouteBanner();
+
+  positionRunTripOffRouteBanner();
+
+  banner.classList.remove(
+    'hidden'
+  );
+
+  banner.style.display =
+    'block';
+}
+
+function hideRunTripOffRouteBanner() {
+  if (!runTripOffRouteBanner) {
+    return;
+  }
+
+  runTripOffRouteBanner.classList.add(
+    'hidden'
+  );
+
+  runTripOffRouteBanner.style.display =
+    'none';
+}
+
+function resetRunTripOffRouteGuidance() {
+  runTripOffRouteHits = 0;
+  runTripRouteRecoveryHits = 0;
+  runTripIsOffRoute = false;
+  runTripOffRouteAnnouncementDone = false;
+  hideRunTripOffRouteBanner();
+}
+
+function announceRunTripOffRoute() {
+  if (runTripOffRouteAnnouncementDone) {
+    return;
+  }
+
+  runTripOffRouteAnnouncementDone =
+    true;
+
+  requestRunningDynamicVoice(
+    '경로를 이탈했습니다. 원래 경로로 돌아가세요.'
+  );
+}
+
+function updateRunTripOffRouteGuidance(
+  projection
+) {
+  if (!projection) {
+    return false;
+  }
+
+  const distanceToRoute =
+    Math.max(
+      0,
+      Number(
+        projection.distanceToRouteMeters
+      ) || 0
+    );
+
+  if (!runTripIsOffRoute) {
+    if (
+      distanceToRoute >=
+      RUNTRIP_OFF_ROUTE_TRIGGER_METERS
+    ) {
+      runTripOffRouteHits++;
+    } else {
+      runTripOffRouteHits = 0;
+    }
+
+    if (
+      runTripOffRouteHits >=
+      RUNTRIP_OFF_ROUTE_REQUIRED_HITS
+    ) {
+      runTripIsOffRoute = true;
+      runTripRouteRecoveryHits = 0;
+
+      showRunTripOffRouteBanner();
+      announceRunTripOffRoute();
+    }
+
+    return runTripIsOffRoute;
+  }
+
+  showRunTripOffRouteBanner();
+
+  if (
+    distanceToRoute <=
+    RUNTRIP_OFF_ROUTE_RECOVERY_METERS
+  ) {
+    runTripRouteRecoveryHits++;
+  } else {
+    runTripRouteRecoveryHits = 0;
+  }
+
+  if (
+    runTripRouteRecoveryHits >=
+    RUNTRIP_ROUTE_RECOVERY_REQUIRED_HITS
+  ) {
+    runTripIsOffRoute = false;
+    runTripOffRouteHits = 0;
+    runTripRouteRecoveryHits = 0;
+    runTripOffRouteAnnouncementDone = false;
+
+    hideRunTripOffRouteBanner();
+  }
+
+  return runTripIsOffRoute;
 }
 
 function formatRunTripNavigationDistance(distanceMeters) {
@@ -7470,6 +7733,7 @@ function resetRunTripNavigationSegmentAnnouncements() {
 
 function resetRunTripNavigationGuidance() {
   hideRunTripNavigationBanners();
+  resetRunTripOffRouteGuidance();
   runTripNavigationRuntimeSegments = [];
   runTripNavigationRouteMetrics = null;
   runTripCurrentNavigationSegmentIndex = 0;
@@ -7521,15 +7785,12 @@ function announceRunTripNavigationFirst(
   direction,
   remainingDistanceMeters
 ) {
-  const distance = getRunTripNavigationVoiceDistance(
-    remainingDistanceMeters
+  requestRunningDynamicVoice(
+    buildRunTripNavigationFirstMessage(
+      direction,
+      remainingDistanceMeters
+    )
   );
-
-  const message =
-    `${distance}m 앞에서 ` +
-    `${getRunTripNavigationDirectionLabel(direction)}입니다.`;
-
-  requestRunningDynamicVoice(message);
 }
 
 function announceRunTripNavigationSecond(
@@ -7537,27 +7798,13 @@ function announceRunTripNavigationSecond(
   currentRemainingDistanceMeters,
   nextSegment
 ) {
-  const currentDistance = getRunTripNavigationVoiceDistance(
-    currentRemainingDistanceMeters
+  requestRunningDynamicVoice(
+    buildRunTripNavigationSecondMessage(
+      currentDirection,
+      currentRemainingDistanceMeters,
+      nextSegment
+    )
   );
-
-  let message =
-    `${currentDistance}m 앞에서 ` +
-    `${getRunTripNavigationDirectionLabel(currentDirection)}입니다.`;
-
-  const nextDirection = nextSegment?.endAction?.direction;
-
-  if (nextDirection === 'left' || nextDirection === 'right') {
-    const nextDistance = getRunTripNavigationVoiceDistance(
-      nextSegment.lengthMeters
-    );
-
-    message +=
-      ` 이어서 ${nextDistance}m 직진 후 ` +
-      `${getRunTripNavigationDirectionLabel(nextDirection)}입니다.`;
-  }
-
-  requestRunningDynamicVoice(message);
 }
 
 function canJoinRunTripNavigationRoute(
@@ -7655,9 +7902,23 @@ function updateRunTripNavigationGuidance(
   }
 
   /*
-    경로에서 멀리 떨어진 GPS는 내비게이션 진행률에 사용하지 않는다.
-    기존 구현은 이 경우에도 전체 경로에서 가장 가까운 점을 선택해
-    출발 직후 0m / 다음 회전 배너가 표시될 수 있었다.
+    한국어 내비게이션 V1:
+    경로에서 20m 이상 벗어난 상태가 3회 연속 확인되면
+    재탐색 대신 원래 예정 경로로 복귀하도록 안내한다.
+    다시 15m 이내에 2회 연속 들어오면 정상 안내로 복귀한다.
+  */
+  if (
+    updateRunTripOffRouteGuidance(
+      projection
+    )
+  ) {
+    hideRunTripNavigationBanners();
+    return;
+  }
+
+  /*
+    경로에서 너무 멀리 떨어진 GPS는 내비게이션 진행률에 사용하지 않는다.
+    오프루트 확정 전이라도 45m 이상 떨어진 샘플은 회전 진행률에서 제외한다.
   */
   if (
     projection.distanceToRouteMeters >
@@ -7818,6 +8079,10 @@ function updateRunTripNavigationGuidance(
 window.addEventListener('resize', function () {
   if (isRunTripFollowing) {
     positionRunTripNavigationBanners();
+
+    if (runTripIsOffRoute) {
+      positionRunTripOffRouteBanner();
+    }
   }
 });
 
@@ -7967,6 +8232,7 @@ function openRunTripCheckpointCamera() {
 function showRunTripCheckpointNotice(options = {}) {
   removeRunTripCheckpointNotice();
   hideRunTripNavigationBanners();
+  hideRunTripOffRouteBanner();
 
   const isWaypoint =
     options.type === 'waypoint';
