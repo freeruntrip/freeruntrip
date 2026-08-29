@@ -10712,10 +10712,58 @@ function completeRunTrip(
 
   isRunTripCompletionInProgress = true;
 
+  /*
+    Safari localStorage 용량 안정화:
+    진행 중 RunTrip 복구 데이터에는 예정 경로/내비게이션/실제 경로가
+    포함되어 있어 장거리 RunTrip 종료 시 새 기록과 동시에 저장되면
+    동일한 대용량 경로 데이터가 잠깐 중복될 수 있다.
+
+    종료 직전 복구 데이터를 문자열로 보관한 뒤 localStorage에서 잠시
+    제거하고 기록 저장을 시도한다. 저장에 실패하면 복구 데이터를
+    원상 복원해 사용자의 진행 기록을 잃지 않도록 한다.
+  */
+  let activeRunTripRecoveryBackup = null;
+
+  try {
+    activeRunTripRecoveryBackup =
+      localStorage.getItem(
+        RUNTRIP_ACTIVE_STATE_KEY
+      );
+
+    if (
+      activeRunTripRecoveryBackup !== null
+    ) {
+      localStorage.removeItem(
+        RUNTRIP_ACTIVE_STATE_KEY
+      );
+    }
+  } catch (error) {
+    console.warn(
+      'RunTrip 종료 전 복구 데이터 임시 정리 실패:',
+      error
+    );
+  }
+
   const savedRecord =
     saveRunTripRecord();
 
   if (!savedRecord) {
+    if (
+      activeRunTripRecoveryBackup !== null
+    ) {
+      try {
+        localStorage.setItem(
+          RUNTRIP_ACTIVE_STATE_KEY,
+          activeRunTripRecoveryBackup
+        );
+      } catch (restoreError) {
+        console.error(
+          'RunTrip 저장 실패 후 복구 데이터 복원 실패:',
+          restoreError
+        );
+      }
+    }
+
     isRunTripCompletionInProgress = false;
 
     alert(
