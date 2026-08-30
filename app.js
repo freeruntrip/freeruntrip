@@ -10692,16 +10692,6 @@ routeSegments:
 plannedRouteCoordinates:
   plannedRoute,
 
-plannedNavigationSegments:
-  latestRunTripRouteSummary &&
-  Array.isArray(latestRunTripRouteSummary.navigationSegments)
-    ? latestRunTripRouteSummary.navigationSegments.map(
-        function (segment) {
-          return JSON.parse(JSON.stringify(segment));
-        }
-      )
-    : [],
-
 routeProvider:
   latestRunTripRouteSummary?.provider ||
   'mapbox',
