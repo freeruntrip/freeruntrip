@@ -7117,6 +7117,8 @@ let runTripNavigationSecondAnnouncementDone = false;
 let runTripNavigationLastRouteProgressMeters = 0;
 let runTripNavigationLastRouteSegmentIndex = 0;
 let runTripNavigationHasJoinedRoute = false;
+let runTripNavigationDiagnosticLastLogTime = 0;
+const RUNTRIP_NAVIGATION_DIAGNOSTIC_INTERVAL_MS = 2000;
 
 /*
   배너 V1 안전장치
@@ -7846,6 +7848,31 @@ function canJoinRunTripNavigationRoute(
   );
 }
 
+function logRunTripNavigationDiagnostic(
+  label,
+  data = {}
+) {
+  const now = Date.now();
+
+  if (
+    label === 'tick' &&
+    now - runTripNavigationDiagnosticLastLogTime <
+      RUNTRIP_NAVIGATION_DIAGNOSTIC_INTERVAL_MS
+  ) {
+    return;
+  }
+
+  if (label === 'tick') {
+    runTripNavigationDiagnosticLastLogTime = now;
+  }
+
+  console.log(
+    'FreeRunTrip NAV 진단:',
+    label,
+    data
+  );
+}
+
 function updateRunTripNavigationGuidance(
   latitude,
   longitude
@@ -7894,8 +7921,6 @@ function updateRunTripNavigationGuidance(
     - globalProjection:
       화면에 보이는 전체 예정 경로를 기준으로 현재 위치와의 최단거리를 찾고
       경로 이탈 여부만 판정한다.
-      사용자가 민트 예정 경로 위를 달리고 있는데도 다른 구간을 기준으로
-      이탈 경고가 뜨는 문제를 방지한다.
   */
   const globalProjection =
     projectRunTripPointToRoute(
@@ -7913,16 +7938,42 @@ function updateRunTripNavigationGuidance(
   }
 
   if (!projection || !globalProjection) {
+    logRunTripNavigationDiagnostic(
+      'projection-missing',
+      {
+        hasLocalProjection: Boolean(localProjection),
+        hasGlobalProjection: Boolean(globalProjection)
+      }
+    );
+
     hideRunTripNavigationBanners();
     return;
   }
 
+  logRunTripNavigationDiagnostic(
+    'tick',
+    {
+      runtimeSegmentCount:
+        runTripNavigationRuntimeSegments.length,
+      joinedRoute:
+        runTripNavigationHasJoinedRoute,
+      localDistanceToRouteMeters:
+        localProjection
+          ? Number(localProjection.distanceToRouteMeters.toFixed(1))
+          : null,
+      globalDistanceToRouteMeters:
+        Number(globalProjection.distanceToRouteMeters.toFixed(1)),
+      routeProgressMeters:
+        Number(projection.routeDistanceMeters.toFixed(1)),
+      routeSegmentIndex:
+        projection.routeSegmentIndex,
+      currentNavigationSegmentIndex:
+        runTripCurrentNavigationSegmentIndex
+    }
+  );
+
   /*
-    한국어 내비게이션 V1:
     경로 이탈 여부는 반드시 전체 예정 경로(globalProjection)를 기준으로 판단한다.
-    경로에서 20m 이상 벗어난 상태가 3회 연속 확인되면
-    재탐색 대신 원래 예정 경로로 복귀하도록 안내한다.
-    다시 15m 이내에 2회 연속 들어오면 정상 안내로 복귀한다.
   */
   if (
     updateRunTripOffRouteGuidance(
@@ -7959,6 +8010,16 @@ function updateRunTripNavigationGuidance(
         projection
       )
     ) {
+      logRunTripNavigationDiagnostic(
+        'join-wait',
+        {
+          distanceToRouteMeters:
+            Number(projection.distanceToRouteMeters.toFixed(1)),
+          routeProgressMeters:
+            Number(projection.routeDistanceMeters.toFixed(1))
+        }
+      );
+
       hideRunTripNavigationBanners();
       return;
     }
@@ -8040,6 +8101,22 @@ function updateRunTripNavigationGuidance(
     currentSegment.endDistanceMeters - routeProgressMeters
   );
 
+  logRunTripNavigationDiagnostic(
+    'segment',
+    {
+      currentSegmentIndex:
+        runTripCurrentNavigationSegmentIndex,
+      direction:
+        currentDirection,
+      segmentProgress:
+        Number(segmentProgress.toFixed(3)),
+      remainingDistanceMeters:
+        Number(remainingDistanceMeters.toFixed(1)),
+      segmentLengthMeters:
+        Number(currentSegment.lengthMeters.toFixed(1))
+    }
+  );
+
   if (segmentProgress < 0.5) {
     hideRunTripNavigationBanners();
     return;
@@ -8048,6 +8125,17 @@ function updateRunTripNavigationGuidance(
   showRunTripNavigationPrimaryBanner(
     currentDirection,
     remainingDistanceMeters
+  );
+
+  logRunTripNavigationDiagnostic(
+    'primary-banner-show',
+    {
+      direction: currentDirection,
+      remainingDistanceMeters:
+        Number(remainingDistanceMeters.toFixed(1)),
+      segmentProgress:
+        Number(segmentProgress.toFixed(3))
+    }
   );
 
   if (
@@ -8073,6 +8161,18 @@ function updateRunTripNavigationGuidance(
       showRunTripNavigationSecondaryBanner(
         nextTurnSegment.endAction.direction,
         nextTurnSegment.lengthMeters
+      );
+
+      logRunTripNavigationDiagnostic(
+        'secondary-banner-show',
+        {
+          direction:
+            nextTurnSegment.endAction.direction,
+          distanceMeters:
+            Number(nextTurnSegment.lengthMeters.toFixed(1)),
+          segmentProgress:
+            Number(segmentProgress.toFixed(3))
+        }
       );
     } else if (runTripNavigationSecondaryBanner) {
       runTripNavigationSecondaryBanner.classList.add('hidden');
@@ -10708,16 +10808,6 @@ routeSegments:
 
 plannedRouteCoordinates:
   plannedRoute,
-
-plannedNavigationSegments:
-  latestRunTripRouteSummary &&
-  Array.isArray(latestRunTripRouteSummary.navigationSegments)
-    ? latestRunTripRouteSummary.navigationSegments.map(
-        function (segment) {
-          return JSON.parse(JSON.stringify(segment));
-        }
-      )
-    : [],
 
 routeProvider:
   latestRunTripRouteSummary?.provider ||
