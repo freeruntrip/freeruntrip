@@ -7884,32 +7884,49 @@ function updateRunTripNavigationGuidance(
     }
   );
 
+  /*
+    경로 진행률과 경로 이탈 판정을 분리한다.
+
+    - localProjection:
+      현재 진행 위치 주변의 경로만 찾아 배너/진행률 계산에 사용한다.
+      루프형 RunTrip에서 가까운 다른 구간으로 진행률이 점프하는 것을 막는다.
+
+    - globalProjection:
+      화면에 보이는 전체 예정 경로를 기준으로 현재 위치와의 최단거리를 찾고
+      경로 이탈 여부만 판정한다.
+      사용자가 민트 예정 경로 위를 달리고 있는데도 다른 구간을 기준으로
+      이탈 경고가 뜨는 문제를 방지한다.
+  */
+  const globalProjection =
+    projectRunTripPointToRoute(
+      latitude,
+      longitude
+    );
+
   let projection = localProjection;
 
   if (
     !projection ||
     projection.distanceToRouteMeters > 80
   ) {
-    projection = projectRunTripPointToRoute(
-      latitude,
-      longitude
-    );
+    projection = globalProjection;
   }
 
-  if (!projection) {
+  if (!projection || !globalProjection) {
     hideRunTripNavigationBanners();
     return;
   }
 
   /*
     한국어 내비게이션 V1:
+    경로 이탈 여부는 반드시 전체 예정 경로(globalProjection)를 기준으로 판단한다.
     경로에서 20m 이상 벗어난 상태가 3회 연속 확인되면
     재탐색 대신 원래 예정 경로로 복귀하도록 안내한다.
     다시 15m 이내에 2회 연속 들어오면 정상 안내로 복귀한다.
   */
   if (
     updateRunTripOffRouteGuidance(
-      projection
+      globalProjection
     )
   ) {
     hideRunTripNavigationBanners();
@@ -10691,6 +10708,16 @@ routeSegments:
 
 plannedRouteCoordinates:
   plannedRoute,
+
+plannedNavigationSegments:
+  latestRunTripRouteSummary &&
+  Array.isArray(latestRunTripRouteSummary.navigationSegments)
+    ? latestRunTripRouteSummary.navigationSegments.map(
+        function (segment) {
+          return JSON.parse(JSON.stringify(segment));
+        }
+      )
+    : [],
 
 routeProvider:
   latestRunTripRouteSummary?.provider ||
