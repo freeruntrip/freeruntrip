@@ -7117,8 +7117,10 @@ let runTripNavigationSecondAnnouncementDone = false;
 let runTripNavigationLastRouteProgressMeters = 0;
 let runTripNavigationLastRouteSegmentIndex = 0;
 let runTripNavigationHasJoinedRoute = false;
+let runTripNavigationJoinedAtMs = null;
 let runTripNavigationDiagnosticLastLogTime = 0;
 const RUNTRIP_NAVIGATION_DIAGNOSTIC_INTERVAL_MS = 2000;
+const RUNTRIP_OFF_ROUTE_JOIN_GRACE_MS = 8000;
 
 /*
   배너 V1 안전장치
@@ -7742,6 +7744,7 @@ function resetRunTripNavigationGuidance() {
   runTripNavigationLastRouteProgressMeters = 0;
   runTripNavigationLastRouteSegmentIndex = 0;
   runTripNavigationHasJoinedRoute = false;
+  runTripNavigationJoinedAtMs = null;
   resetRunTripNavigationSegmentAnnouncements();
 }
 
@@ -7973,16 +7976,10 @@ function updateRunTripNavigationGuidance(
   );
 
   /*
-    경로 이탈 여부는 반드시 전체 예정 경로(globalProjection)를 기준으로 판단한다.
+    경로 이탈 판정은 실제 예정 경로에 합류한 뒤에만 시작한다.
+    출발 직후 GPS가 아직 안정되지 않았거나 출발점 근처로 들어오는 동안에는
+    off-route 경고를 만들지 않는다.
   */
-  if (
-    updateRunTripOffRouteGuidance(
-      globalProjection
-    )
-  ) {
-    hideRunTripNavigationBanners();
-    return;
-  }
 
   /*
     경로에서 너무 멀리 떨어진 GPS는 내비게이션 진행률에 사용하지 않는다.
@@ -8025,6 +8022,9 @@ function updateRunTripNavigationGuidance(
     }
 
     runTripNavigationHasJoinedRoute = true;
+    runTripNavigationJoinedAtMs = Date.now();
+    resetRunTripOffRouteGuidance();
+
     runTripNavigationLastRouteProgressMeters =
       Math.max(0, projection.routeDistanceMeters);
     runTripNavigationLastRouteSegmentIndex =
@@ -8039,6 +8039,47 @@ function updateRunTripNavigationGuidance(
           Number(projection.distanceToRouteMeters.toFixed(1))
       }
     );
+  }
+
+  /*
+    경로 합류 직후에는 짧은 GPS 안정화 시간을 둔다.
+    이 시간 동안에는 이탈 hit를 누적하지 않고 기존 경고 상태도 초기화한다.
+  */
+  const joinedElapsedMs =
+    runTripNavigationJoinedAtMs === null
+      ? Infinity
+      : Date.now() - runTripNavigationJoinedAtMs;
+
+  if (
+    joinedElapsedMs <
+    RUNTRIP_OFF_ROUTE_JOIN_GRACE_MS
+  ) {
+    resetRunTripOffRouteGuidance();
+
+    logRunTripNavigationDiagnostic(
+      'off-route-grace',
+      {
+        remainingMs:
+          Math.max(
+            0,
+            RUNTRIP_OFF_ROUTE_JOIN_GRACE_MS -
+              joinedElapsedMs
+          ),
+        globalDistanceToRouteMeters:
+          Number(
+            globalProjection
+              .distanceToRouteMeters
+              .toFixed(1)
+          )
+      }
+    );
+  } else if (
+    updateRunTripOffRouteGuidance(
+      globalProjection
+    )
+  ) {
+    hideRunTripNavigationBanners();
+    return;
   }
 
   runTripNavigationLastRouteSegmentIndex =
