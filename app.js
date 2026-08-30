@@ -751,11 +751,24 @@ function centerMapboxRunTripMapOnPosition(
     );
 
   /*
-    RunTrip 실행 중 Follow 지도는 야외 테스트 기준으로
-    기존 18.2보다 약 3단계 넓게 보이도록 15.2로 고정한다.
-    현재 위치뿐 아니라 다음 경로와 경유지를 함께 읽기 위한 줌이다.
+    RunTrip 실행 중 기본 Follow 줌은 15.2로 시작한다.
+    사용자가 핀치 확대/축소하면 그 줌 레벨을 runTripFollowZoomLevel에
+    저장하고, 이후 GPS 업데이트에서는 중심만 현재 위치로 이동하면서
+    사용자가 선택한 줌을 그대로 유지한다.
   */
-  const targetZoom = 15.2;
+  const currentMapZoom =
+    Number(
+      freeRunTripMapboxMainMap.getZoom()
+    );
+
+  const targetZoom =
+    Number.isFinite(
+      Number(runTripFollowZoomLevel)
+    )
+      ? Number(runTripFollowZoomLevel)
+      : Number.isFinite(currentMapZoom)
+        ? currentMapZoom
+        : 15.2;
 
   freeRunTripMapboxMainMap.easeTo({
     center: [
@@ -7032,6 +7045,9 @@ let mapboxRunTripFollowMarker = null;
 let isRunTripPaused = false;
 let isRunTripCountdownActive = false;
 let isRunTripMapFollowing = true;
+let runTripFollowZoomLevel = 15.2;
+let runTripMapPinchZoomActive = false;
+let runTripMapPinchZoomReleaseTimer = null;
 let hasRunTripArrivalNotified = false;
 let isRunTripCompletionInProgress = false;
 let runTripRecentPositions = [];
@@ -9138,6 +9154,7 @@ function restoreActiveRunTripState(
   hasRunTripArrivalNotified = false;
   isRunTripCompletionInProgress = false;
   isRunTripMapFollowing = true;
+  runTripFollowZoomLevel = 15.2;
   runTripNextWaypointIndex = Math.max(
     0,
     Number(savedState.nextWaypointIndex) || 0
@@ -9977,6 +9994,19 @@ function resetRunTripDashboard() {
 
   isRunTripPaused = false;
   isRunTripMapFollowing = true;
+  runTripFollowZoomLevel = 15.2;
+  runTripMapPinchZoomActive = false;
+
+  if (
+    runTripMapPinchZoomReleaseTimer !== null
+  ) {
+    clearTimeout(
+      runTripMapPinchZoomReleaseTimer
+    );
+
+    runTripMapPinchZoomReleaseTimer =
+      null;
+  }
 
   runTripDashboard.classList.add(
     'hidden'
@@ -10608,6 +10638,7 @@ async function startRunTripFollowing() {
   hasRunTripArrivalNotified = false;
   isRunTripCompletionInProgress = false;
   isRunTripMapFollowing = true;
+  runTripFollowZoomLevel = 15.2;
   runTripRecentPositions = [];
   runTripLastGpsTimestamp = null;
   runTripTotalElevationGain = 0;
@@ -14383,6 +14414,18 @@ runTripDashboardFollowState.addEventListener(
     isRunTripMapFollowing =
       !isRunTripMapFollowing;
 
+    if (isRunTripMapFollowing) {
+      const currentZoom =
+        Number(
+          freeRunTripMapboxMainMap?.getZoom()
+        );
+
+      if (Number.isFinite(currentZoom)) {
+        runTripFollowZoomLevel =
+          currentZoom;
+      }
+    }
+
     if (
       isRunTripMapFollowing &&
       runTripLastValidPosition
@@ -14413,20 +14456,124 @@ runTripDashboardFollowState.addEventListener(
 map.on(
   'dragstart',
   function () {
-    if (
-      !isRunTripFollowing ||
-      isRunTripPaused ||
-      !isRunTripMapFollowing
-    ) {
-      return;
-    }
-
-    isRunTripMapFollowing = false;
-    updateRunTripDashboard();
+    /*
+      RunTrip 실행 중 지도 drag/pan은 Follow 상태를 끄지 않는다.
+      사용자가 지도를 잠깐 이동해도 다음 GPS 업데이트에서
+      현재 위치 중심 추적이 자동으로 이어진다.
+      Follow OFF는 사용자가 버튼을 직접 눌렀을 때만 변경한다.
+    */
+    return;
   }
 );
+/*
+  RunTrip Follow 지도 UX
+  - 핀치 줌: Follow ON 유지
+  - 핀치가 끝난 줌 레벨을 이후 GPS 추적에서도 유지
+  - drag/pan: Follow ON 유지
+  - Follow OFF는 사용자가 버튼을 직접 눌렀을 때만 전환
+*/
+const runTripMapboxCanvasContainer =
+  freeRunTripMapboxMainMap.getCanvasContainer();
+
+if (runTripMapboxCanvasContainer) {
+  runTripMapboxCanvasContainer.addEventListener(
+    'touchstart',
+    function (event) {
+      if (
+        !isRunTripFollowing ||
+        isRunTripPaused
+      ) {
+        return;
+      }
+
+      if (
+        event.touches &&
+        event.touches.length >= 2
+      ) {
+        runTripMapPinchZoomActive = true;
+
+        if (
+          runTripMapPinchZoomReleaseTimer !== null
+        ) {
+          clearTimeout(
+            runTripMapPinchZoomReleaseTimer
+          );
+
+          runTripMapPinchZoomReleaseTimer =
+            null;
+        }
+      }
+    },
+    {
+      passive: true
+    }
+  );
+
+  runTripMapboxCanvasContainer.addEventListener(
+    'touchend',
+    function (event) {
+      if (
+        !runTripMapPinchZoomActive
+      ) {
+        return;
+      }
+
+      if (
+        event.touches &&
+        event.touches.length >= 2
+      ) {
+        return;
+      }
+
+      if (
+        runTripMapPinchZoomReleaseTimer !== null
+      ) {
+        clearTimeout(
+          runTripMapPinchZoomReleaseTimer
+        );
+      }
+
+      runTripMapPinchZoomReleaseTimer =
+        setTimeout(
+          function () {
+            runTripMapPinchZoomActive =
+              false;
+
+            runTripMapPinchZoomReleaseTimer =
+              null;
+          },
+          180
+        );
+    },
+    {
+      passive: true
+    }
+  );
+
+  runTripMapboxCanvasContainer.addEventListener(
+    'touchcancel',
+    function () {
+      runTripMapPinchZoomActive = false;
+
+      if (
+        runTripMapPinchZoomReleaseTimer !== null
+      ) {
+        clearTimeout(
+          runTripMapPinchZoomReleaseTimer
+        );
+
+        runTripMapPinchZoomReleaseTimer =
+          null;
+      }
+    },
+    {
+      passive: true
+    }
+  );
+}
+
 freeRunTripMapboxMainMap.on(
-  'dragstart',
+  'zoomend',
   function () {
     if (
       !isRunTripFollowing ||
@@ -14436,9 +14583,30 @@ freeRunTripMapboxMainMap.on(
       return;
     }
 
-    isRunTripMapFollowing = false;
+    const currentZoom =
+      Number(
+        freeRunTripMapboxMainMap.getZoom()
+      );
 
-    updateRunTripDashboard();
+    if (Number.isFinite(currentZoom)) {
+      runTripFollowZoomLevel =
+        currentZoom;
+    }
+  }
+);
+
+freeRunTripMapboxMainMap.on(
+  'dragstart',
+  function () {
+    /*
+      RunTrip 실행 중 drag/pan도 Follow ON을 유지한다.
+      사용자가 지도를 움직인 뒤 별도 버튼을 누르지 않아도
+      다음 GPS 업데이트에서 현재 위치 마커 중심으로 자동 복귀한다.
+
+      Follow OFF는 runTripDashboardFollowState 버튼을
+      사용자가 직접 눌렀을 때만 변경한다.
+    */
+    return;
   }
 );
 
