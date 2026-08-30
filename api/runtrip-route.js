@@ -108,6 +108,42 @@ function flattenRouteSteps(route) {
   return steps;
 }
 
+function buildRouteLegCoordinates(route) {
+  const legs = Array.isArray(route?.legs) ? route.legs : [];
+
+  return legs
+    .map((leg) => {
+      const legSteps = Array.isArray(leg?.steps) ? leg.steps : [];
+      const coordinates = [];
+
+      legSteps.forEach((step) => {
+        const stepCoordinates =
+          Array.isArray(step?.geometry?.coordinates)
+            ? step.geometry.coordinates
+                .map(normalizeLatLngFromMapbox)
+                .filter(Boolean)
+            : [];
+
+        stepCoordinates.forEach((point) => {
+          const previous = coordinates[coordinates.length - 1];
+
+          if (
+            previous &&
+            Math.abs(previous[0] - point[0]) < 1e-10 &&
+            Math.abs(previous[1] - point[1]) < 1e-10
+          ) {
+            return;
+          }
+
+          coordinates.push(point);
+        });
+      });
+
+      return coordinates;
+    })
+    .filter((coordinates) => coordinates.length >= 2);
+}
+
 function isFreeRunTripLeftRightTurn(step) {
   const maneuverType = String(
     step?.maneuver?.type || ""
@@ -307,6 +343,9 @@ module.exports = async function handler(request, response) {
     }
 
     const steps = flattenRouteSteps(route);
+    const legCoordinates =
+      buildRouteLegCoordinates(route);
+
     const navigationSegments =
       createFreeRunTripNavigationSegments(steps);
 
@@ -318,6 +357,7 @@ module.exports = async function handler(request, response) {
       distanceMeters: Math.max(0, Number(route?.distance) || 0),
       durationSeconds: Math.max(0, Number(route?.duration) || 0),
       steps,
+      legCoordinates,
       navigationSegments,
     });
   } catch (error) {

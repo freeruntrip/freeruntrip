@@ -6684,6 +6684,83 @@ function updateMapboxRunTripPlannedRoute(
 function clearMapboxRunTripPlannedRoute() {
   updateMapboxRunTripPlannedRoute([]);
 }
+
+function getRunTripActiveLegCoordinates() {
+  if (
+    !latestRunTripRouteSummary ||
+    !Array.isArray(
+      latestRunTripRouteSummary.legCoordinates
+    ) ||
+    latestRunTripRouteSummary.legCoordinates.length === 0
+  ) {
+    return null;
+  }
+
+  const activeLegIndex = Math.max(
+    0,
+    Math.min(
+      latestRunTripRouteSummary.legCoordinates.length - 1,
+      Number(runTripNextWaypointIndex) || 0
+    )
+  );
+
+  const activeLeg =
+    latestRunTripRouteSummary.legCoordinates[
+      activeLegIndex
+    ];
+
+  return Array.isArray(activeLeg)
+    ? activeLeg
+    : null;
+}
+
+function updateRunTripFollowingPlannedRoute() {
+  if (!isRunTripFollowing) {
+    return;
+  }
+
+  const activeLeg =
+    getRunTripActiveLegCoordinates();
+
+  if (
+    Array.isArray(activeLeg) &&
+    activeLeg.length >= 2
+  ) {
+    updateMapboxRunTripPlannedRoute(
+      activeLeg
+    );
+
+    console.log(
+      'FreeRunTrip 현재 진행 leg 표시:',
+      {
+        legIndex:
+          Math.max(
+            0,
+            Number(runTripNextWaypointIndex) || 0
+          ),
+        pointCount:
+          activeLeg.length
+      }
+    );
+
+    return;
+  }
+
+  /*
+    구버전 복구 데이터처럼 legCoordinates가 없는 경우에만
+    전체 예정 경로를 fallback으로 표시한다.
+  */
+  if (
+    latestRunTripRouteSummary &&
+    Array.isArray(
+      latestRunTripRouteSummary.coordinates
+    )
+  ) {
+    updateMapboxRunTripPlannedRoute(
+      latestRunTripRouteSummary.coordinates
+    );
+  }
+}
 function updateMapboxRunTripActualRoute() {
   if (!freeRunTripMapboxMainMap) {
     return;
@@ -8612,6 +8689,9 @@ function checkRunTripWaypointArrival(
 
   runTripNextWaypointIndex++;
   runTripWaypointArrivalHits = 0;
+
+  updateRunTripFollowingPlannedRoute();
+
   saveActiveRunTripState();
 }
 
@@ -8777,6 +8857,25 @@ function createRunTripRecoveryState() {
                   Number(point[0]),
                   Number(point[1])
                 ];
+              })
+          : [],
+
+      legCoordinates:
+        Array.isArray(
+          latestRunTripRouteSummary
+            .legCoordinates
+        )
+          ? latestRunTripRouteSummary
+              .legCoordinates
+              .map(function (leg) {
+                return Array.isArray(leg)
+                  ? leg.map(function (point) {
+                      return [
+                        Number(point[0]),
+                        Number(point[1])
+                      ];
+                    })
+                  : [];
               })
           : [],
 
@@ -9056,6 +9155,35 @@ function restoreActiveRunTripState(
 
     coordinates:
       plannedCoordinates,
+
+    legCoordinates:
+      Array.isArray(
+        plannedSummary.legCoordinates
+      )
+        ? plannedSummary.legCoordinates
+            .map(function (leg) {
+              return Array.isArray(leg)
+                ? leg
+                    .filter(function (point) {
+                      return (
+                        Array.isArray(point) &&
+                        point.length >= 2 &&
+                        Number.isFinite(Number(point[0])) &&
+                        Number.isFinite(Number(point[1]))
+                      );
+                    })
+                    .map(function (point) {
+                      return [
+                        Number(point[0]),
+                        Number(point[1])
+                      ];
+                    })
+                : [];
+            })
+            .filter(function (leg) {
+              return leg.length >= 2;
+            })
+        : [],
 
     provider:
       plannedSummary.provider ||
@@ -9373,6 +9501,8 @@ runTripPanel.classList.add(
 );
 
 setMapboxRunTripNavigationAppearance(true);
+
+updateRunTripFollowingPlannedRoute();
 
   runTripConfirmedSummary.classList.add(
     'hidden'
@@ -10229,6 +10359,17 @@ function stopRunTripFollowing(options = {}) {
 
   setMapboxRunTripNavigationAppearance(false);
 
+  if (
+    latestRunTripRouteSummary &&
+    Array.isArray(
+      latestRunTripRouteSummary.coordinates
+    )
+  ) {
+    updateMapboxRunTripPlannedRoute(
+      latestRunTripRouteSummary.coordinates
+    );
+  }
+
   if (runTripFollowMarker) {
     map.removeLayer(
       runTripFollowMarker
@@ -10669,6 +10810,8 @@ async function startRunTripFollowing() {
   );
 
   setMapboxRunTripNavigationAppearance(true);
+
+  updateRunTripFollowingPlannedRoute();
 
   initializeRunTripNavigationGuidance(
     latestRunTripRouteSummary
@@ -13397,6 +13540,21 @@ latestRunTripRouteSummary = {
   steps:
     Array.isArray(outwardRoute.steps)
       ? outwardRoute.steps
+      : [],
+  legCoordinates:
+    Array.isArray(outwardRoute.legCoordinates)
+      ? outwardRoute.legCoordinates.map(
+          function (leg) {
+            return Array.isArray(leg)
+              ? leg.map(function (point) {
+                  return [
+                    Number(point[0]),
+                    Number(point[1])
+                  ];
+                })
+              : [];
+          }
+        )
       : [],
   coordinates: routeCoordinates.map(function (point) {
     return [point[0], point[1]];
