@@ -10254,15 +10254,45 @@ function checkRunTripArrival(
 
   hasRunTripArrivalNotified = true;
 
-  showRunTripArrivalNotice();
+/*
+  자동 도착 판정은 geolocation watchPosition 콜백 안에서 실행된다.
 
-  /*
-    도착이 확정된 순간 기록을 즉시 저장하고 측정을 종료한다.
-    기록 상세 화면으로 자동 이동하지 않고 마지막 지도 화면을 유지한다.
-  */
-  completeRunTrip({
-    arrived: true
-  });
+  iPhone Safari 야외테스트에서 이 콜백 안에서 바로
+  RunTrip 기록을 저장하면 자동 종료에서만 저장 실패가 발생했고,
+  같은 RunTrip을 수동 종료하면 정상 저장됐다.
+
+  따라서 자동 종료 저장을 현재 GPS 콜백의 다음 이벤트로 넘긴다.
+  저장 성공 후에만 도착 UI와 종료 음성을 표시한다.
+*/
+window.setTimeout(function () {
+  if (
+    !hasRunTripArrivalNotified ||
+    !isRunTripFollowing ||
+    !runTripStartTime
+  ) {
+    return;
+  }
+
+  cancelFreeRunTripVoiceGuidance();
+
+  const savedRecord =
+    completeRunTrip({
+      arrived: true
+    });
+
+  if (!savedRecord) {
+    /*
+      저장 실패 시 다음 GPS 샘플에서
+      자동 종료를 다시 시도할 수 있도록 한다.
+    */
+    hasRunTripArrivalNotified = false;
+    runTripDestinationArrivalHits = 0;
+
+    return;
+  }
+
+  showRunTripArrivalNotice();
+}, 0);
 }
 
 function formatRunTripPlannedDuration(totalMinutes) {
