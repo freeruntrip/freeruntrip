@@ -8032,3 +8032,82 @@ body {
     font-size: 21px;
   }
 }
+/* ========================================
+   RunTrip Mapbox 표준 maneuver 배너
+   - 화살표 + 거리 + 실제 Mapbox 안내 문장
+======================================== */
+
+.runtrip-navigation-primary-banner {
+  width: min(310px, calc(100vw - 28px));
+  min-height: 92px;
+
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 10px;
+
+  padding:
+    13px
+    14px
+    12px
+    22px;
+}
+
+.runtrip-navigation-primary-copy {
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+
+.runtrip-navigation-primary-copy
+#runTripNavigationPrimaryDistance {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.runtrip-navigation-primary-instruction {
+  display: block;
+
+  overflow: hidden;
+
+  color: rgba(15, 23, 42, 0.82);
+
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.35;
+
+  letter-spacing: -0.02em;
+
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+@media (max-width: 390px) {
+  .runtrip-navigation-primary-banner {
+    width: min(292px, calc(100vw - 20px));
+
+    grid-template-columns:
+      50px
+      minmax(0, 1fr);
+
+    gap: 8px;
+
+    padding:
+      12px
+      12px
+      11px
+      20px;
+  }
+
+  .runtrip-navigation-primary-copy
+  #runTripNavigationPrimaryDistance {
+    font-size: 27px;
+  }
+
+  .runtrip-navigation-primary-instruction {
+    font-size: 11px;
+  }
+}

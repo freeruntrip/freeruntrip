@@ -7403,11 +7403,21 @@ const runTripNavigationPrimaryDistance = document.getElementById(
   'runTripNavigationPrimaryDistance'
 );
 
+const runTripNavigationPrimaryInstruction =
+  document.getElementById(
+    'runTripNavigationPrimaryInstruction'
+  );
+
 const runTripNavigationSecondaryDistance = document.getElementById(
   'runTripNavigationSecondaryDistance'
 );
 
 let runTripNavigationRuntimeSegments = [];
+let runTripStandardNavigationSteps = [];
+let runTripStandardNavigationStepIndex = 0;
+let runTripStandardNavigationLastAnnouncedStepIndex = -1;
+let runTripStandardNavigationClosestDistance = Infinity;
+let runTripStandardNavigationVoiceSuppressedForTest = false;
 let runTripNavigationRouteMetrics = null;
 let runTripCurrentNavigationSegmentIndex = 0;
 let runTripNavigationFirstAnnouncementDone = false;
@@ -8036,6 +8046,11 @@ function resetRunTripNavigationSegmentAnnouncements() {
 function resetRunTripNavigationGuidance() {
   hideRunTripNavigationBanners();
   resetRunTripOffRouteGuidance();
+
+  runTripStandardNavigationSteps = [];
+  runTripStandardNavigationStepIndex = 0;
+  runTripStandardNavigationLastAnnouncedStepIndex = -1;
+  runTripStandardNavigationClosestDistance = Infinity;
   runTripNavigationRuntimeSegments = [];
   runTripNavigationRouteMetrics = null;
   runTripCurrentNavigationSegmentIndex = 0;
@@ -8068,29 +8083,49 @@ function initializeRunTripNavigationGuidance(routeSummary) {
 }
 
 function initializeRunTripNavigationForActiveLeg() {
-  resetRunTripNavigationGuidance();
+  hideRunTripNavigationBanners();
+
+  /*
+    Mapbox 표준 step 내비게이션은
+    현재 진행 중인 leg의 step 배열을 그대로 사용한다.
+
+    기존 FreeRunTrip 50% / 75% 구간 계산은
+    더 이상 이 초기화 함수에서 만들지 않는다.
+  */
+  runTripStandardNavigationSteps = [];
+  runTripStandardNavigationStepIndex = 0;
+  runTripStandardNavigationLastAnnouncedStepIndex = -1;
+  runTripStandardNavigationClosestDistance = Infinity;
+  /*
+    기존 내비게이션 상태도 안전하게 초기화한다.
+    STEP 전환 작업이 완료될 때까지 남아 있는
+    구버전 상태가 다음 leg에 영향을 주지 않게 한다.
+  */
+  runTripNavigationRuntimeSegments = [];
+  runTripNavigationRouteMetrics = null;
+  runTripCurrentNavigationSegmentIndex = 0;
+  runTripNavigationLastRouteProgressMeters = 0;
+  runTripNavigationLastRouteSegmentIndex = 0;
+  runTripNavigationHasJoinedRoute = false;
+  runTripNavigationJoinedAtMs = null;
+
+  resetRunTripOffRouteGuidance();
+  resetRunTripNavigationSegmentAnnouncements();
 
   if (!latestRunTripRouteSummary) {
     return;
   }
 
-  const legCoordinates =
+  const legSteps =
     Array.isArray(
-      latestRunTripRouteSummary.legCoordinates
+      latestRunTripRouteSummary.legSteps
     )
-      ? latestRunTripRouteSummary.legCoordinates
+      ? latestRunTripRouteSummary.legSteps
       : [];
 
-  const legNavigationSegments =
-    Array.isArray(
-      latestRunTripRouteSummary.legNavigationSegments
-    )
-      ? latestRunTripRouteSummary.legNavigationSegments
-      : [];
-
-  if (legCoordinates.length === 0) {
+  if (legSteps.length === 0) {
     console.warn(
-      'FreeRunTrip NAV: legCoordinates 없음'
+      'FreeRunTrip NAV: legSteps 없음'
     );
 
     return;
@@ -8100,58 +8135,292 @@ function initializeRunTripNavigationForActiveLeg() {
     Math.max(
       0,
       Math.min(
-        legCoordinates.length - 1,
+        legSteps.length - 1,
         Number(runTripNextWaypointIndex) || 0
       )
     );
 
-  const activeCoordinates =
-    legCoordinates[activeLegIndex];
-
-  const activeNavigationSegments =
-    legNavigationSegments[activeLegIndex];
+  const activeSteps =
+    legSteps[activeLegIndex];
 
   if (
-    !Array.isArray(activeCoordinates) ||
-    activeCoordinates.length < 2
+    !Array.isArray(activeSteps) ||
+    activeSteps.length === 0
   ) {
     console.warn(
-      'FreeRunTrip NAV: 현재 leg 경로 없음',
+      'FreeRunTrip NAV: 현재 leg step 없음',
       activeLegIndex
     );
 
     return;
   }
 
-  runTripNavigationRuntimeSegments =
-    buildRunTripNavigationRuntimeSegments(
-      Array.isArray(activeNavigationSegments)
-        ? activeNavigationSegments
-        : [],
-      activeCoordinates
-    );
+  runTripStandardNavigationSteps =
+    activeSteps.slice();
+
+  runTripStandardNavigationStepIndex = 0;
+
+  runTripStandardNavigationLastAnnouncedStepIndex =
+    -1;
 
   positionRunTripNavigationBanners();
 
   console.log(
-    'FreeRunTrip 현재 leg 내비게이션 준비:',
+    'FreeRunTrip Mapbox 표준 내비게이션 준비:',
     {
-      legIndex: activeLegIndex,
+      legIndex:
+        activeLegIndex,
 
-      coordinateCount:
-        activeCoordinates.length,
+      stepCount:
+        runTripStandardNavigationSteps.length,
 
-      rawSegmentCount:
-        Array.isArray(activeNavigationSegments)
-          ? activeNavigationSegments.length
-          : 0,
-
-      runtimeSegmentCount:
-        runTripNavigationRuntimeSegments.length
+      firstStep:
+        runTripStandardNavigationSteps[0] ||
+        null
     }
   );
 }
+function getRunTripStandardStepTarget(
+  stepIndex
+) {
+  const nextStep =
+    runTripStandardNavigationSteps[
+      stepIndex + 1
+    ];
 
+  const target =
+    nextStep?.maneuver?.location;
+
+  if (
+    !Array.isArray(target) ||
+    target.length < 2
+  ) {
+    return null;
+  }
+
+  const latitude =
+    Number(target[0]);
+
+  const longitude =
+    Number(target[1]);
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return null;
+  }
+
+  return [
+    latitude,
+    longitude
+  ];
+}
+
+function getRunTripStandardNavigationInstruction(
+  stepIndex
+) {
+  const nextStep =
+    runTripStandardNavigationSteps[
+      stepIndex + 1
+    ];
+
+  if (!nextStep) {
+    return '';
+  }
+
+  return String(
+    nextStep?.maneuver?.instruction ||
+    ''
+  ).trim();
+}
+
+function getRunTripStandardNavigationModifier(
+  stepIndex
+) {
+  const nextStep =
+    runTripStandardNavigationSteps[
+      stepIndex + 1
+    ];
+
+  return String(
+    nextStep?.maneuver?.modifier ||
+    ''
+  )
+    .trim()
+    .toLowerCase();
+}
+
+function getRunTripStandardNavigationType(
+  stepIndex
+) {
+  const nextStep =
+    runTripStandardNavigationSteps[
+      stepIndex + 1
+    ];
+
+  return String(
+    nextStep?.maneuver?.type ||
+    ''
+  )
+    .trim()
+    .toLowerCase();
+}
+
+function getRunTripStandardNavigationArrow(
+  stepIndex
+) {
+  const modifier =
+    getRunTripStandardNavigationModifier(
+      stepIndex
+    );
+
+  const type =
+    getRunTripStandardNavigationType(
+      stepIndex
+    );
+
+  if (
+    modifier === 'left' ||
+    modifier === 'slight left' ||
+    modifier === 'sharp left'
+  ) {
+    return '↰';
+  }
+
+  if (
+    modifier === 'right' ||
+    modifier === 'slight right' ||
+    modifier === 'sharp right'
+  ) {
+    return '↱';
+  }
+
+  if (
+    modifier === 'uturn' ||
+    type === 'rotary'
+  ) {
+    return '↩';
+  }
+
+  if (
+    type === 'arrive'
+  ) {
+    return '●';
+  }
+
+  return '↑';
+}
+
+function showRunTripStandardNavigationBanner(
+  stepIndex,
+  distanceMeters
+) {
+  if (
+    !runTripNavigationBannerRoot ||
+    !runTripNavigationPrimaryBanner ||
+    !runTripNavigationPrimaryArrow ||
+    !runTripNavigationPrimaryDistance
+  ) {
+    return;
+  }
+
+  positionRunTripNavigationBanners();
+
+  runTripNavigationPrimaryArrow.textContent =
+    getRunTripStandardNavigationArrow(
+      stepIndex
+    );
+
+  runTripNavigationPrimaryDistance.textContent =
+    formatRunTripNavigationDistance(
+      distanceMeters
+    );
+
+  const instruction =
+    getRunTripStandardNavigationInstruction(
+      stepIndex
+    );
+
+  if (runTripNavigationPrimaryInstruction) {
+  runTripNavigationPrimaryInstruction.textContent =
+    instruction || '경로를 따라 이동하세요';
+}
+    runTripNavigationPrimaryBanner.setAttribute(
+    'aria-label',
+    instruction
+      ? (
+          `${formatRunTripNavigationDistance(
+            distanceMeters
+          )} ${instruction}`
+        )
+      : formatRunTripNavigationDistance(
+          distanceMeters
+        )
+  );
+
+  runTripNavigationBannerRoot.classList.remove(
+    'hidden'
+  );
+
+  runTripNavigationPrimaryBanner.classList.remove(
+    'hidden'
+  );
+
+  /*
+    표준 내비게이션 V1에서는
+    기존 ② 다음 회전 배너를 사용하지 않는다.
+  */
+  if (runTripNavigationSecondaryBanner) {
+    runTripNavigationSecondaryBanner.classList.add(
+      'hidden'
+    );
+  }
+}
+
+function announceRunTripStandardNavigation(
+  stepIndex,
+  distanceMeters
+) {
+  if (
+    runTripStandardNavigationVoiceSuppressedForTest
+  ) {
+    return;
+  }
+
+  if (
+    stepIndex ===
+    runTripStandardNavigationLastAnnouncedStepIndex
+  ) {
+    return;
+  }
+
+  const instruction =
+    getRunTripStandardNavigationInstruction(
+      stepIndex
+    );
+
+  if (!instruction) {
+    return;
+  }
+
+  const distance =
+    getRunTripNavigationVoiceDistance(
+      distanceMeters
+    );
+
+  const message =
+    distance > 0
+      ? `${distance}미터 앞 ${instruction}`
+      : instruction;
+
+  runTripStandardNavigationLastAnnouncedStepIndex =
+    stepIndex;
+
+  requestRunningDynamicVoice(
+    message
+  );
+}
 function getNextTurnNavigationSegment(currentIndex) {
   for (
     let index = currentIndex + 1;
@@ -8266,8 +8535,7 @@ function updateRunTripNavigationGuidance(
   if (
     !isRunTripFollowing ||
     isRunTripPaused ||
-    activeRunTripCheckpointNotice ||
-    runTripNavigationRuntimeSegments.length === 0
+    activeRunTripCheckpointNotice
   ) {
     if (activeRunTripCheckpointNotice) {
       hideRunTripNavigationBanners();
@@ -8276,348 +8544,402 @@ function updateRunTripNavigationGuidance(
     return;
   }
 
-  const metrics = runTripNavigationRouteMetrics;
-
-  if (!metrics) {
-    return;
-  }
-
-  const localProjection = projectRunTripPointToRoute(
-    latitude,
-    longitude,
-    {
-      startIndex: Math.max(
-        0,
-        runTripNavigationLastRouteSegmentIndex - 5
-      ),
-      endIndex: Math.min(
-        metrics.points.length - 2,
-        runTripNavigationLastRouteSegmentIndex + 90
-      )
-    }
-  );
-
-  /*
-    경로 진행률과 경로 이탈 판정을 분리한다.
-
-    - localProjection:
-      현재 진행 위치 주변의 경로만 찾아 배너/진행률 계산에 사용한다.
-      루프형 RunTrip에서 가까운 다른 구간으로 진행률이 점프하는 것을 막는다.
-
-    - globalProjection:
-      화면에 보이는 전체 예정 경로를 기준으로 현재 위치와의 최단거리를 찾고
-      경로 이탈 여부만 판정한다.
-  */
-  const globalProjection =
-    projectRunTripPointToRoute(
-      latitude,
-      longitude
-    );
-
-  let projection = localProjection;
-
   if (
-    !projection ||
-    projection.distanceToRouteMeters > 80
-  ) {
-    projection = globalProjection;
-  }
-
-  if (!projection || !globalProjection) {
-    logRunTripNavigationDiagnostic(
-      'projection-missing',
-      {
-        hasLocalProjection: Boolean(localProjection),
-        hasGlobalProjection: Boolean(globalProjection)
-      }
-    );
-
-    hideRunTripNavigationBanners();
-    return;
-  }
-
-  logRunTripNavigationDiagnostic(
-    'tick',
-    {
-      runtimeSegmentCount:
-        runTripNavigationRuntimeSegments.length,
-      joinedRoute:
-        runTripNavigationHasJoinedRoute,
-      localDistanceToRouteMeters:
-        localProjection
-          ? Number(localProjection.distanceToRouteMeters.toFixed(1))
-          : null,
-      globalDistanceToRouteMeters:
-        Number(globalProjection.distanceToRouteMeters.toFixed(1)),
-      routeProgressMeters:
-        Number(projection.routeDistanceMeters.toFixed(1)),
-      routeSegmentIndex:
-        projection.routeSegmentIndex,
-      currentNavigationSegmentIndex:
-        runTripCurrentNavigationSegmentIndex
-    }
-  );
-
-  /*
-    경로 이탈 판정은 실제 예정 경로에 합류한 뒤에만 시작한다.
-    출발 직후 GPS가 아직 안정되지 않았거나 출발점 근처로 들어오는 동안에는
-    off-route 경고를 만들지 않는다.
-  */
-
-  /*
-    경로에서 너무 멀리 떨어진 GPS는 내비게이션 진행률에 사용하지 않는다.
-    오프루트 확정 전이라도 45m 이상 떨어진 샘플은 회전 진행률에서 제외한다.
-  */
-  if (
-    projection.distanceToRouteMeters >
-    RUNTRIP_NAVIGATION_MAX_OFF_ROUTE_METERS
+    !Array.isArray(
+      runTripStandardNavigationSteps
+    ) ||
+    runTripStandardNavigationSteps.length < 2
   ) {
     hideRunTripNavigationBanners();
     return;
   }
 
+  const latitudeNumber =
+    Number(latitude);
+
+  const longitudeNumber =
+    Number(longitude);
+
+  if (
+    !Number.isFinite(latitudeNumber) ||
+    !Number.isFinite(longitudeNumber)
+  ) {
+    return;
+  }
+
+  let target =
+    getRunTripStandardStepTarget(
+      runTripStandardNavigationStepIndex
+    );
+
+  if (!target) {
+    hideRunTripNavigationBanners();
+    return;
+  }
+
+  let distanceToTarget =
+    calculateDistance(
+      latitudeNumber,
+      longitudeNumber,
+      target[0],
+      target[1]
+    );
+
+  runTripStandardNavigationClosestDistance =
+    Math.min(
+      runTripStandardNavigationClosestDistance,
+      distanceToTarget
+    );
+
+  const hasPassedRunTripStandardManeuver =
+    runTripStandardNavigationClosestDistance <= 30 &&
+    distanceToTarget >=
+      runTripStandardNavigationClosestDistance + 8;
+
   /*
-    새 RunTrip 세션에서는 반드시 예정 경로의 시작점 부근에서 한 번
-    경로에 합류한 뒤에만 진행률 추적을 시작한다.
-    사용자가 선택한 출발지와 실제 현재 위치가 다른 실내 테스트에서도
-    잘못된 첫 회전 배너가 뜨지 않는다.
+    한 GPS 샘플에서는 최대 한 step만 진행한다.
+
+    1) maneuver 18m 이내 진입
+    또는
+    2) 30m 이내까지 접근한 뒤
+       최소 거리보다 8m 이상 다시 멀어짐
   */
-  if (!runTripNavigationHasJoinedRoute) {
-    if (
-      !canJoinRunTripNavigationRoute(
-        latitude,
-        longitude,
-        projection
-      )
-    ) {
-      logRunTripNavigationDiagnostic(
-        'join-wait',
-        {
-          distanceToRouteMeters:
-            Number(projection.distanceToRouteMeters.toFixed(1)),
-          routeProgressMeters:
-            Number(projection.routeDistanceMeters.toFixed(1))
-        }
+  if (
+    (
+      distanceToTarget <= 18 ||
+      hasPassedRunTripStandardManeuver
+    ) &&
+    runTripStandardNavigationStepIndex <
+      runTripStandardNavigationSteps.length - 2
+  ) {
+    runTripStandardNavigationStepIndex++;
+
+    runTripStandardNavigationLastAnnouncedStepIndex =
+      -1;
+
+    runTripStandardNavigationClosestDistance =
+      Infinity;
+
+    target =
+      getRunTripStandardStepTarget(
+        runTripStandardNavigationStepIndex
       );
 
-      hideRunTripNavigationBanners();
-      return;
+    if (target) {
+      distanceToTarget =
+        calculateDistance(
+          latitudeNumber,
+          longitudeNumber,
+          target[0],
+          target[1]
+        );
     }
 
-    runTripNavigationHasJoinedRoute = true;
-    runTripNavigationJoinedAtMs = Date.now();
-    resetRunTripOffRouteGuidance();
-
-    runTripNavigationLastRouteProgressMeters =
-      Math.max(0, projection.routeDistanceMeters);
-    runTripNavigationLastRouteSegmentIndex =
-      projection.routeSegmentIndex;
-
     console.log(
-      'FreeRunTrip 내비게이션 경로 합류:',
+      'FreeRunTrip Mapbox step 전환:',
       {
-        routeProgressMeters:
-          Number(projection.routeDistanceMeters.toFixed(1)),
-        distanceToRouteMeters:
-          Number(projection.distanceToRouteMeters.toFixed(1))
-      }
-    );
-  }
+        stepIndex:
+          runTripStandardNavigationStepIndex,
 
-  /*
-    경로 합류 직후에는 짧은 GPS 안정화 시간을 둔다.
-    이 시간 동안에는 이탈 hit를 누적하지 않고 기존 경고 상태도 초기화한다.
-  */
-  const joinedElapsedMs =
-    runTripNavigationJoinedAtMs === null
-      ? Infinity
-      : Date.now() - runTripNavigationJoinedAtMs;
-
-  if (
-    joinedElapsedMs <
-    RUNTRIP_OFF_ROUTE_JOIN_GRACE_MS
-  ) {
-    resetRunTripOffRouteGuidance();
-
-    logRunTripNavigationDiagnostic(
-      'off-route-grace',
-      {
-        remainingMs:
-          Math.max(
-            0,
-            RUNTRIP_OFF_ROUTE_JOIN_GRACE_MS -
-              joinedElapsedMs
-          ),
-        globalDistanceToRouteMeters:
-          Number(
-            globalProjection
-              .distanceToRouteMeters
-              .toFixed(1)
+        nextInstruction:
+          getRunTripStandardNavigationInstruction(
+            runTripStandardNavigationStepIndex
           )
       }
     );
-  } else if (
-    updateRunTripOffRouteGuidance(
-      globalProjection
-    )
-  ) {
+  }
+
+  if (!target) {
     hideRunTripNavigationBanners();
     return;
   }
 
-  runTripNavigationLastRouteSegmentIndex =
-    projection.routeSegmentIndex;
+  const nextType =
+    getRunTripStandardNavigationType(
+      runTripStandardNavigationStepIndex
+    );
 
-  const routeProgressMeters = Math.max(
-    runTripNavigationLastRouteProgressMeters - 15,
-    projection.routeDistanceMeters
-  );
-
-  runTripNavigationLastRouteProgressMeters = Math.max(
-    runTripNavigationLastRouteProgressMeters,
-    routeProgressMeters
-  );
-
-  while (
-    runTripCurrentNavigationSegmentIndex <
-      runTripNavigationRuntimeSegments.length - 1 &&
-    routeProgressMeters >=
-      runTripNavigationRuntimeSegments[
-        runTripCurrentNavigationSegmentIndex
-      ].endDistanceMeters + 6
-  ) {
-    runTripCurrentNavigationSegmentIndex++;
-    resetRunTripNavigationSegmentAnnouncements();
-    hideRunTripNavigationBanners();
-  }
-
-  const currentSegment =
-    runTripNavigationRuntimeSegments[
-      runTripCurrentNavigationSegmentIndex
-    ];
-
-  if (!currentSegment || currentSegment.lengthMeters <= 0) {
-    return;
-  }
-
-  const currentDirection =
-    currentSegment?.endAction?.direction;
-
+  /*
+    arrive는 내비게이션이 RunTrip을 직접 종료하지 않는다.
+    실제 경유지/도착 판정은 기존 도착 감지 로직이 담당한다.
+  */
   if (
-    currentDirection !== 'left' &&
-    currentDirection !== 'right'
+    nextType === 'arrive' &&
+    distanceToTarget <= 20
   ) {
     hideRunTripNavigationBanners();
     return;
   }
 
-  const segmentProgress = Math.max(
-    0,
-    Math.min(
-      1,
-      (routeProgressMeters - currentSegment.startDistanceMeters) /
-        currentSegment.lengthMeters
-    )
+  showRunTripStandardNavigationBanner(
+    runTripStandardNavigationStepIndex,
+    distanceToTarget
   );
 
-  const remainingDistanceMeters = Math.max(
-    0,
-    currentSegment.endDistanceMeters - routeProgressMeters
-  );
-
-  logRunTripNavigationDiagnostic(
-    'segment',
-    {
-      currentSegmentIndex:
-        runTripCurrentNavigationSegmentIndex,
-      direction:
-        currentDirection,
-      segmentProgress:
-        Number(segmentProgress.toFixed(3)),
-      remainingDistanceMeters:
-        Number(remainingDistanceMeters.toFixed(1)),
-      segmentLengthMeters:
-        Number(currentSegment.lengthMeters.toFixed(1))
-    }
-  );
-
-  if (segmentProgress < 0.5) {
-    hideRunTripNavigationBanners();
-    return;
-  }
-
-  showRunTripNavigationPrimaryBanner(
-    currentDirection,
-    remainingDistanceMeters
-  );
-
-  logRunTripNavigationDiagnostic(
-    'primary-banner-show',
-    {
-      direction: currentDirection,
-      remainingDistanceMeters:
-        Number(remainingDistanceMeters.toFixed(1)),
-      segmentProgress:
-        Number(segmentProgress.toFixed(3))
-    }
-  );
-
+  /*
+    다음 maneuver 60m 안에서
+    해당 step당 한 번만 음성을 안내한다.
+  */
   if (
-    segmentProgress >= 0.5 &&
-    !runTripNavigationFirstAnnouncementDone &&
-    segmentProgress < 0.75
+    distanceToTarget <= 60 &&
+    nextType !== 'arrive'
   ) {
-    runTripNavigationFirstAnnouncementDone = true;
-
-    announceRunTripNavigationFirst(
-      currentDirection,
-      remainingDistanceMeters
+    announceRunTripStandardNavigation(
+      runTripStandardNavigationStepIndex,
+      distanceToTarget
     );
   }
 
-  const nextTurnSegment =
-    getNextTurnNavigationSegment(
-      runTripCurrentNavigationSegmentIndex
-    );
+  console.log(
+    'FreeRunTrip Mapbox 표준 NAV:',
+    {
+      stepIndex:
+        runTripStandardNavigationStepIndex,
 
-  if (segmentProgress >= 0.75) {
-    if (nextTurnSegment) {
-      showRunTripNavigationSecondaryBanner(
-        nextTurnSegment.endAction.direction,
-        nextTurnSegment.lengthMeters
-      );
+      stepCount:
+        runTripStandardNavigationSteps.length,
 
-      logRunTripNavigationDiagnostic(
-        'secondary-banner-show',
-        {
-          direction:
-            nextTurnSegment.endAction.direction,
-          distanceMeters:
-            Number(nextTurnSegment.lengthMeters.toFixed(1)),
-          segmentProgress:
-            Number(segmentProgress.toFixed(3))
-        }
-      );
-    } else if (runTripNavigationSecondaryBanner) {
-      runTripNavigationSecondaryBanner.classList.add('hidden');
+      distanceToNextManeuver:
+        Number(
+          distanceToTarget.toFixed(1)
+        ),
+
+      type:
+        nextType,
+
+      modifier:
+        getRunTripStandardNavigationModifier(
+          runTripStandardNavigationStepIndex
+        ),
+
+      instruction:
+        getRunTripStandardNavigationInstruction(
+          runTripStandardNavigationStepIndex
+        )
     }
-
-    if (!runTripNavigationSecondAnnouncementDone) {
-      runTripNavigationFirstAnnouncementDone = true;
-      runTripNavigationSecondAnnouncementDone = true;
-
-      announceRunTripNavigationSecond(
-        currentDirection,
-        remainingDistanceMeters,
-        nextTurnSegment
-      );
-    }
-  } else if (runTripNavigationSecondaryBanner) {
-    runTripNavigationSecondaryBanner.classList.add('hidden');
-  }
+  );
 }
+window.getFreeRunTripStandardNavigationDebug =
+  function () {
+    const currentStep =
+      runTripStandardNavigationSteps[
+        runTripStandardNavigationStepIndex
+      ] || null;
 
-window.addEventListener('resize', function () {
+    const nextStep =
+      runTripStandardNavigationSteps[
+        runTripStandardNavigationStepIndex + 1
+      ] || null;
+
+    const debugState = {
+      isRunTripFollowing:
+        isRunTripFollowing,
+
+      isRunTripPaused:
+        isRunTripPaused,
+
+      activeLegIndex:
+        Math.max(
+          0,
+          Number(runTripNextWaypointIndex) || 0
+        ),
+
+      stepCount:
+        runTripStandardNavigationSteps.length,
+
+      currentStepIndex:
+        runTripStandardNavigationStepIndex,
+
+      currentStep:
+        currentStep,
+
+      nextStep:
+        nextStep,
+
+      nextManeuver:
+        nextStep?.maneuver || null,
+
+      nextInstruction:
+        getRunTripStandardNavigationInstruction(
+          runTripStandardNavigationStepIndex
+        ),
+
+      nextType:
+        getRunTripStandardNavigationType(
+          runTripStandardNavigationStepIndex
+        ),
+
+      nextModifier:
+        getRunTripStandardNavigationModifier(
+          runTripStandardNavigationStepIndex
+        ),
+
+      nextTarget:
+        getRunTripStandardStepTarget(
+          runTripStandardNavigationStepIndex
+        ),
+
+      closestDistanceMeters:
+        Number.isFinite(
+          runTripStandardNavigationClosestDistance
+        )
+          ? runTripStandardNavigationClosestDistance
+          : null
+    };
+
+    console.log(
+      'FreeRunTrip 표준 NAV 진단:',
+      debugState
+    );
+
+    return debugState;
+  };
+window.testFreeRunTripStandardNavigationPassage =
+  function () {
+    if (
+      !Array.isArray(
+        runTripStandardNavigationSteps
+      ) ||
+      runTripStandardNavigationSteps.length < 3
+    ) {
+      console.warn(
+        'FreeRunTrip NAV 테스트: step 데이터가 부족합니다.'
+      );
+
+      return null;
+    }
+
+    const originalStepIndex =
+      runTripStandardNavigationStepIndex;
+
+    const originalClosestDistance =
+      runTripStandardNavigationClosestDistance;
+
+    const originalAnnouncedStepIndex =
+      runTripStandardNavigationLastAnnouncedStepIndex;
+
+    const target =
+      getRunTripStandardStepTarget(
+        originalStepIndex
+      );
+
+    if (!target) {
+      console.warn(
+        'FreeRunTrip NAV 테스트: 다음 maneuver 위치가 없습니다.'
+      );
+
+      return null;
+    }
+    const originalVoiceSuppressedForTest =
+  runTripStandardNavigationVoiceSuppressedForTest;
+
+runTripStandardNavigationVoiceSuppressedForTest =
+  true;
+    /*
+      테스트용 GPS 좌표:
+      같은 경도에서 maneuver 북쪽으로
+      약 25m → 약 40m 위치를 순서대로 넣는다.
+
+      25m까지 접근한 뒤 15m 다시 멀어지므로
+      STEP 5-D의 통과 조건을 만족해야 한다.
+    */
+    const metersPerDegreeLatitude =
+      111320;
+
+    const nearLatitude =
+      target[0] +
+      25 / metersPerDegreeLatitude;
+
+    const passedLatitude =
+      target[0] +
+      40 / metersPerDegreeLatitude;
+
+    const longitude =
+      target[1];
+
+    /*
+      현재 step 음성이 테스트 중 재생되지 않도록 한다.
+    */
+    runTripStandardNavigationLastAnnouncedStepIndex =
+      originalStepIndex;
+
+    runTripStandardNavigationClosestDistance =
+      Infinity;
+
+    console.log(
+      'FreeRunTrip NAV 통과 테스트 시작:',
+      {
+        originalStepIndex:
+          originalStepIndex,
+
+        target:
+          target
+      }
+    );
+
+    updateRunTripNavigationGuidance(
+      nearLatitude,
+      longitude
+    );
+
+    const indexAfterNear =
+      runTripStandardNavigationStepIndex;
+
+    const closestAfterNear =
+      runTripStandardNavigationClosestDistance;
+
+    updateRunTripNavigationGuidance(
+      passedLatitude,
+      longitude
+    );
+
+    const indexAfterPassed =
+      runTripStandardNavigationStepIndex;
+
+    const testResult = {
+      originalStepIndex:
+        originalStepIndex,
+
+      indexAfter25Meters:
+        indexAfterNear,
+
+      closestAfter25Meters:
+        Number(
+          closestAfterNear.toFixed(1)
+        ),
+
+      indexAfter40Meters:
+        indexAfterPassed,
+
+      advanced:
+        indexAfterPassed ===
+        originalStepIndex + 1
+    };
+
+    /*
+      테스트가 실제 RunTrip 진행 상태를
+      변경하지 않도록 즉시 원래 값으로 복원한다.
+    */
+    runTripStandardNavigationStepIndex =
+      originalStepIndex;
+
+    runTripStandardNavigationClosestDistance =
+      originalClosestDistance;
+
+    runTripStandardNavigationLastAnnouncedStepIndex =
+      originalAnnouncedStepIndex;
+
+    runTripStandardNavigationVoiceSuppressedForTest =
+      originalVoiceSuppressedForTest;
+    
+      console.log(
+      'FreeRunTrip NAV 통과 테스트 결과:',
+      testResult
+    );
+
+    return testResult;
+  };
+  window.addEventListener('resize', function () {
   if (isRunTripFollowing) {
     positionRunTripNavigationBanners();
 
@@ -9078,11 +9400,17 @@ function createRunTripRecoveryState() {
       activeRunTripPhotoIds.slice(),
 
     navigationState: {
-      currentSegmentIndex:
-        Math.max(
-          0,
-          Number(runTripCurrentNavigationSegmentIndex) || 0
-        ),
+  standardStepIndex:
+    Math.max(
+      0,
+      Number(runTripStandardNavigationStepIndex) || 0
+    ),
+
+  currentSegmentIndex:
+    Math.max(
+      0,
+      Number(runTripCurrentNavigationSegmentIndex) || 0
+    ),
 
       lastRouteProgressMeters:
         Math.max(
@@ -9146,25 +9474,43 @@ function createRunTripRecoveryState() {
         ) || 0,
 
       coordinates:
-        Array.isArray(
-          latestRunTripRouteSummary
-            .coordinates
-        )
-          ? latestRunTripRouteSummary
-              .coordinates
-              .map(function (point) {
-                return [
-                  Number(point[0]),
-                  Number(point[1])
-                ];
-              })
-          : [],
+  Array.isArray(
+    latestRunTripRouteSummary
+      .coordinates
+  )
+    ? latestRunTripRouteSummary
+        .coordinates
+        .map(function (point) {
+          return [
+            Number(point[0]),
+            Number(point[1])
+          ];
+        })
+    : [],
 
-      legCoordinates:
-        Array.isArray(
-          latestRunTripRouteSummary
-            .legCoordinates
-        )
+legSteps:
+  Array.isArray(
+    latestRunTripRouteSummary
+      .legSteps
+  )
+    ? latestRunTripRouteSummary
+        .legSteps
+        .map(function (steps) {
+          return Array.isArray(steps)
+            ? steps.map(function (step) {
+                return JSON.parse(
+                  JSON.stringify(step)
+                );
+              })
+            : [];
+        })
+    : [],
+
+legCoordinates:
+  Array.isArray(
+    latestRunTripRouteSummary
+      .legCoordinates
+  )
           ? latestRunTripRouteSummary
               .legCoordinates
               .map(function (leg) {
@@ -9471,7 +9817,22 @@ function restoreActiveRunTripState(
 
     coordinates:
       plannedCoordinates,
-
+    legSteps:
+  Array.isArray(
+    plannedSummary.legSteps
+  )
+    ? plannedSummary.legSteps.map(
+        function (steps) {
+          return Array.isArray(steps)
+            ? steps.map(function (step) {
+                return JSON.parse(
+                  JSON.stringify(step)
+                );
+              })
+            : [];
+        }
+      )
+    : [],
     legCoordinates:
       Array.isArray(
         plannedSummary.legCoordinates
@@ -9788,6 +10149,16 @@ updateMapboxRunTripActualRoute();
   initializeRunTripNavigationForActiveLeg();
 
   if (savedState.navigationState) {
+    runTripStandardNavigationStepIndex =
+  Math.max(
+    0,
+    Math.min(
+      runTripStandardNavigationSteps.length - 2,
+      Number(
+        savedState.navigationState.standardStepIndex
+      ) || 0
+    )
+  );
     runTripCurrentNavigationSegmentIndex =
       Math.max(
         0,
@@ -13933,6 +14304,18 @@ latestRunTripRouteSummary = {
     Array.isArray(outwardRoute.steps)
       ? outwardRoute.steps
       : [],
+  legSteps:
+  Array.isArray(
+    outwardRoute.legSteps
+  )
+    ? outwardRoute.legSteps.map(
+        function (steps) {
+          return Array.isArray(steps)
+            ? steps
+            : [];
+        }
+      )
+    : [],
   legCoordinates:
     Array.isArray(outwardRoute.legCoordinates)
       ? outwardRoute.legCoordinates.map(
