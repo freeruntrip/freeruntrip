@@ -138,6 +138,34 @@ function buildRouteLegNavigationSegments(route) {
   });
 }
 
+function buildRouteLegSteps(route) {
+  const legs =
+    Array.isArray(route?.legs)
+      ? route.legs
+      : [];
+
+  return legs.map(function (
+    leg,
+    legIndex
+  ) {
+    const legSteps =
+      Array.isArray(leg?.steps)
+        ? leg.steps
+        : [];
+
+    return legSteps.map(function (
+      step,
+      stepIndex
+    ) {
+      return normalizeStep(
+        step,
+        legIndex,
+        stepIndex
+      );
+    });
+  });
+}
+
 function buildRouteLegCoordinates(route) {
   const legs = Array.isArray(route?.legs) ? route.legs : [];
 
@@ -373,6 +401,8 @@ module.exports = async function handler(request, response) {
     }
 
     const steps = flattenRouteSteps(route);
+    const legSteps =
+       buildRouteLegSteps(route);
     const legCoordinates =
       buildRouteLegCoordinates(route);
 
@@ -390,6 +420,7 @@ module.exports = async function handler(request, response) {
       distanceMeters: Math.max(0, Number(route?.distance) || 0),
       durationSeconds: Math.max(0, Number(route?.duration) || 0),
       steps,
+      legSteps,
       legCoordinates,
       navigationSegments,
       legNavigationSegments,
