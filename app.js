@@ -7862,6 +7862,91 @@ function initializeRunTripNavigationGuidance(routeSummary) {
   );
 }
 
+function initializeRunTripNavigationForActiveLeg() {
+  resetRunTripNavigationGuidance();
+
+  if (!latestRunTripRouteSummary) {
+    return;
+  }
+
+  const legCoordinates =
+    Array.isArray(
+      latestRunTripRouteSummary.legCoordinates
+    )
+      ? latestRunTripRouteSummary.legCoordinates
+      : [];
+
+  const legNavigationSegments =
+    Array.isArray(
+      latestRunTripRouteSummary.legNavigationSegments
+    )
+      ? latestRunTripRouteSummary.legNavigationSegments
+      : [];
+
+  if (legCoordinates.length === 0) {
+    console.warn(
+      'FreeRunTrip NAV: legCoordinates 없음'
+    );
+
+    return;
+  }
+
+  const activeLegIndex =
+    Math.max(
+      0,
+      Math.min(
+        legCoordinates.length - 1,
+        Number(runTripNextWaypointIndex) || 0
+      )
+    );
+
+  const activeCoordinates =
+    legCoordinates[activeLegIndex];
+
+  const activeNavigationSegments =
+    legNavigationSegments[activeLegIndex];
+
+  if (
+    !Array.isArray(activeCoordinates) ||
+    activeCoordinates.length < 2
+  ) {
+    console.warn(
+      'FreeRunTrip NAV: 현재 leg 경로 없음',
+      activeLegIndex
+    );
+
+    return;
+  }
+
+  runTripNavigationRuntimeSegments =
+    buildRunTripNavigationRuntimeSegments(
+      Array.isArray(activeNavigationSegments)
+        ? activeNavigationSegments
+        : [],
+      activeCoordinates
+    );
+
+  positionRunTripNavigationBanners();
+
+  console.log(
+    'FreeRunTrip 현재 leg 내비게이션 준비:',
+    {
+      legIndex: activeLegIndex,
+
+      coordinateCount:
+        activeCoordinates.length,
+
+      rawSegmentCount:
+        Array.isArray(activeNavigationSegments)
+          ? activeNavigationSegments.length
+          : 0,
+
+      runtimeSegmentCount:
+        runTripNavigationRuntimeSegments.length
+    }
+  );
+}
+
 function getNextTurnNavigationSegment(currentIndex) {
   for (
     let index = currentIndex + 1;
@@ -8691,6 +8776,7 @@ function checkRunTripWaypointArrival(
   runTripWaypointArrivalHits = 0;
 
   updateRunTripFollowingPlannedRoute();
+  initializeRunTripNavigationForActiveLeg();
 
   saveActiveRunTripState();
 }
@@ -8809,7 +8895,16 @@ function createRunTripRecoveryState() {
         Boolean(runTripNavigationFirstAnnouncementDone),
 
       secondAnnouncementDone:
-        Boolean(runTripNavigationSecondAnnouncementDone)
+        Boolean(runTripNavigationSecondAnnouncementDone),
+
+      hasJoinedRoute:
+        Boolean(runTripNavigationHasJoinedRoute),
+
+      activeLegIndex:
+        Math.max(
+       0,
+    Number(runTripNextWaypointIndex) || 0
+  )
     },
 
     actualRouteCoordinates:
@@ -8878,7 +8973,23 @@ function createRunTripRecoveryState() {
                   : [];
               })
           : [],
-
+      legNavigationSegments:
+  Array.isArray(
+    latestRunTripRouteSummary
+      .legNavigationSegments
+  )
+    ? latestRunTripRouteSummary
+        .legNavigationSegments
+        .map(function (segments) {
+          return Array.isArray(segments)
+            ? segments.map(function (segment) {
+                return JSON.parse(
+                  JSON.stringify(segment)
+                );
+              })
+            : [];
+        })
+    : [],
       provider:
         latestRunTripRouteSummary.provider ||
         'mapbox',
@@ -9184,7 +9295,22 @@ function restoreActiveRunTripState(
               return leg.length >= 2;
             })
         : [],
-
+    legNavigationSegments:
+  Array.isArray(
+    plannedSummary.legNavigationSegments
+  )
+    ? plannedSummary
+        .legNavigationSegments
+        .map(function (segments) {
+          return Array.isArray(segments)
+            ? segments.map(function (segment) {
+                return JSON.parse(
+                  JSON.stringify(segment)
+                );
+              })
+            : [];
+        })
+    : [],
     provider:
       plannedSummary.provider ||
       'mapbox',
@@ -9454,9 +9580,7 @@ restoredActualSegments.forEach(
 
 updateMapboxRunTripActualRoute();
 
-  initializeRunTripNavigationGuidance(
-    latestRunTripRouteSummary
-  );
+  initializeRunTripNavigationForActiveLeg();
 
   if (savedState.navigationState) {
     runTripCurrentNavigationSegmentIndex =
@@ -9485,6 +9609,28 @@ updateMapboxRunTripActualRoute();
 
     runTripNavigationSecondAnnouncementDone =
       Boolean(savedState.navigationState.secondAnnouncementDone);
+    const restoredNavigationLegIndex =
+  Math.max(
+    0,
+    Number(
+      savedState.navigationState.activeLegIndex
+    ) || 0
+  );
+
+if (
+  restoredNavigationLegIndex ===
+  runTripNextWaypointIndex
+) {
+  runTripNavigationHasJoinedRoute =
+    Boolean(
+      savedState.navigationState.hasJoinedRoute
+    );
+
+  if (runTripNavigationHasJoinedRoute) {
+    runTripNavigationJoinedAtMs =
+      Date.now();
+  }
+}
   }
 
   isRunTripConfirmed = true;
@@ -10813,9 +10959,7 @@ async function startRunTripFollowing() {
 
   updateRunTripFollowingPlannedRoute();
 
-  initializeRunTripNavigationGuidance(
-    latestRunTripRouteSummary
-  );
+  initializeRunTripNavigationForActiveLeg();
 
   runTripDashboard.classList.remove(
     'hidden'
@@ -13537,6 +13681,19 @@ latestRunTripRouteSummary = {
     Array.isArray(outwardRoute.navigationSegments)
       ? outwardRoute.navigationSegments
       : [],
+  legNavigationSegments:
+  Array.isArray(
+    outwardRoute.legNavigationSegments
+  )
+    ? outwardRoute
+        .legNavigationSegments
+        .map(function (segments) {
+          return Array.isArray(segments)
+            ? segments
+            : [];
+        })
+    : [],
+  
   steps:
     Array.isArray(outwardRoute.steps)
       ? outwardRoute.steps

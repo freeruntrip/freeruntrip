@@ -108,6 +108,36 @@ function flattenRouteSteps(route) {
   return steps;
 }
 
+function buildRouteLegNavigationSegments(route) {
+  const legs =
+    Array.isArray(route?.legs)
+      ? route.legs
+      : [];
+
+  return legs.map(function (
+    leg,
+    legIndex
+  ) {
+    const legSteps =
+      Array.isArray(leg?.steps)
+        ? leg.steps.map(function (
+            step,
+            stepIndex
+          ) {
+            return normalizeStep(
+              step,
+              legIndex,
+              stepIndex
+            );
+          })
+        : [];
+
+    return createFreeRunTripNavigationSegments(
+      legSteps
+    );
+  });
+}
+
 function buildRouteLegCoordinates(route) {
   const legs = Array.isArray(route?.legs) ? route.legs : [];
 
@@ -349,7 +379,10 @@ module.exports = async function handler(request, response) {
     const navigationSegments =
       createFreeRunTripNavigationSegments(steps);
 
-    return response.status(200).json({
+    const legNavigationSegments =
+       buildRouteLegNavigationSegments(route);
+      
+       return response.status(200).json({
       provider: "mapbox",
       profile: "mapbox/walking",
       language: normalizeMapboxLanguage(language),
@@ -359,6 +392,7 @@ module.exports = async function handler(request, response) {
       steps,
       legCoordinates,
       navigationSegments,
+      legNavigationSegments,
     });
   } catch (error) {
     console.error("RunTrip Mapbox route server error:", error);
