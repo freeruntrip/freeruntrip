@@ -8111,3 +8111,212 @@ body {
     font-size: 11px;
   }
 }
+/* ========================================
+   2026-09-01 RunTrip maneuver 배너 5-D
+   - ① 현재 maneuver를 가장 강하게 표시
+   - ② 그다음 maneuver는 보조 정보로 표시
+   - iPhone에서 거리와 방향 문구를 한눈에 구분
+======================================== */
+
+/* ① 현재 안내 */
+.runtrip-navigation-primary-banner {
+  width: min(
+    310px,
+    calc(100vw - 28px)
+  );
+
+  min-height: 92px;
+
+  grid-template-columns:
+    56px
+    minmax(0, 1fr);
+
+  gap: 10px;
+
+  padding:
+    13px
+    14px
+    12px
+    22px;
+
+  border-radius: 19px;
+}
+
+/* ② 다음 안내 */
+.runtrip-navigation-secondary-banner {
+  width: min(
+    248px,
+    calc(100vw - 52px)
+  );
+
+  min-height: 68px;
+
+  grid-template-columns:
+    42px
+    minmax(0, 1fr);
+
+  gap: 8px;
+
+  padding:
+    10px
+    13px
+    10px
+    19px;
+
+  border-radius: 16px;
+
+  background:
+    rgba(
+      129,
+      218,
+      216,
+      0.94
+    );
+}
+
+/* ② 거리 + 안내 문구 */
+.runtrip-navigation-secondary-copy {
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  gap: 4px;
+}
+
+.runtrip-navigation-secondary-copy
+#runTripNavigationSecondaryDistance {
+  font-size: 22px;
+  line-height: 1;
+}
+
+/* ②는 ①보다 한 단계 작은 문구 */
+.runtrip-navigation-secondary-instruction {
+  display: block;
+
+  overflow: hidden;
+
+  color:
+    rgba(
+      15,
+      23,
+      42,
+      0.76
+    );
+
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.3;
+
+  letter-spacing: -0.02em;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ② 화살표도 ①보다 작게 */
+.runtrip-navigation-secondary-banner
+.runtrip-navigation-banner-arrow {
+  font-size: 31px;
+}
+
+/*
+  ①과 ②의 시각적 우선순위:
+  현재 안내는 더 강한 그림자,
+  다음 안내는 조금 가볍게 유지한다.
+*/
+.runtrip-navigation-primary-banner {
+  box-shadow:
+    0 12px 28px
+      rgba(
+        15,
+        23,
+        42,
+        0.24
+      ),
+    inset 0 1px 0
+      rgba(
+        255,
+        255,
+        255,
+        0.4
+      );
+}
+
+.runtrip-navigation-secondary-banner {
+  box-shadow:
+    0 8px 20px
+      rgba(
+        15,
+        23,
+        42,
+        0.18
+      ),
+    inset 0 1px 0
+      rgba(
+        255,
+        255,
+        255,
+        0.3
+      );
+}
+
+/* 작은 iPhone */
+@media (max-width: 390px) {
+  .runtrip-navigation-primary-banner {
+    width: min(
+      292px,
+      calc(100vw - 20px)
+    );
+
+    min-height: 88px;
+
+    grid-template-columns:
+      50px
+      minmax(0, 1fr);
+
+    gap: 8px;
+
+    padding:
+      12px
+      12px
+      11px
+      20px;
+  }
+
+  .runtrip-navigation-secondary-banner {
+    width: min(
+      228px,
+      calc(100vw - 42px)
+    );
+
+    min-height: 64px;
+
+    grid-template-columns:
+      38px
+      minmax(0, 1fr);
+
+    gap: 7px;
+
+    padding:
+      9px
+      11px
+      9px
+      18px;
+  }
+
+  .runtrip-navigation-secondary-copy
+  #runTripNavigationSecondaryDistance {
+    font-size: 20px;
+  }
+
+  .runtrip-navigation-secondary-instruction {
+    font-size: 10px;
+  }
+
+  .runtrip-navigation-secondary-banner
+  .runtrip-navigation-banner-arrow {
+    font-size: 28px;
+  }
+}

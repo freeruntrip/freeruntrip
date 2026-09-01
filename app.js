@@ -6890,7 +6890,7 @@ function clearMapboxRunTripPlannedRoute() {
   updateMapboxRunTripPlannedRoute([]);
 }
 
-function getRunTripActiveLegCoordinates() {
+function getRunTripRemainingLegCoordinates() {
   if (
     !latestRunTripRouteSummary ||
     !Array.isArray(
@@ -6901,21 +6901,63 @@ function getRunTripActiveLegCoordinates() {
     return null;
   }
 
+  const legCoordinates =
+    latestRunTripRouteSummary.legCoordinates;
+
   const activeLegIndex = Math.max(
     0,
     Math.min(
-      latestRunTripRouteSummary.legCoordinates.length - 1,
+      legCoordinates.length - 1,
       Number(runTripNextWaypointIndex) || 0
     )
   );
 
-  const activeLeg =
-    latestRunTripRouteSummary.legCoordinates[
-      activeLegIndex
-    ];
+  const remainingCoordinates = [];
 
-  return Array.isArray(activeLeg)
-    ? activeLeg
+  for (
+    let legIndex = activeLegIndex;
+    legIndex < legCoordinates.length;
+    legIndex++
+  ) {
+    const leg =
+      legCoordinates[legIndex];
+
+    if (
+      !Array.isArray(leg) ||
+      leg.length < 2
+    ) {
+      continue;
+    }
+
+    leg.forEach(function (point, pointIndex) {
+      if (
+        !Array.isArray(point) ||
+        point.length < 2
+      ) {
+        return;
+      }
+
+      /*
+        각 leg의 시작점은
+        직전 leg의 마지막 점과 겹칠 수 있으므로
+        두 번째 leg부터 첫 좌표는 한 번만 사용한다.
+      */
+      if (
+        remainingCoordinates.length > 0 &&
+        pointIndex === 0
+      ) {
+        return;
+      }
+
+      remainingCoordinates.push([
+        Number(point[0]),
+        Number(point[1])
+      ]);
+    });
+  }
+
+  return remainingCoordinates.length >= 2
+    ? remainingCoordinates
     : null;
 }
 
@@ -6924,27 +6966,28 @@ function updateRunTripFollowingPlannedRoute() {
     return;
   }
 
-  const activeLeg =
-    getRunTripActiveLegCoordinates();
+  const remainingRoute =
+    getRunTripRemainingLegCoordinates();
 
   if (
-    Array.isArray(activeLeg) &&
-    activeLeg.length >= 2
+    Array.isArray(remainingRoute) &&
+    remainingRoute.length >= 2
   ) {
     updateMapboxRunTripPlannedRoute(
-      activeLeg
+      remainingRoute
     );
 
     console.log(
-      'FreeRunTrip 현재 진행 leg 표시:',
+      'FreeRunTrip 남은 RunTrip 경로 표시:',
       {
-        legIndex:
+        startLegIndex:
           Math.max(
             0,
             Number(runTripNextWaypointIndex) || 0
           ),
+
         pointCount:
-          activeLeg.length
+          remainingRoute.length
       }
     );
 
@@ -7419,13 +7462,17 @@ const runTripNavigationPrimaryInstruction =
 const runTripNavigationSecondaryDistance = document.getElementById(
   'runTripNavigationSecondaryDistance'
 );
-
+const runTripNavigationSecondaryInstruction =
+  document.getElementById(
+    'runTripNavigationSecondaryInstruction'
+  );
 let runTripNavigationRuntimeSegments = [];
 let runTripStandardNavigationSteps = [];
 let runTripStandardNavigationStepIndex = 0;
 let runTripStandardNavigationLastAnnouncedStepIndex = -1;
 let runTripStandardNavigationClosestDistance = Infinity;
 let runTripStandardNavigationVoiceSuppressedForTest = false;
+let runTripStandardNavigationDisplayedDistance = null;
 let runTripNavigationRouteMetrics = null;
 let runTripCurrentNavigationSegmentIndex = 0;
 let runTripNavigationFirstAnnouncementDone = false;
@@ -7717,6 +7764,54 @@ function updateRunTripOffRouteGuidance(
   }
 
   return runTripIsOffRoute;
+}
+
+function getRunTripStandardNavigationDisplayedDistance(
+  distanceMeters
+) {
+  const safeDistance =
+    Math.max(
+      0,
+      Number(distanceMeters) || 0
+    );
+
+  if (
+    !Number.isFinite(
+      runTripStandardNavigationDisplayedDistance
+    )
+  ) {
+    runTripStandardNavigationDisplayedDistance =
+      safeDistance;
+
+    return safeDistance;
+  }
+
+  /*
+    실제 GPS 거리보다 표시 숫자가 갑자기 멀어지는 것을 완화한다.
+
+    - 가까워지는 변화는 비교적 빠르게 반영
+    - GPS 흔들림으로 거리가 다시 늘어나는 변화는 천천히 반영
+  */
+  const previousDistance =
+    runTripStandardNavigationDisplayedDistance;
+
+  const smoothingFactor =
+    safeDistance <= previousDistance
+      ? 0.65
+      : 0.2;
+
+  const smoothedDistance =
+    previousDistance +
+    (
+      safeDistance -
+      previousDistance
+    ) *
+    smoothingFactor;
+
+  runTripStandardNavigationDisplayedDistance =
+    smoothedDistance;
+
+  return smoothedDistance;
 }
 
 function formatRunTripNavigationDistance(distanceMeters) {
@@ -8059,6 +8154,7 @@ function resetRunTripNavigationGuidance() {
   runTripStandardNavigationStepIndex = 0;
   runTripStandardNavigationLastAnnouncedStepIndex = -1;
   runTripStandardNavigationClosestDistance = Infinity;
+  runTripStandardNavigationDisplayedDistance = null;
   runTripNavigationRuntimeSegments = [];
   runTripNavigationRouteMetrics = null;
   runTripCurrentNavigationSegmentIndex = 0;
@@ -8104,6 +8200,7 @@ function initializeRunTripNavigationForActiveLeg() {
   runTripStandardNavigationStepIndex = 0;
   runTripStandardNavigationLastAnnouncedStepIndex = -1;
   runTripStandardNavigationClosestDistance = Infinity;
+  runTripStandardNavigationDisplayedDistance = null;
   /*
     기존 내비게이션 상태도 안전하게 초기화한다.
     STEP 전환 작업이 완료될 때까지 남아 있는
@@ -8242,7 +8339,73 @@ function getRunTripStandardNavigationInstruction(
     ''
   ).trim();
 }
+function getRunTripStandardNavigationDisplayInstruction(
+  stepIndex
+) {
+  const type =
+    getRunTripStandardNavigationType(
+      stepIndex
+    );
 
+  const modifier =
+    getRunTripStandardNavigationModifier(
+      stepIndex
+    );
+
+  const rawInstruction =
+    getRunTripStandardNavigationInstruction(
+      stepIndex
+    );
+
+  if (
+    modifier === 'left' ||
+    modifier === 'sharp left'
+  ) {
+    return '좌회전';
+  }
+
+  if (modifier === 'slight left') {
+    return '왼쪽 방향';
+  }
+
+  if (
+    modifier === 'right' ||
+    modifier === 'sharp right'
+  ) {
+    return '우회전';
+  }
+
+  if (modifier === 'slight right') {
+    return '오른쪽 방향';
+  }
+
+  if (modifier === 'uturn') {
+    return '유턴';
+  }
+
+  if (
+    type === 'roundabout' ||
+    type === 'rotary'
+  ) {
+    return '회전교차로 진입';
+  }
+
+  if (type === 'arrive') {
+    return '도착지에 도착';
+  }
+
+  if (
+    type === 'continue' ||
+    type === 'new name'
+  ) {
+    return '직진';
+  }
+
+  return (
+    rawInstruction ||
+    '경로를 따라 이동하세요'
+  );
+}
 function getRunTripStandardNavigationModifier(
   stepIndex
 ) {
@@ -8275,6 +8438,124 @@ function getRunTripStandardNavigationType(
     .toLowerCase();
 }
 
+function getRunTripStandardSecondaryStep(
+  stepIndex
+) {
+  const secondaryStep =
+    runTripStandardNavigationSteps[
+      stepIndex + 2
+    ];
+
+  if (!secondaryStep) {
+    return null;
+  }
+
+  return secondaryStep;
+}
+function getRunTripStandardSecondaryNavigationData(
+  stepIndex
+) {
+  const primaryStep =
+    runTripStandardNavigationSteps[
+      stepIndex + 1
+    ];
+
+  const secondaryStep =
+    getRunTripStandardSecondaryStep(
+      stepIndex
+    );
+
+  if (
+    !primaryStep ||
+    !secondaryStep
+  ) {
+    return null;
+  }
+
+  const distanceMeters =
+    Math.max(
+      0,
+      Number(
+        primaryStep.distanceMeters
+      ) || 0
+    );
+
+  const type =
+    String(
+      secondaryStep?.maneuver?.type ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+  const modifier =
+    String(
+      secondaryStep?.maneuver?.modifier ||
+      ''
+    )
+      .trim()
+      .toLowerCase();
+
+  let arrow = '↑';
+  let instruction = '직진';
+
+  if (
+    modifier === 'left' ||
+    modifier === 'sharp left'
+  ) {
+    arrow = '↰';
+    instruction = '좌회전';
+  } else if (
+    modifier === 'slight left'
+  ) {
+    arrow = '↰';
+    instruction = '왼쪽 방향';
+  } else if (
+    modifier === 'right' ||
+    modifier === 'sharp right'
+  ) {
+    arrow = '↱';
+    instruction = '우회전';
+  } else if (
+    modifier === 'slight right'
+  ) {
+    arrow = '↱';
+    instruction = '오른쪽 방향';
+  } else if (
+    modifier === 'uturn'
+  ) {
+    arrow = '↩';
+    instruction = '유턴';
+  } else if (
+    type === 'roundabout' ||
+    type === 'rotary'
+  ) {
+    arrow = '↩';
+    instruction = '회전교차로 진입';
+  } else if (
+    type === 'arrive'
+  ) {
+    arrow = '●';
+    instruction = '도착지';
+  }
+
+  return {
+    distanceMeters:
+      distanceMeters,
+
+    arrow:
+      arrow,
+
+    instruction:
+      instruction,
+
+    type:
+      type,
+
+    modifier:
+      modifier
+  };
+}
 function getRunTripStandardNavigationArrow(
   stepIndex
 ) {
@@ -8305,10 +8586,11 @@ function getRunTripStandardNavigationArrow(
   }
 
   if (
-    modifier === 'uturn' ||
-    type === 'rotary'
+  modifier === 'uturn' ||
+  type === 'rotary' ||
+  type === 'roundabout'
   ) {
-    return '↩';
+  return '↩';
   }
 
   if (
@@ -8335,6 +8617,11 @@ function showRunTripStandardNavigationBanner(
 
   positionRunTripNavigationBanners();
 
+  const displayedDistance =
+  getRunTripStandardNavigationDisplayedDistance(
+    distanceMeters
+  );
+
   runTripNavigationPrimaryArrow.textContent =
     getRunTripStandardNavigationArrow(
       stepIndex
@@ -8342,13 +8629,13 @@ function showRunTripStandardNavigationBanner(
 
   runTripNavigationPrimaryDistance.textContent =
     formatRunTripNavigationDistance(
-      distanceMeters
+      displayedDistance
     );
 
   const instruction =
-    getRunTripStandardNavigationInstruction(
-      stepIndex
-    );
+  getRunTripStandardNavigationDisplayInstruction(
+    stepIndex
+  );
 
   if (runTripNavigationPrimaryInstruction) {
   runTripNavigationPrimaryInstruction.textContent =
@@ -8359,11 +8646,11 @@ function showRunTripStandardNavigationBanner(
     instruction
       ? (
           `${formatRunTripNavigationDistance(
-            distanceMeters
+            displayedDistance
           )} ${instruction}`
         )
       : formatRunTripNavigationDistance(
-          distanceMeters
+          displayedDistance
         )
   );
 
@@ -8376,14 +8663,55 @@ function showRunTripStandardNavigationBanner(
   );
 
   /*
-    표준 내비게이션 V1에서는
-    기존 ② 다음 회전 배너를 사용하지 않는다.
+  표준 내비게이션 V1:
+  현재 maneuver ①과 그다음 maneuver ②를 함께 표시한다.
   */
-  if (runTripNavigationSecondaryBanner) {
-    runTripNavigationSecondaryBanner.classList.add(
-      'hidden'
+  const secondaryData =
+  getRunTripStandardSecondaryNavigationData(
+    stepIndex
+  );
+
+if (
+  secondaryData &&
+  runTripNavigationSecondaryBanner &&
+  runTripNavigationSecondaryArrow &&
+  runTripNavigationSecondaryDistance
+) {
+  runTripNavigationSecondaryArrow.textContent =
+    secondaryData.arrow;
+
+  runTripNavigationSecondaryDistance.textContent =
+    formatRunTripNavigationDistance(
+      secondaryData.distanceMeters
     );
+
+  const secondaryInstruction =
+    secondaryData.type === 'arrive'
+      ? '직진 후 도착'
+      : `직진 후 ${secondaryData.instruction}`;
+
+  if (runTripNavigationSecondaryInstruction) {
+    runTripNavigationSecondaryInstruction.textContent =
+      secondaryInstruction;
   }
+
+  runTripNavigationSecondaryBanner.setAttribute(
+    'aria-label',
+    `${formatRunTripNavigationDistance(
+      secondaryData.distanceMeters
+    )} ${secondaryInstruction}`
+  );
+
+  runTripNavigationSecondaryBanner.classList.remove(
+    'hidden'
+  );
+} else if (
+  runTripNavigationSecondaryBanner
+) {
+  runTripNavigationSecondaryBanner.classList.add(
+    'hidden'
+  );
+}
 }
 
 function announceRunTripStandardNavigation(
@@ -8629,7 +8957,9 @@ function updateRunTripNavigationGuidance(
     runTripStandardNavigationClosestDistance =
       Infinity;
 
-    target =
+    runTripStandardNavigationDisplayedDistance =
+       null;
+      target =
       getRunTripStandardStepTarget(
         runTripStandardNavigationStepIndex
       );
@@ -8824,7 +9154,10 @@ window.testFreeRunTripStandardNavigationPassage =
     const originalClosestDistance =
       runTripStandardNavigationClosestDistance;
 
-    const originalAnnouncedStepIndex =
+    const originalDisplayedDistance =
+       runTripStandardNavigationDisplayedDistance;
+    
+      const originalAnnouncedStepIndex =
       runTripStandardNavigationLastAnnouncedStepIndex;
 
     const target =
@@ -8935,7 +9268,10 @@ runTripStandardNavigationVoiceSuppressedForTest =
     runTripStandardNavigationClosestDistance =
       originalClosestDistance;
 
-    runTripStandardNavigationLastAnnouncedStepIndex =
+    runTripStandardNavigationDisplayedDistance =
+      originalDisplayedDistance;
+    
+      runTripStandardNavigationLastAnnouncedStepIndex =
       originalAnnouncedStepIndex;
 
     runTripStandardNavigationVoiceSuppressedForTest =
