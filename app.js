@@ -7339,6 +7339,14 @@ let runTripWaypointArrivalHits = 0;
 let runTripDestinationArrivalHits = 0;
 let runTripClosestDestinationDistance = Infinity;
 let activeRunTripCheckpointNotice = null;
+
+/*
+  경유지 도착 알림이 표시되는 동안
+  다음 leg의 Mapbox maneuver step을
+  stepIndex 0에서 안전하게 대기시킨다.
+*/
+let runTripNavigationCheckpointHold = false;
+
 let completedRunTripRecordId = null;
 
 const RUNTRIP_NOTICE_VISIBLE_DISTANCE_METERS = 50;
@@ -8535,7 +8543,8 @@ function updateRunTripNavigationGuidance(
   if (
     !isRunTripFollowing ||
     isRunTripPaused ||
-    activeRunTripCheckpointNotice
+    activeRunTripCheckpointNotice ||
+    runTripNavigationCheckpointHold
   ) {
     if (activeRunTripCheckpointNotice) {
       hideRunTripNavigationBanners();
@@ -8985,6 +8994,10 @@ function getWeightedSmoothedRunTripPosition(
 
 function resetRunTripArrivalTracking() {
   removeRunTripCheckpointNotice();
+
+  runTripNavigationCheckpointHold =
+    false;
+
   runTripNextWaypointIndex = 0;
   runTripWaypointArrivalHits = 0;
   runTripDestinationArrivalHits = 0;
@@ -9025,7 +9038,50 @@ function getRunTripWaypointOrdinal(number) {
   return labels[index] || `${index + 1}번째`;
 }
 
-function removeRunTripCheckpointNotice() {
+function positionRunTripCheckpointNotice(
+  noticeElement = null
+) {
+  const notice =
+    noticeElement ||
+    activeRunTripCheckpointNotice?.element;
+
+  if (!notice) {
+    return;
+  }
+
+  /*
+    기존 CSS의 가운데 정렬
+    left: 50% + translateX(-50%)
+    구조는 그대로 유지하고,
+    위치만 상단에서 하단으로 변경한다.
+  */
+  notice.style.position = 'fixed';
+
+  notice.style.top = 'auto';
+
+  notice.style.bottom =
+    'calc(16px + env(safe-area-inset-bottom))';
+
+  notice.style.left = '50%';
+  notice.style.right = 'auto';
+
+  notice.style.width =
+    'min(calc(100% - 28px), 402px)';
+
+  notice.style.maxWidth = '402px';
+
+  notice.style.marginLeft = '0';
+  notice.style.marginRight = '0';
+
+  notice.style.boxSizing =
+    'border-box';
+
+  notice.style.zIndex = '10001';
+}
+
+function removeRunTripCheckpointNotice(
+  options = {}
+) {
   if (
     activeRunTripCheckpointNotice &&
     activeRunTripCheckpointNotice.element
@@ -9034,6 +9090,21 @@ function removeRunTripCheckpointNotice() {
   }
 
   activeRunTripCheckpointNotice = null;
+
+  /*
+    경유지 알림이 정상적으로 사라지면
+    다음 leg의 step 0 대기를 해제한다.
+
+    새 알림으로 교체하는 순간에는
+    releaseNavigationHold:false를 사용해
+    중간에 NAV가 잠깐 살아나는 것을 막는다.
+  */
+  if (
+    options.releaseNavigationHold !== false
+  ) {
+    runTripNavigationCheckpointHold =
+      false;
+  }
 }
 
 function updateRunTripCheckpointNoticeDistance(
@@ -9093,12 +9164,26 @@ function openRunTripCheckpointCamera() {
 }
 
 function showRunTripCheckpointNotice(options = {}) {
-  removeRunTripCheckpointNotice();
+  removeRunTripCheckpointNotice({
+    releaseNavigationHold: false
+  });
+
   hideRunTripNavigationBanners();
   hideRunTripOffRouteBanner();
 
   const isWaypoint =
     options.type === 'waypoint';
+
+  /*
+    경유지 도착 알림 동안에는
+    다음 leg가 준비되어 있더라도
+    maneuver step 진행을 허용하지 않는다.
+
+    최종 도착 알림은 이미 RunTrip 측정이
+    종료된 뒤 표시되므로 HOLD가 필요 없다.
+  */
+  runTripNavigationCheckpointHold =
+    isWaypoint;
 
   const notice =
     document.createElement('div');
@@ -9161,6 +9246,10 @@ function showRunTripCheckpointNotice(options = {}) {
   `;
 
   document.body.appendChild(notice);
+
+  positionRunTripCheckpointNotice(
+  notice
+  );
 
   activeRunTripCheckpointNotice = {
     element: notice,
