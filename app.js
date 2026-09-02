@@ -771,24 +771,31 @@ function centerMapboxRunTripMapOnPosition(
         : 15.2;
 
   freeRunTripMapboxMainMap.easeTo({
-    center: [
-      longitude,
-      latitude
-    ],
+  center: [
+    longitude,
+    latitude
+  ],
 
-    zoom:
-      targetZoom,
+  zoom:
+    targetZoom,
 
-    offset: [
-      0,
-      verticalOffset
-    ],
+  offset: [
+    0,
+    verticalOffset
+  ],
 
-    duration:
-      options.animate === true
-        ? 500
-        : 0
-  });
+  bearing:
+    Number.isFinite(
+      Number(options.bearing)
+    )
+      ? Number(options.bearing)
+      : freeRunTripMapboxMainMap.getBearing(),
+
+  duration:
+    options.animate === true
+      ? 500
+      : 0
+});
 }
 const SMOOTHING_COUNT = 3;
 const DEFAULT_RUNNER_WEIGHT_KG = 70;
@@ -7706,18 +7713,36 @@ function applyRunTripHeadingToMap(
   }
 
   /*
-    GPS Follow가 center와 zoom을 담당하고,
-    방향 센서는 bearing만 담당한다.
+  Heading-up 내비게이션:
+  스마트폰 방향이 바뀔 때 bearing만 회전시키면
+  화면 offset 때문에 현재 위치 마커가 원을 그리듯 이동할 수 있다.
 
-    따라서 사용자가 제자리에서 몸을 돌려도
-    GPS 위치 변화 없이 지도가 회전할 수 있다.
+  따라서 현재 GPS 위치를 지도상의 고정 위치에 다시 배치하면서
+  center + zoom + offset + bearing을 동시에 적용한다.
+*/
+if (runTripLastValidPosition) {
+  centerMapboxRunTripMapOnPosition(
+    [
+      runTripLastValidPosition.latitude,
+      runTripLastValidPosition.longitude
+    ],
+    {
+      animate: false,
+      bearing: heading
+    }
+  );
+} else {
+  /*
+    아직 첫 GPS 위치를 받기 전에는
+    임시로 bearing만 적용한다.
   */
   freeRunTripMapboxMainMap.setBearing(
     heading
   );
+}
 
-  runTripLastAppliedHeadingDegrees =
-    heading;
+runTripLastAppliedHeadingDegrees =
+  heading;
 }
 function startRunTripHeadingTracking() {
   if (runTripHeadingListenerActive) {
@@ -14965,7 +14990,7 @@ function centerRunTripPreviewMapOnPlace(
           )
         );
 
-  freeRunTripMapboxMainMap.easeTo({
+        freeRunTripMapboxMainMap.easeTo({
     center: [
       longitude,
       latitude
