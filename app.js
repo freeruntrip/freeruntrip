@@ -7371,6 +7371,46 @@ let isRunTripPaused = false;
 let isRunTripCountdownActive = false;
 let isRunTripMapFollowing = true;
 let runTripFollowZoomLevel = 15.2;
+/*
+  RunTrip heading-up 지도 V1
+  - 스마트폰 방향 센서 기준으로 Mapbox bearing 회전
+  - 제자리 회전에도 지도 방향 반영
+  - 0° / 360° 경계 보정
+  - 작은 센서 떨림 무시
+  - iPhone Safari 방향 센서 권한 처리
+*/
+let runTripHeadingPermissionState =
+  'unknown';
+
+let runTripHeadingListenerActive =
+  false;
+
+let runTripRawHeadingDegrees =
+  null;
+
+let runTripSmoothedHeadingDegrees =
+  null;
+
+let runTripLastAppliedHeadingDegrees =
+  null;
+
+let runTripLastHeadingUpdateAt =
+  0;
+
+const RUNTRIP_HEADING_SMOOTHING_FACTOR =
+  0.22;
+
+const RUNTRIP_HEADING_SENSOR_DEAD_ZONE_DEGREES =
+  2.5;
+
+const RUNTRIP_HEADING_MAP_DEAD_ZONE_DEGREES =
+  1.2;
+
+const RUNTRIP_HEADING_MIN_UPDATE_INTERVAL_MS =
+  70;
+
+const RUNTRIP_HEADING_MAX_COMPASS_ACCURACY_DEGREES =
+  45;
 let runTripMapPinchZoomActive = false;
 let runTripMapPinchZoomReleaseTimer = null;
 let hasRunTripArrivalNotified = false;
@@ -7423,7 +7463,545 @@ let runTripActualRouteLine = null;
 let runTripActualRouteLines = [];
 const RUNTRIP_ACTIVE_STATE_KEY =
   'freeRunTripActiveRunTripV1';
+function normalizeRunTripHeadingDegrees(
+  degrees
+) {
+  const value =
+    Number(degrees);
 
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  return (
+    (value % 360) + 360
+  ) % 360;
+}
+
+function getRunTripShortestHeadingDelta(
+  fromDegrees,
+  toDegrees
+) {
+  const from =
+    normalizeRunTripHeadingDegrees(
+      fromDegrees
+    );
+
+  const to =
+    normalizeRunTripHeadingDegrees(
+      toDegrees
+    );
+
+  if (
+    from === null ||
+    to === null
+  ) {
+    return null;
+  }
+
+  return (
+    (to - from + 540) %
+    360
+  ) - 180;
+}
+
+function getRunTripScreenOrientationDegrees() {
+  const screenAngle =
+    Number(
+      window.screen?.orientation?.angle
+    );
+
+  if (Number.isFinite(screenAngle)) {
+    return screenAngle;
+  }
+
+  const legacyOrientation =
+    Number(
+      window.orientation
+    );
+
+  return Number.isFinite(
+    legacyOrientation
+  )
+    ? legacyOrientation
+    : 0;
+}
+function getRunTripHeadingFromOrientationEvent(
+  event
+) {
+  if (!event) {
+    return null;
+  }
+
+  /*
+    iPhone Safari에서는
+    webkitCompassHeading이 실제 나침반 방위각을 제공한다.
+
+    0도   = 북쪽
+    90도  = 동쪽
+    180도 = 남쪽
+    270도 = 서쪽
+  */
+  const webkitHeading =
+    Number(
+      event.webkitCompassHeading
+    );
+
+  if (Number.isFinite(webkitHeading)) {
+    const compassAccuracy =
+      Number(
+        event.webkitCompassAccuracy
+      );
+
+    /*
+      센서 정확도가 지나치게 나쁜 경우에는
+      해당 샘플을 사용하지 않는다.
+    */
+    if (
+      Number.isFinite(compassAccuracy) &&
+      compassAccuracy >
+        RUNTRIP_HEADING_MAX_COMPASS_ACCURACY_DEGREES
+    ) {
+      return null;
+    }
+
+    return normalizeRunTripHeadingDegrees(
+      webkitHeading
+    );
+  }
+
+  /*
+    iPhone 전용 값이 없는 브라우저에서는
+    표준 DeviceOrientationEvent의 alpha를 사용한다.
+
+    absolute가 true인 경우에만
+    북쪽 기준 방위로 사용할 수 있다.
+  */
+  const alpha =
+    Number(
+      event.alpha
+    );
+
+  if (
+    !Number.isFinite(alpha) ||
+    event.absolute !== true
+  ) {
+    return null;
+  }
+
+  /*
+    alpha는 회전 방향 정의가 compass heading과 반대이므로
+    360 - alpha로 변환한다.
+
+    화면이 가로 방향일 때는
+    screen orientation 값도 함께 보정한다.
+  */
+  return normalizeRunTripHeadingDegrees(
+    360 -
+    alpha +
+    getRunTripScreenOrientationDegrees()
+  );
+}
+function smoothRunTripHeadingDegrees(
+  nextHeading
+) {
+  const normalizedNext =
+    normalizeRunTripHeadingDegrees(
+      nextHeading
+    );
+
+  if (normalizedNext === null) {
+    return null;
+  }
+
+  if (
+    !Number.isFinite(
+      runTripSmoothedHeadingDegrees
+    )
+  ) {
+    runTripSmoothedHeadingDegrees =
+      normalizedNext;
+
+    return normalizedNext;
+  }
+
+  const delta =
+    getRunTripShortestHeadingDelta(
+      runTripSmoothedHeadingDegrees,
+      normalizedNext
+    );
+
+  if (!Number.isFinite(delta)) {
+    return null;
+  }
+
+  /*
+    작은 손떨림이나 센서 노이즈는
+    실제 지도 회전에 반영하지 않는다.
+  */
+  if (
+    Math.abs(delta) <
+    RUNTRIP_HEADING_SENSOR_DEAD_ZONE_DEGREES
+  ) {
+    return (
+      runTripSmoothedHeadingDegrees
+    );
+  }
+
+  runTripSmoothedHeadingDegrees =
+    normalizeRunTripHeadingDegrees(
+      runTripSmoothedHeadingDegrees +
+      delta *
+        RUNTRIP_HEADING_SMOOTHING_FACTOR
+    );
+
+  return (
+    runTripSmoothedHeadingDegrees
+  );
+}
+
+function applyRunTripHeadingToMap(
+  headingDegrees
+) {
+  if (
+    !freeRunTripMapboxMainMap ||
+    !isRunTripFollowing ||
+    isRunTripPaused ||
+    !isRunTripMapFollowing ||
+    runTripMapPinchZoomActive
+  ) {
+    return;
+  }
+
+  const heading =
+    normalizeRunTripHeadingDegrees(
+      headingDegrees
+    );
+
+  if (heading === null) {
+    return;
+  }
+
+  if (
+    Number.isFinite(
+      runTripLastAppliedHeadingDegrees
+    )
+  ) {
+    const delta =
+      getRunTripShortestHeadingDelta(
+        runTripLastAppliedHeadingDegrees,
+        heading
+      );
+
+    /*
+      지도 bearing 자체도 너무 작은 변화는 무시한다.
+    */
+    if (
+      Number.isFinite(delta) &&
+      Math.abs(delta) <
+        RUNTRIP_HEADING_MAP_DEAD_ZONE_DEGREES
+    ) {
+      return;
+    }
+  }
+
+  /*
+    GPS Follow가 center와 zoom을 담당하고,
+    방향 센서는 bearing만 담당한다.
+
+    따라서 사용자가 제자리에서 몸을 돌려도
+    GPS 위치 변화 없이 지도가 회전할 수 있다.
+  */
+  freeRunTripMapboxMainMap.setBearing(
+    heading
+  );
+
+  runTripLastAppliedHeadingDegrees =
+    heading;
+}
+function startRunTripHeadingTracking() {
+  if (runTripHeadingListenerActive) {
+    return true;
+  }
+
+  if (
+    typeof window.DeviceOrientationEvent ===
+    'undefined'
+  ) {
+    runTripHeadingPermissionState =
+      'unsupported';
+
+    console.warn(
+      'FreeRunTrip heading: 이 기기에서는 방향 센서를 사용할 수 없습니다.'
+    );
+
+    return false;
+  }
+
+  window.addEventListener(
+    'deviceorientation',
+    handleRunTripDeviceOrientation,
+    true
+  );
+
+  runTripHeadingListenerActive =
+    true;
+
+  console.log(
+    'FreeRunTrip heading 센서 리스너 시작'
+  );
+
+  return true;
+}
+function stopRunTripHeadingTracking(
+  options = {}
+) {
+  if (runTripHeadingListenerActive) {
+    window.removeEventListener(
+      'deviceorientation',
+      handleRunTripDeviceOrientation,
+      true
+    );
+
+    runTripHeadingListenerActive =
+      false;
+
+    console.log(
+      'FreeRunTrip heading 센서 리스너 종료'
+    );
+  }
+
+  if (options.resetHeading === true) {
+    runTripRawHeadingDegrees =
+      null;
+
+    runTripSmoothedHeadingDegrees =
+      null;
+
+    runTripLastAppliedHeadingDegrees =
+      null;
+
+    runTripLastHeadingUpdateAt =
+      0;
+
+    if (freeRunTripMapboxMainMap) {
+      freeRunTripMapboxMainMap.setBearing(
+        0
+      );
+    }
+  }
+}
+async function requestRunTripHeadingPermission() {
+  if (
+    typeof window.DeviceOrientationEvent ===
+    'undefined'
+  ) {
+    runTripHeadingPermissionState =
+      'unsupported';
+
+    return false;
+  }
+
+  const OrientationEvent =
+    window.DeviceOrientationEvent;
+
+  /*
+    이미 허용된 세션이면
+    다시 권한 창을 띄우지 않고
+    리스너만 확인한다.
+  */
+  if (
+    runTripHeadingPermissionState ===
+    'granted'
+  ) {
+    startRunTripHeadingTracking();
+
+    return true;
+  }
+
+  /*
+    iPhone Safari처럼 별도 권한 요청 API가
+    존재하는 브라우저의 처리.
+  */
+  if (
+    typeof OrientationEvent.requestPermission ===
+    'function'
+  ) {
+    try {
+      let permission;
+
+      /*
+        compass heading은 북쪽 기준의 절대 방향이 필요하므로
+        가능한 브라우저에서는 magnetometer까지 요청한다.
+      */
+      try {
+        permission =
+          await OrientationEvent.requestPermission(
+            true
+          );
+      } catch (absolutePermissionError) {
+        /*
+          일부 Safari 버전에서는
+          true 인자를 지원하지 않을 수 있으므로
+          기본 requestPermission()으로 다시 시도한다.
+        */
+        permission =
+          await OrientationEvent.requestPermission();
+      }
+
+      if (permission !== 'granted') {
+        runTripHeadingPermissionState =
+          'denied';
+
+        console.warn(
+          'FreeRunTrip heading 센서 권한 거부:',
+          permission
+        );
+
+        return false;
+      }
+
+      runTripHeadingPermissionState =
+        'granted';
+
+      startRunTripHeadingTracking();
+
+      console.log(
+        'FreeRunTrip heading 센서 권한 허용'
+      );
+
+      return true;
+    } catch (error) {
+      runTripHeadingPermissionState =
+        'denied';
+
+      console.warn(
+        'FreeRunTrip heading 센서 권한 요청 실패:',
+        error
+      );
+
+      return false;
+    }
+  }
+
+  /*
+    별도 permission API가 없는 브라우저는
+    이벤트 사용을 직접 시도한다.
+  */
+  runTripHeadingPermissionState =
+    'granted';
+
+  startRunTripHeadingTracking();
+
+  return true;
+}
+function handleRunTripDeviceOrientation(
+  event
+) {
+  if (
+    !isRunTripFollowing ||
+    isRunTripPaused ||
+    !isRunTripMapFollowing
+  ) {
+    return;
+  }
+
+  const now =
+    performance.now();
+
+  /*
+    센서 이벤트는 초당 매우 많이 들어올 수 있으므로
+    약 70ms보다 빠른 업데이트는 무시한다.
+  */
+  if (
+    now -
+      runTripLastHeadingUpdateAt <
+    RUNTRIP_HEADING_MIN_UPDATE_INTERVAL_MS
+  ) {
+    return;
+  }
+
+  const heading =
+    getRunTripHeadingFromOrientationEvent(
+      event
+    );
+
+  if (heading === null) {
+    return;
+  }
+
+  runTripLastHeadingUpdateAt =
+    now;
+
+  runTripRawHeadingDegrees =
+    heading;
+
+    const smoothedHeading =
+      smoothRunTripHeadingDegrees(
+        heading
+    );
+
+  if (smoothedHeading === null) {
+    return;
+  }
+
+  applyRunTripHeadingToMap(
+     smoothedHeading
+  );
+    
+    console.log(
+    'FreeRunTrip heading raw:',
+    {
+      heading:
+        Number(
+          heading.toFixed(1)
+        ),
+
+      smoothedHeading:
+        Number(
+          smoothedHeading.toFixed(1)
+        ),
+        webkitCompassHeading:
+        Number.isFinite(
+          Number(
+            event.webkitCompassHeading
+          )
+        )
+          ? Number(
+              Number(
+                event.webkitCompassHeading
+              ).toFixed(1)
+            )
+          : null,
+
+      webkitCompassAccuracy:
+        Number.isFinite(
+          Number(
+            event.webkitCompassAccuracy
+          )
+        )
+          ? Number(
+              Number(
+                event.webkitCompassAccuracy
+              ).toFixed(1)
+            )
+          : null,
+
+      alpha:
+        Number.isFinite(
+          Number(event.alpha)
+        )
+          ? Number(
+              Number(event.alpha)
+                .toFixed(1)
+            )
+          : null,
+
+      absolute:
+        event.absolute === true
+    }
+  );
+}
 /* ========================================
    RunTrip 내비게이션 배너 · 음성 V1
    - 경로 분할: 명확한 좌회전 / 우회전만
@@ -9133,7 +9711,80 @@ window.getFreeRunTripStandardNavigationDebug =
 
     return debugState;
   };
-window.testFreeRunTripStandardNavigationPassage =
+
+window.getFreeRunTripHeadingDebug =
+  function () {
+    const debugState = {
+      permissionState:
+        runTripHeadingPermissionState,
+
+      listenerActive:
+        runTripHeadingListenerActive,
+
+      isRunTripFollowing:
+        isRunTripFollowing,
+
+      isRunTripPaused:
+        isRunTripPaused,
+
+      isRunTripMapFollowing:
+        isRunTripMapFollowing,
+
+      rawHeading:
+        Number.isFinite(
+          runTripRawHeadingDegrees
+        )
+          ? Number(
+              runTripRawHeadingDegrees.toFixed(1)
+            )
+          : null,
+
+      smoothedHeading:
+        Number.isFinite(
+          runTripSmoothedHeadingDegrees
+        )
+          ? Number(
+              runTripSmoothedHeadingDegrees.toFixed(1)
+            )
+          : null,
+
+      lastAppliedHeading:
+        Number.isFinite(
+          runTripLastAppliedHeadingDegrees
+        )
+          ? Number(
+              runTripLastAppliedHeadingDegrees.toFixed(1)
+            )
+          : null,
+
+      mapBearing:
+        freeRunTripMapboxMainMap
+          ? Number(
+              freeRunTripMapboxMainMap
+                .getBearing()
+                .toFixed(1)
+            )
+          : null,
+
+      lastHeadingUpdateAt:
+        Number.isFinite(
+          runTripLastHeadingUpdateAt
+        )
+          ? Math.round(
+              runTripLastHeadingUpdateAt
+            )
+          : null
+    };
+
+    console.log(
+      'FreeRunTrip heading 진단:',
+      debugState
+    );
+
+    return debugState;
+  };
+
+  window.testFreeRunTripStandardNavigationPassage =
   function () {
     if (
       !Array.isArray(
@@ -11501,6 +12152,14 @@ function stopRunTripFollowing(options = {}) {
 
   cancelFreeRunTripVoiceGuidance();
   resetRunTripNavigationGuidance();
+  /*
+    RunTrip이 정상적으로 끝나거나 취소되면
+    방향 센서 리스너를 완전히 종료하고
+    Mapbox bearing을 다시 북쪽 0도로 복원한다.
+  */
+  stopRunTripHeadingTracking({
+    resetHeading: true
+  });
 
   if (
     runTripFollowWatchId !== null &&
@@ -11931,6 +12590,16 @@ async function startRunTripFollowing() {
 
     return;
   }
+  /*
+    iPhone Safari에서는 방향 센서 권한 요청을
+    RUNTRIP 시작 버튼의 사용자 터치 흐름 안에서
+    실행해야 한다.
+
+    따라서 3초 카운트다운보다 먼저 요청한다.
+    권한을 거부해도 RunTrip 자체는 정상 시작하고
+    지도만 기존 north-up 상태로 사용한다.
+  */
+  await requestRunTripHeadingPermission();
 
   const countdownCompleted =
     await showRunTripCountdown();
@@ -11941,6 +12610,30 @@ async function startRunTripFollowing() {
 
   announceRunTripStart();
 
+    /*
+    새 RunTrip은 이전 세션의 heading 값을
+    절대 이어받지 않는다.
+  */
+  runTripRawHeadingDegrees =
+    null;
+
+  runTripSmoothedHeadingDegrees =
+    null;
+
+  runTripLastAppliedHeadingDegrees =
+    null;
+
+  runTripLastHeadingUpdateAt =
+    0;
+
+  if (freeRunTripMapboxMainMap) {
+    freeRunTripMapboxMainMap.setBearing(
+      0
+    );
+  }
+
+  startRunTripHeadingTracking();
+  
   resetRunTripDashboard();
 
   runTripStartTime = new Date();
@@ -12338,6 +13031,8 @@ function resetRunTripDraftState() {
 }
 
 function freezeRunTripAtArrival(savedRecord) {
+  stopRunTripHeadingTracking();
+  
   clearInterval(runTripTimerInterval);
   runTripTimerInterval = null;
 
@@ -15694,14 +16389,18 @@ startRunTripFollowBtn.addEventListener(
 );
 pauseRunTripBtn.addEventListener(
   'click',
-  function () {
+  async function () {
     if (!isRunTripFollowing) {
       return;
     }
 
-    if (isRunTripPaused) {
-  isRunTripPaused = false;
-  isRunTripMapFollowing = true;
+        if (isRunTripPaused) {
+      await requestRunTripHeadingPermission();
+
+      isRunTripPaused = false;
+      isRunTripMapFollowing = true;
+
+      startRunTripHeadingTracking();
 
   runTripLastValidPosition = null;
   runTripRecentPositions = [];
@@ -15723,7 +16422,8 @@ pauseRunTripBtn.addEventListener(
 }
 
     isRunTripPaused = true;
-
+    stopRunTripHeadingTracking();
+ 
     cancelFreeRunTripVoiceGuidance();
     hideRunTripNavigationBanners();
 
@@ -15769,9 +16469,19 @@ runTripDashboardFollowState.addEventListener(
       return;
     }
 
+    /*
+      Follow 버튼을 누를 때마다
+      ON ↔ OFF 상태를 전환한다.
+    */
     isRunTripMapFollowing =
       !isRunTripMapFollowing;
 
+    /*
+      Follow가 다시 ON이 된 순간:
+      1. 현재 사용자가 보고 있던 줌을 기억
+      2. 마지막으로 계산된 스마트폰 heading이 있으면
+         즉시 그 방향으로 지도를 다시 맞춘다.
+    */
     if (isRunTripMapFollowing) {
       const currentZoom =
         Number(
@@ -15782,8 +16492,22 @@ runTripDashboardFollowState.addEventListener(
         runTripFollowZoomLevel =
           currentZoom;
       }
+
+      if (
+        Number.isFinite(
+          runTripSmoothedHeadingDegrees
+        )
+      ) {
+        applyRunTripHeadingToMap(
+          runTripSmoothedHeadingDegrees
+        );
+      }
     }
 
+    /*
+      Follow ON이고 현재 GPS 위치가 있으면
+      현재 위치 중심으로 다시 돌아온다.
+    */
     if (
       isRunTripMapFollowing &&
       runTripLastValidPosition
@@ -15799,13 +16523,14 @@ runTripDashboardFollowState.addEventListener(
           animate: true
         }
       );
+
       centerMapboxRunTripMapOnPosition(
-         currentLatLng,
-         {
-           animate: true
-         }
-       );  
-    }  
+        currentLatLng,
+        {
+          animate: true
+        }
+      );
+    }
 
     updateRunTripDashboard();
   }
