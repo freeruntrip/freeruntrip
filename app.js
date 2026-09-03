@@ -8960,54 +8960,146 @@ function getRunTripStandardNavigationDisplayInstruction(
       stepIndex
     );
 
-  if (
-    modifier === 'left' ||
-    modifier === 'sharp left'
-  ) {
-    return '좌회전';
-  }
-
-  if (modifier === 'slight left') {
-    return '왼쪽 방향';
-  }
-
-  if (
-    modifier === 'right' ||
-    modifier === 'sharp right'
-  ) {
-    return '우회전';
-  }
-
-  if (modifier === 'slight right') {
-    return '오른쪽 방향';
-  }
-
-  if (modifier === 'uturn') {
-    return '유턴';
-  }
-
-  if (
-    type === 'roundabout' ||
-    type === 'rotary'
-  ) {
-    return '회전교차로 진입';
-  }
-
-  if (type === 'arrive') {
-    return '도착지에 도착';
-  }
-
-  if (
-    type === 'continue' ||
-    type === 'new name'
-  ) {
-    return '직진';
-  }
+  const displayData =
+    getRunTripManeuverDisplayData(
+      type,
+      modifier
+    );
 
   return (
+    displayData.instruction ||
     rawInstruction ||
     '경로를 따라 이동하세요'
   );
+}
+function getRunTripManeuverDisplayData(
+  type,
+  modifier
+) {
+  const safeType =
+    String(type || '')
+      .trim()
+      .toLowerCase();
+
+  const safeModifier =
+    String(modifier || '')
+      .trim()
+      .toLowerCase();
+
+  /*
+    type 자체가 의미를 결정하는 maneuver는
+    modifier보다 먼저 판단한다.
+  */
+
+  if (safeType === 'arrive') {
+    return {
+      arrow: '●',
+      instruction: '도착지에 도착'
+    };
+  }
+
+  if (
+    safeType === 'roundabout' ||
+    safeType === 'rotary'
+  ) {
+    return {
+      arrow: '↻',
+      instruction: '회전교차로 진입'
+    };
+  }
+
+  if (safeType === 'fork') {
+    if (
+      safeModifier.includes('left')
+    ) {
+      return {
+        arrow: '↖',
+        instruction: '왼쪽 갈림길'
+      };
+    }
+
+    if (
+      safeModifier.includes('right')
+    ) {
+      return {
+        arrow: '↗',
+        instruction: '오른쪽 갈림길'
+      };
+    }
+
+    return {
+      arrow: '↑',
+      instruction: '갈림길에서 직진'
+    };
+  }
+
+  /*
+    그다음 modifier 중심 maneuver를 판단한다.
+  */
+
+  if (safeModifier === 'uturn') {
+    return {
+      arrow: '↩',
+      instruction: '유턴'
+    };
+  }
+
+  if (safeModifier === 'sharp left') {
+    return {
+      arrow: '↰',
+      instruction: '급좌회전'
+    };
+  }
+
+  if (safeModifier === 'sharp right') {
+    return {
+      arrow: '↱',
+      instruction: '급우회전'
+    };
+  }
+
+  if (safeModifier === 'slight left') {
+    return {
+      arrow: '↖',
+      instruction: '왼쪽 방향'
+    };
+  }
+
+  if (safeModifier === 'slight right') {
+    return {
+      arrow: '↗',
+      instruction: '오른쪽 방향'
+    };
+  }
+
+  if (safeModifier === 'left') {
+    return {
+      arrow: '↰',
+      instruction: '좌회전'
+    };
+  }
+
+  if (safeModifier === 'right') {
+    return {
+      arrow: '↱',
+      instruction: '우회전'
+    };
+  }
+
+  if (
+    safeType === 'continue' ||
+    safeType === 'new name'
+  ) {
+    return {
+      arrow: '↑',
+      instruction: '직진'
+    };
+  }
+
+  return {
+    arrow: '↑',
+    instruction: ''
+  };
 }
 function getRunTripStandardNavigationModifier(
   stepIndex
@@ -9099,58 +9191,30 @@ function getRunTripStandardSecondaryNavigationData(
       .trim()
       .toLowerCase();
 
-  let arrow = '↑';
-  let instruction = '직진';
+  const displayData =
+    getRunTripManeuverDisplayData(
+      type,
+      modifier
+    );
 
-  if (
-    modifier === 'left' ||
-    modifier === 'sharp left'
-  ) {
-    arrow = '↰';
-    instruction = '좌회전';
-  } else if (
-    modifier === 'slight left'
-  ) {
-    arrow = '↰';
-    instruction = '왼쪽 방향';
-  } else if (
-    modifier === 'right' ||
-    modifier === 'sharp right'
-  ) {
-    arrow = '↱';
-    instruction = '우회전';
-  } else if (
-    modifier === 'slight right'
-  ) {
-    arrow = '↱';
-    instruction = '오른쪽 방향';
-  } else if (
-    modifier === 'uturn'
-  ) {
-    arrow = '↩';
-    instruction = '유턴';
-  } else if (
-    type === 'roundabout' ||
-    type === 'rotary'
-  ) {
-    arrow = '↩';
-    instruction = '회전교차로 진입';
-  } else if (
-    type === 'arrive'
-  ) {
-    arrow = '●';
-    instruction = '도착지';
-  }
+  const rawInstruction =
+    String(
+      secondaryStep?.maneuver?.instruction ||
+      ''
+    ).trim();
 
   return {
     distanceMeters:
       distanceMeters,
 
     arrow:
-      arrow,
+      displayData.arrow ||
+      '↑',
 
     instruction:
-      instruction,
+      displayData.instruction ||
+      rawInstruction ||
+      '직진',
 
     type:
       type,
@@ -9162,47 +9226,26 @@ function getRunTripStandardSecondaryNavigationData(
 function getRunTripStandardNavigationArrow(
   stepIndex
 ) {
-  const modifier =
-    getRunTripStandardNavigationModifier(
-      stepIndex
-    );
-
   const type =
     getRunTripStandardNavigationType(
       stepIndex
     );
 
-  if (
-    modifier === 'left' ||
-    modifier === 'slight left' ||
-    modifier === 'sharp left'
-  ) {
-    return '↰';
-  }
+  const modifier =
+    getRunTripStandardNavigationModifier(
+      stepIndex
+    );
 
-  if (
-    modifier === 'right' ||
-    modifier === 'slight right' ||
-    modifier === 'sharp right'
-  ) {
-    return '↱';
-  }
+  const displayData =
+    getRunTripManeuverDisplayData(
+      type,
+      modifier
+    );
 
-  if (
-  modifier === 'uturn' ||
-  type === 'rotary' ||
-  type === 'roundabout'
-  ) {
-  return '↩';
-  }
-
-  if (
-    type === 'arrive'
-  ) {
-    return '●';
-  }
-
-  return '↑';
+  return (
+    displayData.arrow ||
+    '↑'
+  );
 }
 
 function showRunTripStandardNavigationBanner(
@@ -9316,7 +9359,47 @@ if (
   );
 }
 }
+function getRunTripManeuverVoiceInstruction(
+  type,
+  modifier,
+  fallbackInstruction = ''
+) {
+  const safeType =
+    String(type || '')
+      .trim()
+      .toLowerCase();
 
+  const safeModifier =
+    String(modifier || '')
+      .trim()
+      .toLowerCase();
+
+  if (
+    safeType === 'roundabout' ||
+    safeType === 'rotary'
+  ) {
+    return '회전교차로에 진입합니다';
+  }
+
+  const displayData =
+    getRunTripManeuverDisplayData(
+      safeType,
+      safeModifier
+    );
+
+  const instruction =
+    String(
+      displayData.instruction ||
+      fallbackInstruction ||
+      ''
+    ).trim();
+
+  if (!instruction) {
+    return '';
+  }
+
+  return `${instruction}입니다`;
+}
 function announceRunTripStandardNavigation(
   stepIndex,
   distanceMeters
@@ -9334,12 +9417,29 @@ function announceRunTripStandardNavigation(
     return;
   }
 
-  const instruction =
+  const type =
+    getRunTripStandardNavigationType(
+      stepIndex
+    );
+
+  const modifier =
+    getRunTripStandardNavigationModifier(
+      stepIndex
+    );
+
+  const rawInstruction =
     getRunTripStandardNavigationInstruction(
       stepIndex
     );
 
-  if (!instruction) {
+  const voiceInstruction =
+    getRunTripManeuverVoiceInstruction(
+      type,
+      modifier,
+      rawInstruction
+    );
+
+  if (!voiceInstruction) {
     return;
   }
 
@@ -9350,8 +9450,8 @@ function announceRunTripStandardNavigation(
 
   const message =
     distance > 0
-      ? `${distance}미터 앞 ${instruction}`
-      : instruction;
+      ? `${distance}미터 앞 ${voiceInstruction}`
+      : voiceInstruction;
 
   runTripStandardNavigationLastAnnouncedStepIndex =
     stepIndex;
@@ -9831,10 +9931,13 @@ window.getFreeRunTripHeadingDebug =
       runTripStandardNavigationClosestDistance;
 
     const originalDisplayedDistance =
-       runTripStandardNavigationDisplayedDistance;
-    
-      const originalAnnouncedStepIndex =
+      runTripStandardNavigationDisplayedDistance;
+
+    const originalAnnouncedStepIndex =
       runTripStandardNavigationLastAnnouncedStepIndex;
+
+    const originalVoiceSuppressedForTest =
+      runTripStandardNavigationVoiceSuppressedForTest;
 
     const target =
       getRunTripStandardStepTarget(
@@ -9848,18 +9951,23 @@ window.getFreeRunTripHeadingDebug =
 
       return null;
     }
-    const originalVoiceSuppressedForTest =
-  runTripStandardNavigationVoiceSuppressedForTest;
 
-runTripStandardNavigationVoiceSuppressedForTest =
-  true;
     /*
       테스트용 GPS 좌표:
-      같은 경도에서 maneuver 북쪽으로
-      약 25m → 약 40m 위치를 순서대로 넣는다.
+      maneuver 기준 같은 경도에서
 
-      25m까지 접근한 뒤 15m 다시 멀어지므로
-      STEP 5-D의 통과 조건을 만족해야 한다.
+      1) 약 25m 지점
+      2) 약 40m 지점
+
+      순서로 이동시킨다.
+
+      25m까지 접근한 뒤
+      최소 거리보다 약 15m 다시 멀어지므로
+
+      "30m 이내 접근 후
+       최소 거리보다 8m 이상 멀어짐"
+
+      통과 조건을 만족해야 한다.
     */
     const metersPerDegreeLatitude =
       111320;
@@ -9875,90 +9983,144 @@ runTripStandardNavigationVoiceSuppressedForTest =
     const longitude =
       target[1];
 
-    /*
-      현재 step 음성이 테스트 중 재생되지 않도록 한다.
-    */
-    runTripStandardNavigationLastAnnouncedStepIndex =
-      originalStepIndex;
+    let testResult = null;
 
-    runTripStandardNavigationClosestDistance =
-      Infinity;
+    try {
+      /*
+        실내 테스트 중에는
+        Typecast maneuver 음성을 절대 호출하지 않는다.
+      */
+      runTripStandardNavigationVoiceSuppressedForTest =
+        true;
 
-    console.log(
-      'FreeRunTrip NAV 통과 테스트 시작:',
-      {
+      /*
+        혹시 기존 announce 상태가 있더라도
+        테스트 결과에 영향을 주지 않도록 맞춘다.
+      */
+      runTripStandardNavigationLastAnnouncedStepIndex =
+        originalStepIndex;
+
+      runTripStandardNavigationClosestDistance =
+        Infinity;
+
+      runTripStandardNavigationDisplayedDistance =
+        null;
+
+      console.log(
+        'FreeRunTrip NAV 통과 테스트 시작:',
+        {
+          originalStepIndex:
+            originalStepIndex,
+
+          target:
+            target,
+
+          testSequence:
+            '25m → 40m'
+        }
+      );
+
+      /*
+        첫 번째 가상 GPS:
+        maneuver 약 25m 지점까지 접근.
+      */
+      updateRunTripNavigationGuidance(
+        nearLatitude,
+        longitude
+      );
+
+      const indexAfterNear =
+        runTripStandardNavigationStepIndex;
+
+      const closestAfterNear =
+        runTripStandardNavigationClosestDistance;
+
+      /*
+        두 번째 가상 GPS:
+        maneuver에서 약 40m까지 다시 멀어진다.
+      */
+      updateRunTripNavigationGuidance(
+        passedLatitude,
+        longitude
+      );
+
+      const indexAfterPassed =
+        runTripStandardNavigationStepIndex;
+
+      testResult = {
         originalStepIndex:
           originalStepIndex,
 
-        target:
-          target
-      }
-    );
+        indexAfter25Meters:
+          indexAfterNear,
 
-    updateRunTripNavigationGuidance(
-      nearLatitude,
-      longitude
-    );
+        closestAfter25Meters:
+          Number.isFinite(
+            closestAfterNear
+          )
+            ? Number(
+                closestAfterNear.toFixed(1)
+              )
+            : null,
 
-    const indexAfterNear =
-      runTripStandardNavigationStepIndex;
+        indexAfter40Meters:
+          indexAfterPassed,
 
-    const closestAfterNear =
-      runTripStandardNavigationClosestDistance;
+        advanced:
+          indexAfterPassed ===
+          originalStepIndex + 1
+      };
 
-    updateRunTripNavigationGuidance(
-      passedLatitude,
-      longitude
-    );
-
-    const indexAfterPassed =
-      runTripStandardNavigationStepIndex;
-
-    const testResult = {
-      originalStepIndex:
-        originalStepIndex,
-
-      indexAfter25Meters:
-        indexAfterNear,
-
-      closestAfter25Meters:
-        Number(
-          closestAfterNear.toFixed(1)
-        ),
-
-      indexAfter40Meters:
-        indexAfterPassed,
-
-      advanced:
-        indexAfterPassed ===
-        originalStepIndex + 1
-    };
-
-    /*
-      테스트가 실제 RunTrip 진행 상태를
-      변경하지 않도록 즉시 원래 값으로 복원한다.
-    */
-    runTripStandardNavigationStepIndex =
-      originalStepIndex;
-
-    runTripStandardNavigationClosestDistance =
-      originalClosestDistance;
-
-    runTripStandardNavigationDisplayedDistance =
-      originalDisplayedDistance;
-    
-      runTripStandardNavigationLastAnnouncedStepIndex =
-      originalAnnouncedStepIndex;
-
-    runTripStandardNavigationVoiceSuppressedForTest =
-      originalVoiceSuppressedForTest;
-    
       console.log(
-      'FreeRunTrip NAV 통과 테스트 결과:',
-      testResult
-    );
+        'FreeRunTrip NAV 통과 테스트 결과:',
+        testResult
+      );
 
-    return testResult;
+      return testResult;
+    } catch (error) {
+      console.error(
+        'FreeRunTrip NAV 통과 테스트 실패:',
+        error
+      );
+
+      return {
+        originalStepIndex:
+          originalStepIndex,
+
+        advanced:
+          false,
+
+        error:
+          String(
+            error?.message ||
+            error ||
+            '알 수 없는 오류'
+          )
+      };
+    } finally {
+      /*
+        테스트 성공/실패 여부와 관계없이
+        실제 RunTrip 상태를 반드시 원래대로 복원한다.
+      */
+      runTripStandardNavigationStepIndex =
+        originalStepIndex;
+
+      runTripStandardNavigationClosestDistance =
+        originalClosestDistance;
+
+      runTripStandardNavigationDisplayedDistance =
+        originalDisplayedDistance;
+
+      runTripStandardNavigationLastAnnouncedStepIndex =
+        originalAnnouncedStepIndex;
+
+      runTripStandardNavigationVoiceSuppressedForTest =
+        originalVoiceSuppressedForTest;
+
+      console.log(
+        'FreeRunTrip NAV 통과 테스트 상태 복원 완료'
+      );
+    }
   };
   window.addEventListener('resize', function () {
   if (isRunTripFollowing) {
