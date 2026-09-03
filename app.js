@@ -2641,7 +2641,7 @@ function announceRunTripEnd() {
 
 function announceRunTripDestinationArrival() {
   speakFreeRunTripVoice(
-    '도착지에 도착했습니다.',
+    '최종 목적지에 도착했습니다.',
     {
       key: 'runtrip-destination-voice',
       interrupt: true
@@ -2673,7 +2673,7 @@ function announceRunTripDestinationThenEnd() {
   - runtrip-waypoint-1-voice.mp3  : 첫 번째 경유지에 도착했습니다.
   - runtrip-waypoint-2-voice.mp3  : 두 번째 경유지에 도착했습니다.
   - runtrip-waypoint-3-voice.mp3  : 세 번째 경유지에 도착했습니다.
-  - runtrip-destination-voice.mp3 : 도착지에 도착했습니다.
+  - runtrip-destination-voice.mp3 : 최종 목적지에 도착했습니다.
   - running-end-voice.mp3         : 러닝을 종료합니다.
   - running-end-mood-voice.mp3    : 이번 러닝은 어떤 순간이었나요?
   - runtrip-end-voice.mp3         : 런트립을 종료합니다.
