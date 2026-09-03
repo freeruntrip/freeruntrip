@@ -9400,6 +9400,216 @@ function getRunTripManeuverVoiceInstruction(
 
   return `${instruction}입니다`;
 }
+window.testFreeRunTripManeuverMappings =
+  function () {
+    const testCases = [
+      {
+        name: '좌회전',
+        type: 'turn',
+        modifier: 'left',
+        expectedArrow: '↰',
+        expectedDisplay: '좌회전',
+        expectedVoice: '좌회전입니다'
+      },
+      {
+        name: '우회전',
+        type: 'turn',
+        modifier: 'right',
+        expectedArrow: '↱',
+        expectedDisplay: '우회전',
+        expectedVoice: '우회전입니다'
+      },
+      {
+        name: '완만한 좌회전',
+        type: 'turn',
+        modifier: 'slight left',
+        expectedArrow: '↖',
+        expectedDisplay: '왼쪽 방향',
+        expectedVoice: '왼쪽 방향입니다'
+      },
+      {
+        name: '완만한 우회전',
+        type: 'turn',
+        modifier: 'slight right',
+        expectedArrow: '↗',
+        expectedDisplay: '오른쪽 방향',
+        expectedVoice: '오른쪽 방향입니다'
+      },
+      {
+        name: '급좌회전',
+        type: 'turn',
+        modifier: 'sharp left',
+        expectedArrow: '↰',
+        expectedDisplay: '급좌회전',
+        expectedVoice: '급좌회전입니다'
+      },
+      {
+        name: '급우회전',
+        type: 'turn',
+        modifier: 'sharp right',
+        expectedArrow: '↱',
+        expectedDisplay: '급우회전',
+        expectedVoice: '급우회전입니다'
+      },
+      {
+        name: '유턴',
+        type: 'turn',
+        modifier: 'uturn',
+        expectedArrow: '↩',
+        expectedDisplay: '유턴',
+        expectedVoice: '유턴입니다'
+      },
+      {
+        name: '회전교차로',
+        type: 'roundabout',
+        modifier: 'right',
+        expectedArrow: '↻',
+        expectedDisplay: '회전교차로 진입',
+        expectedVoice: '회전교차로에 진입합니다'
+      },
+      {
+        name: '로터리',
+        type: 'rotary',
+        modifier: 'left',
+        expectedArrow: '↻',
+        expectedDisplay: '회전교차로 진입',
+        expectedVoice: '회전교차로에 진입합니다'
+      },
+      {
+        name: '왼쪽 갈림길',
+        type: 'fork',
+        modifier: 'slight left',
+        expectedArrow: '↖',
+        expectedDisplay: '왼쪽 갈림길',
+        expectedVoice: '왼쪽 갈림길입니다'
+      },
+      {
+        name: '오른쪽 갈림길',
+        type: 'fork',
+        modifier: 'right',
+        expectedArrow: '↗',
+        expectedDisplay: '오른쪽 갈림길',
+        expectedVoice: '오른쪽 갈림길입니다'
+      },
+      {
+        name: '갈림길 직진',
+        type: 'fork',
+        modifier: 'straight',
+        expectedArrow: '↑',
+        expectedDisplay: '갈림길에서 직진',
+        expectedVoice: '갈림길에서 직진입니다'
+      },
+      {
+        name: '직진',
+        type: 'continue',
+        modifier: 'straight',
+        expectedArrow: '↑',
+        expectedDisplay: '직진',
+        expectedVoice: '직진입니다'
+      },
+      {
+        name: '도로명 변경 직진',
+        type: 'new name',
+        modifier: 'straight',
+        expectedArrow: '↑',
+        expectedDisplay: '직진',
+        expectedVoice: '직진입니다'
+      },
+      {
+        name: '도착',
+        type: 'arrive',
+        modifier: 'right',
+        expectedArrow: '●',
+        expectedDisplay: '도착지에 도착',
+        expectedVoice: '도착지에 도착입니다'
+      }
+    ];
+
+    const results =
+      testCases.map(function (testCase) {
+        const displayData =
+          getRunTripManeuverDisplayData(
+            testCase.type,
+            testCase.modifier
+          );
+
+        const voiceInstruction =
+          getRunTripManeuverVoiceInstruction(
+            testCase.type,
+            testCase.modifier,
+            ''
+          );
+
+        const arrowPassed =
+          displayData.arrow ===
+          testCase.expectedArrow;
+
+        const displayPassed =
+          displayData.instruction ===
+          testCase.expectedDisplay;
+
+        const voicePassed =
+          voiceInstruction ===
+          testCase.expectedVoice;
+
+        return {
+          name:
+            testCase.name,
+
+          type:
+            testCase.type,
+
+          modifier:
+            testCase.modifier,
+
+          arrow:
+            displayData.arrow,
+
+          display:
+            displayData.instruction,
+
+          voice:
+            voiceInstruction,
+
+          passed:
+            arrowPassed &&
+            displayPassed &&
+            voicePassed
+        };
+      });
+
+    const failed =
+      results.filter(function (result) {
+        return result.passed !== true;
+      });
+
+    console.table(results);
+
+    const summary = {
+      total:
+        results.length,
+
+      passed:
+        results.length -
+        failed.length,
+
+      failed:
+        failed.length,
+
+      success:
+        failed.length === 0,
+
+      failedCases:
+        failed
+    };
+
+    console.log(
+      'FreeRunTrip maneuver 매핑 테스트 결과:',
+      summary
+    );
+
+    return summary;
+  };
 function announceRunTripStandardNavigation(
   stepIndex,
   distanceMeters
