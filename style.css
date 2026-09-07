@@ -8321,13 +8321,107 @@ body {
   }
 }
 /* ========================================
-   2026-09-07 RunTrip 경로 안내 배너 축소 TEST 1
-   - 도착 안내 배너는 변경하지 않음
-   - ①/② 경로 안내 배너의 내부 여백 제거
-   - 배너 정보 구조와 글자 크기는 그대로 유지
+   RunTrip 기록 / 내비게이션 전환 버튼
 ======================================== */
+
+.runtrip-banner-switch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 44px;
+  padding: 8px 12px;
+
+  border: 1px solid #56bdbb;
+  border-radius: 12px;
+
+  background: #e5faf7;
+  color: #0f3433;
+
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+.runtrip-banner-switch:focus-visible {
+  outline: 3px solid #0f766e;
+  outline-offset: 3px;
+}
+
+/* 경로 설정 중에는 내비게이션 전환 버튼 숨김 */
+.runtrip-record-switch {
+  display: none;
+}
+
+/* RunTrip 실행 중에만 표시 */
+.runtrip-following .runtrip-record-switch {
+  display: inline-flex;
+  margin-bottom: 6px;
+}
+/* ========================================
+   RunTrip 상단 배너 선택 표시
+======================================== */
+
+/* 내비게이션 선택 시 기록 패널 숨김 */
+.runtrip-following[data-top-banner="navigation"]
+.runtrip-editor-card {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* 기록 선택 시 내비게이션 배너 숨김 */
+.runtrip-navigation-banner-root[data-top-banner="record"] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* 숨긴 내비게이션의 버튼도 터치되지 않도록 처리 */
+.runtrip-navigation-banner-root[data-top-banner="record"]
+.runtrip-banner-switch {
+  pointer-events: none;
+}
+
+/* 배너 영역에서 스와이프 입력 받기 */
+.runtrip-navigation-banner-root[data-top-banner="navigation"]
+.runtrip-navigation-banner-stack {
+  pointer-events: auto;
+  touch-action: pan-y;
+}
+
+.runtrip-following .runtrip-editor-card {
+  touch-action: pan-y;
+}
+/* ========================================
+   RunTrip 상세 안내 문구 줄바꿈
+   기존 글자 크기와 배너 여백 유지
+======================================== */
+
+.runtrip-navigation-primary-copy,
+.runtrip-navigation-secondary-copy {
+  min-width: 0;
+}
+
+.runtrip-navigation-primary-instruction,
+.runtrip-navigation-secondary-instruction {
+  display: block;
+
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+
+  max-height: none;
+}
 
 .runtrip-navigation-primary-banner,
 .runtrip-navigation-secondary-banner {
-  padding: 0;
+  height: auto;
 }

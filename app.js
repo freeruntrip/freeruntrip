@@ -631,14 +631,40 @@ function centerMapboxRunningMapOnPosition(
     mapboxOptions
   );
 }
-function getRunTripMapVerticalOffset() {
-  const runTripExecutionPanel =
-    document.querySelector(
-      '.runtrip-following .runtrip-editor-card'
-    );
+// 실행 중 실제로 보이는 상단 배너를 반환
+function getRunTripVisibleTopPanel() {
+  const followingPanel = document.querySelector(
+    '.runtrip-following'
+  );
 
+  if (!followingPanel) {
+    return null;
+  }
+
+  const topPanel =
+    followingPanel.dataset.topBanner === 'navigation'
+      ? document.querySelector(
+          '#runTripNavigationBannerRoot ' +
+          '.runtrip-navigation-banner-stack'
+        )
+      : followingPanel.querySelector(
+          '.runtrip-editor-card'
+        );
+
+  if (
+    !topPanel ||
+    topPanel.getClientRects().length === 0 ||
+    window.getComputedStyle(topPanel).visibility === 'hidden'
+  ) {
+    return null;
+  }
+
+  return topPanel;
+}
+
+function getRunTripMapVerticalOffset() {
   return getVisibleMapVerticalOffset(
-    runTripExecutionPanel,
+    getRunTripVisibleTopPanel(),
     null,
     12
   );
@@ -701,9 +727,7 @@ function centerMapboxRunTripMapOnPosition(
     mapboxContainer.getBoundingClientRect();
 
   const runTripExecutionPanel =
-    document.querySelector(
-      '.runtrip-following .runtrip-editor-card'
-    );
+    getRunTripVisibleTopPanel();
 
   let visibleTop =
     mapRect.top;
@@ -2035,8 +2059,11 @@ async function requestRunningDynamicVoice(
       await response.blob();
 
     if (
-      requestId !==
-      freeRunTripDynamicVoiceRequestId
+      requestId !== freeRunTripDynamicVoiceRequestId ||
+      (
+        typeof options.isCurrent === 'function' &&
+        !options.isCurrent()
+      )
     ) {
       return false;
     }
@@ -8660,6 +8687,221 @@ let runTripStandardNavigationLastAnnouncedStepIndex = -1;
 let runTripStandardNavigationClosestDistance = Infinity;
 let runTripStandardNavigationVoiceSuppressedForTest = false;
 let runTripStandardNavigationDisplayedDistance = null;
+// 배너·음성·Watch가 공유할 현재 내비게이션 상태
+let runTripNavigationState = null;
+// 같은 maneuver의 임박 안내 중복 요청 방지
+let runTripNavigationImminentKey = null;
+
+// 임박 음성 처리 중 다른 안내가 끼어드는 것을 막기 위한 상태
+let runTripNavigationImminentRequest = null;
+// RunTrip 상단 배너: navigation 또는 record
+let runTripTopBannerMode = 'navigation';
+
+function setRunTripTopBannerMode(mode) {
+  if (
+    !runTripPanel ||
+    !runTripNavigationBannerRoot
+  ) {
+    return;
+  }
+
+  runTripTopBannerMode =
+    mode === 'record'
+      ? 'record'
+      : 'navigation';
+
+  runTripPanel.dataset.topBanner =
+    runTripTopBannerMode;
+
+  runTripNavigationBannerRoot.dataset.topBanner =
+    runTripTopBannerMode;
+
+  if (
+    isRunTripFollowing &&
+    isRunTripPaused &&
+    runTripTopBannerMode === 'navigation'
+  ) {
+    showRunTripNavigationWaitingBanners();
+
+    if (runTripNavigationPrimaryDistance) {
+      runTripNavigationPrimaryDistance.textContent =
+        '일시정지';
+    }
+
+    if (runTripNavigationPrimaryInstruction) {
+      runTripNavigationPrimaryInstruction.textContent =
+        '기록 화면에서 다시 시작을 눌러주세요';
+    }
+
+    if (runTripNavigationPrimaryBanner) {
+      runTripNavigationPrimaryBanner.setAttribute(
+        'aria-label',
+        '일시정지 중입니다. 기록 화면에서 다시 시작을 눌러주세요'
+      );
+    }
+  }
+
+  positionRunTripNavigationBanners();
+
+  if (
+    runTripOffRouteBanner &&
+    !runTripOffRouteBanner.classList.contains('hidden') &&
+    runTripOffRouteBanner.style.display !== 'none'
+  ) {
+        positionRunTripOffRouteBanner();
+  }
+
+  requestAnimationFrame(function () {
+    if (
+      !isRunTripFollowing ||
+      !isRunTripMapFollowing ||
+      !freeRunTripMapboxMainMap ||
+      !runTripLastValidPosition
+    ) {
+      return;
+    }
+
+    const latitude = Number(
+      runTripLastValidPosition.latitude
+    );
+
+    const longitude = Number(
+      runTripLastValidPosition.longitude
+    );
+
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude)
+    ) {
+      return;
+    }
+
+    centerMapboxRunTripMapOnPosition(
+      [latitude, longitude],
+      {
+        animate: false,
+        bearing: freeRunTripMapboxMainMap.getBearing()
+      }
+    );
+  });
+}
+// 상단 배너 전환 버튼 연결
+document.getElementById('runTripShowRecord')
+  ?.addEventListener('click', function () {
+    if (!isRunTripFollowing) {
+      return;
+    }
+
+    setRunTripTopBannerMode('record');
+  });
+
+document.getElementById('runTripShowNavigation')
+  ?.addEventListener('click', function () {
+    if (!isRunTripFollowing) {
+      return;
+    }
+
+    setRunTripTopBannerMode('navigation');
+  });
+// 상단 배너의 좌우 스와이프 연결
+function connectRunTripTopBannerSwipe(element, targetMode) {
+  if (!element) {
+    return;
+  }
+
+  let startTouch = null;
+
+  element.addEventListener('touchstart', function (event) {
+    startTouch = null;
+
+    if (!isRunTripFollowing || event.touches.length !== 1) {
+      return;
+    }
+
+    // 버튼과 입력창의 기본 조작은 그대로 유지
+    if (
+      event.target.closest(
+        'button, input, textarea, select, a'
+      )
+    ) {
+      return;
+    }
+
+    const touch = event.touches[0];
+
+    startTouch = {
+      id: touch.identifier,
+      x: touch.clientX,
+      y: touch.clientY
+    };
+  }, { passive: true });
+
+  element.addEventListener('touchend', function (event) {
+    const start = startTouch;
+    startTouch = null;
+
+    if (!start || !isRunTripFollowing) {
+      return;
+    }
+
+    const touch = Array.from(event.changedTouches).find(
+      item => item.identifier === start.id
+    );
+
+    if (!touch) {
+      return;
+    }
+
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+
+    // 짧은 터치나 세로 이동은 전환으로 처리하지 않음
+    if (
+      Math.abs(dx) < 45 ||
+      Math.abs(dx) <= Math.abs(dy) * 1.5
+    ) {
+      return;
+    }
+
+    const shouldSwitch =
+      (
+        targetMode === 'record' &&
+        runTripTopBannerMode === 'navigation' &&
+        dx < 0
+      ) ||
+      (
+        targetMode === 'navigation' &&
+        runTripTopBannerMode === 'record' &&
+        dx > 0
+      );
+
+    if (!shouldSwitch) {
+      return;
+    }
+
+    if (event.cancelable) {
+      event.preventDefault();
+    }
+
+    setRunTripTopBannerMode(targetMode);
+  }, { passive: false });
+
+  element.addEventListener('touchcancel', function () {
+    startTouch = null;
+  }, { passive: true });
+}
+
+connectRunTripTopBannerSwipe(
+  runTripNavigationBannerRoot?.querySelector(
+    '.runtrip-navigation-banner-stack'
+  ),
+  'record'
+);
+
+connectRunTripTopBannerSwipe(
+  runTripEditorCard,
+  'navigation'
+);
 let runTripNavigationRouteMetrics = null;
 let runTripCurrentNavigationSegmentIndex = 0;
 let runTripNavigationFirstAnnouncementDone = false;
@@ -8825,9 +9067,7 @@ function positionRunTripOffRouteBanner() {
     ensureRunTripOffRouteBanner();
 
   const executionPanel =
-    document.querySelector(
-      '.runtrip-following .runtrip-editor-card'
-    );
+    getRunTripVisibleTopPanel();
 
   const panelBottom =
     executionPanel
@@ -8839,8 +9079,6 @@ function positionRunTripOffRouteBanner() {
 }
 
 function showRunTripOffRouteBanner() {
-  hideRunTripNavigationBanners();
-
   const banner =
     ensureRunTripOffRouteBanner();
 
@@ -9030,6 +9268,99 @@ function getRunTripNavigationVoiceDistance(distanceMeters) {
   return Math.max(5, Math.round(safeDistance / 5) * 5);
 }
 
+function showRunTripNavigationWaitingBanners() {
+  if (
+    !isRunTripFollowing ||
+    !runTripNavigationBannerRoot ||
+    !runTripNavigationPrimaryBanner ||
+    !runTripNavigationSecondaryBanner
+  ) {
+    return;
+  }
+
+  if (runTripNavigationPrimaryArrow) {
+    runTripNavigationPrimaryArrow.textContent = '…';
+  }
+
+  if (runTripNavigationPrimaryDistance) {
+    runTripNavigationPrimaryDistance.textContent = '위치 확인 중';
+  }
+
+  if (runTripNavigationPrimaryInstruction) {
+    runTripNavigationPrimaryInstruction.textContent =
+      '현재 위치를 확인하면 경로를 안내합니다';
+  }
+
+  if (runTripNavigationSecondaryArrow) {
+    runTripNavigationSecondaryArrow.textContent = '…';
+  }
+
+  if (runTripNavigationSecondaryDistance) {
+    runTripNavigationSecondaryDistance.textContent = '다음 안내';
+  }
+
+  if (runTripNavigationSecondaryInstruction) {
+    runTripNavigationSecondaryInstruction.textContent =
+      '이어서 이동할 경로를 안내합니다';
+  }
+
+  runTripNavigationPrimaryBanner.setAttribute(
+    'aria-label',
+    '현재 위치를 확인하면 경로를 안내합니다'
+  );
+
+  runTripNavigationSecondaryBanner.setAttribute(
+    'aria-label',
+    '다음 안내. 이어서 이동할 경로를 안내합니다'
+  );
+
+  positionRunTripNavigationBanners();
+
+  runTripNavigationBannerRoot.classList.remove('hidden');
+  runTripNavigationPrimaryBanner.classList.remove('hidden');
+  runTripNavigationSecondaryBanner.classList.remove('hidden');
+}
+function showRunTripNavigationUnavailableBanners() {
+  if (!isRunTripFollowing) {
+    return;
+  }
+
+  showRunTripNavigationWaitingBanners();
+
+  if (runTripNavigationPrimaryDistance) {
+    runTripNavigationPrimaryDistance.textContent =
+      '안내 확인 필요';
+  }
+
+  if (runTripNavigationPrimaryInstruction) {
+    runTripNavigationPrimaryInstruction.textContent =
+      '방향 안내 정보를 확인할 수 없습니다';
+  }
+
+  if (runTripNavigationSecondaryDistance) {
+    runTripNavigationSecondaryDistance.textContent =
+      '경로 확인';
+  }
+
+  if (runTripNavigationSecondaryInstruction) {
+    runTripNavigationSecondaryInstruction.textContent =
+      '지도에 표시된 예정 경로를 확인해주세요';
+  }
+
+  if (runTripNavigationPrimaryBanner) {
+    runTripNavigationPrimaryBanner.setAttribute(
+      'aria-label',
+      '방향 안내 정보를 확인할 수 없습니다'
+    );
+  }
+
+  if (runTripNavigationSecondaryBanner) {
+    runTripNavigationSecondaryBanner.setAttribute(
+      'aria-label',
+      '지도에 표시된 예정 경로를 확인해주세요'
+    );
+  }
+}
 function hideRunTripNavigationBanners() {
   if (runTripNavigationBannerRoot) {
     runTripNavigationBannerRoot.classList.add('hidden');
@@ -9049,16 +9380,8 @@ function positionRunTripNavigationBanners() {
     return;
   }
 
-  const executionPanel = document.querySelector(
-    '.runtrip-following .runtrip-editor-card'
-  );
-
-  const panelBottom = executionPanel
-    ? executionPanel.getBoundingClientRect().bottom
-    : 0;
-
   runTripNavigationBannerRoot.style.top =
-    `${Math.max(12, Math.round(panelBottom + 10))}px`;
+    'calc(env(safe-area-inset-top, 0px) + 8px)';
 }
 
 function showRunTripNavigationPrimaryBanner(
@@ -9362,6 +9685,9 @@ function resetRunTripNavigationSegmentAnnouncements() {
 }
 
 function resetRunTripNavigationGuidance() {
+  runTripNavigationState = null;
+  runTripNavigationImminentKey = null;
+  runTripNavigationImminentRequest = null;
   hideRunTripNavigationBanners();
   resetRunTripOffRouteGuidance();
 
@@ -9402,7 +9728,12 @@ function initializeRunTripNavigationGuidance(routeSummary) {
 }
 
 function initializeRunTripNavigationForActiveLeg() {
+  runTripNavigationState = null;
+  runTripNavigationImminentKey = null;
+  runTripNavigationImminentRequest = null;
+
   hideRunTripNavigationBanners();
+  showRunTripNavigationWaitingBanners();
 
   /*
   Mapbox 표준 step 내비게이션은
@@ -9553,6 +9884,206 @@ function getRunTripStandardNavigationInstruction(
     nextStep?.maneuver?.instruction ||
     ''
   ).trim();
+}
+function buildRunTripManeuverDetail(step) {
+  if (!step) {
+    return null;
+  }
+
+  const type = String(
+    step.maneuver?.type || ''
+  ).trim().toLowerCase();
+
+  const modifier = String(
+    step.maneuver?.modifier || ''
+  ).trim().toLowerCase();
+
+  const roadName = String(step.name || '').trim();
+
+  const rawInstruction = String(
+    step.maneuver?.instruction || ''
+  ).trim();
+
+  const displayData = getRunTripManeuverDisplayData(
+    type,
+    modifier
+  );
+
+  const exitNumber = Number(step.maneuver?.exit);
+
+  const roundaboutExit =
+    Number.isInteger(exitNumber) && exitNumber > 0
+      ? exitNumber
+      : null;
+
+  let instruction =
+    displayData.instruction ||
+    rawInstruction ||
+    '경로를 따라 이동';
+
+  if (type === 'fork') {
+    instruction = modifier.includes('right')
+      ? '갈림길에서 오른쪽 방향'
+      : modifier.includes('left')
+        ? '갈림길에서 왼쪽 방향'
+        : '갈림길에서 직진';
+  }
+
+  if (type === 'roundabout' || type === 'rotary') {
+    instruction = roundaboutExit
+      ? `회전교차로에서 ${roundaboutExit}번째 출구로 이동`
+      : '회전교차로 진입';
+  }
+
+    if (type === 'arrive') {
+    const legCount =
+      latestRunTripRouteSummary?.legSteps?.length || 0;
+
+    const isFinalLeg =
+      legCount > 0 &&
+      runTripNextWaypointIndex >= legCount - 1;
+
+    instruction = isFinalLeg
+      ? '최종 목적지 접근'
+      : legCount > 0
+        ? `경유지 ${runTripNextWaypointIndex + 1} 접근`
+        : '목적지 접근';
+  }
+
+  if (
+    roadName &&
+    type !== 'arrive' &&
+    type !== 'roundabout' &&
+    type !== 'rotary'
+  ) {
+    instruction = `${roadName} 방면으로 ${instruction}`;
+  }
+
+    // 제공된 한국어 원문에 횡단보도가 명시된 경우,
+  // 방향과 횡단 순서를 추측하지 않고 원문을 사용한다.
+  const hasCrosswalkInstruction =
+    type !== 'arrive' &&
+    rawInstruction.includes('횡단보도');
+
+  if (hasCrosswalkInstruction) {
+    instruction = rawInstruction;
+  }
+
+  return {
+    type,
+    modifier,
+    roadName,
+    rawInstruction,
+    roundaboutExit,
+    hasCrosswalkInstruction,
+    arrow: displayData.arrow || '↑',
+    instruction
+  };
+}
+function getRunTripNavigationState() {
+  const saved = runTripNavigationState;
+
+  const hasCurrentState =
+    isRunTripFollowing &&
+    saved &&
+    saved.legIndex === runTripNextWaypointIndex &&
+    saved.stepIndex === runTripStandardNavigationStepIndex;
+
+  const snapshot = {
+    version: 1,
+    following: isRunTripFollowing,
+    paused: isRunTripPaused,
+
+    legIndex: runTripNextWaypointIndex,
+    stepIndex: runTripStandardNavigationStepIndex,
+
+    maneuverId: hasCurrentState
+      ? saved.maneuverId
+      : null,
+
+    current: hasCurrentState ? saved.current : null,
+    next: hasCurrentState ? saved.next : null,
+
+    remainingDistanceMeters: hasCurrentState
+      ? saved.remainingDistanceMeters
+      : null,
+
+    displayedDistanceMeters: hasCurrentState
+      ? saved.displayedDistanceMeters
+      : null,
+
+    checkpoint: activeRunTripCheckpointNotice
+      ? {
+          type: activeRunTripCheckpointNotice.type,
+          number: activeRunTripCheckpointNotice.number,
+          placeName: activeRunTripCheckpointNotice.placeName
+        }
+      : null
+  };
+
+  // 외부에서 반환값을 수정해도 앱 내부 상태는 바뀌지 않음
+  return JSON.parse(JSON.stringify(snapshot));
+}
+
+window.getRunTripNavigationState =
+  getRunTripNavigationState;
+function buildRunTripNavigationState(
+  stepIndex,
+  remainingDistanceMeters,
+  displayedDistanceMeters
+) {
+  const currentStep =
+    runTripStandardNavigationSteps[stepIndex + 1];
+
+  const nextStep =
+    getRunTripStandardSecondaryStep(stepIndex);
+
+  const current =
+    buildRunTripManeuverDetail(currentStep);
+
+  const next =
+    buildRunTripManeuverDetail(nextStep);
+
+  if (next) {
+    next.distanceMeters = Math.max(
+      0,
+      Number(currentStep?.distanceMeters) || 0
+    );
+  }
+
+  return {
+    version: 1,
+
+    maneuverId:
+      `${runTripNextWaypointIndex}:${stepIndex}`,
+
+    legIndex: runTripNextWaypointIndex,
+    stepIndex,
+
+    current,
+    next,
+
+    remainingDistanceMeters:
+      Number.isFinite(remainingDistanceMeters)
+        ? Math.max(0, remainingDistanceMeters)
+        : null,
+
+    displayedDistanceMeters:
+      Number.isFinite(displayedDistanceMeters)
+        ? Math.max(0, displayedDistanceMeters)
+        : null,
+
+    following: isRunTripFollowing,
+    paused: isRunTripPaused,
+
+    checkpoint: activeRunTripCheckpointNotice
+      ? {
+          type: activeRunTripCheckpointNotice.type,
+          number: activeRunTripCheckpointNotice.number,
+          placeName: activeRunTripCheckpointNotice.placeName
+        }
+      : null
+  };
 }
 function getRunTripStandardNavigationDisplayInstruction(
   stepIndex
@@ -9864,6 +10395,24 @@ function showRunTripStandardNavigationBanner(
   stepIndex,
   distanceMeters
 ) {
+  const displayedDistance =
+    getRunTripStandardNavigationDisplayedDistance(
+      distanceMeters
+    );
+
+  runTripNavigationState = buildRunTripNavigationState(
+    stepIndex,
+    distanceMeters,
+    displayedDistance
+  );
+
+  const state = runTripNavigationState;
+
+  if (!state.current) {
+    showRunTripNavigationUnavailableBanners();
+    return;
+  }
+
   if (
     !runTripNavigationBannerRoot ||
     !runTripNavigationPrimaryBanner ||
@@ -9875,101 +10424,74 @@ function showRunTripStandardNavigationBanner(
 
   positionRunTripNavigationBanners();
 
-  const displayedDistance =
-  getRunTripStandardNavigationDisplayedDistance(
-    distanceMeters
-  );
-
   runTripNavigationPrimaryArrow.textContent =
-    getRunTripStandardNavigationArrow(
-      stepIndex
-    );
+    state.current.arrow;
 
   runTripNavigationPrimaryDistance.textContent =
     formatRunTripNavigationDistance(
-      displayedDistance
+      state.displayedDistanceMeters
     );
-
-  const instruction =
-  getRunTripStandardNavigationDisplayInstruction(
-    stepIndex
-  );
 
   if (runTripNavigationPrimaryInstruction) {
-  runTripNavigationPrimaryInstruction.textContent =
-    instruction || '경로를 따라 이동하세요';
-}
-    runTripNavigationPrimaryBanner.setAttribute(
-    'aria-label',
-    instruction
-      ? (
-          `${formatRunTripNavigationDistance(
-            displayedDistance
-          )} ${instruction}`
-        )
-      : formatRunTripNavigationDistance(
-          displayedDistance
-        )
-  );
-
-  runTripNavigationBannerRoot.classList.remove(
-    'hidden'
-  );
-
-  runTripNavigationPrimaryBanner.classList.remove(
-    'hidden'
-  );
-
-  /*
-  표준 내비게이션 V1:
-  현재 maneuver ①과 그다음 maneuver ②를 함께 표시한다.
-  */
-  const secondaryData =
-  getRunTripStandardSecondaryNavigationData(
-    stepIndex
-  );
-
-if (
-  secondaryData &&
-  runTripNavigationSecondaryBanner &&
-  runTripNavigationSecondaryArrow &&
-  runTripNavigationSecondaryDistance
-) {
-  runTripNavigationSecondaryArrow.textContent =
-    secondaryData.arrow;
-
-  runTripNavigationSecondaryDistance.textContent =
-    formatRunTripNavigationDistance(
-      secondaryData.distanceMeters
-    );
-
-  const secondaryInstruction =
-    secondaryData.type === 'arrive'
-      ? '직진 후 도착'
-      : `직진 후 ${secondaryData.instruction}`;
-
-  if (runTripNavigationSecondaryInstruction) {
-    runTripNavigationSecondaryInstruction.textContent =
-      secondaryInstruction;
+    runTripNavigationPrimaryInstruction.textContent =
+      state.current.instruction;
   }
 
-  runTripNavigationSecondaryBanner.setAttribute(
+  runTripNavigationPrimaryBanner.setAttribute(
     'aria-label',
     `${formatRunTripNavigationDistance(
-      secondaryData.distanceMeters
-    )} ${secondaryInstruction}`
+      state.displayedDistanceMeters
+    )} 앞 ${state.current.instruction}`
   );
 
-  runTripNavigationSecondaryBanner.classList.remove(
-    'hidden'
-  );
-} else if (
-  runTripNavigationSecondaryBanner
-) {
-  runTripNavigationSecondaryBanner.classList.add(
-    'hidden'
-  );
-}
+  runTripNavigationBannerRoot.classList.remove('hidden');
+  runTripNavigationPrimaryBanner.classList.remove('hidden');
+
+  if (
+    runTripNavigationSecondaryBanner &&
+    runTripNavigationSecondaryArrow &&
+    runTripNavigationSecondaryDistance
+  ) {
+    runTripNavigationSecondaryArrow.textContent =
+      state.next?.arrow || '…';
+
+    runTripNavigationSecondaryDistance.textContent =
+      state.next
+        ? formatRunTripNavigationDistance(
+            state.next.distanceMeters
+          )
+        : '다음 안내';
+
+    const nextInstruction = state.next
+      ? `이후 ${state.next.instruction}`
+      : '추가 방향 안내가 없습니다';
+
+    if (runTripNavigationSecondaryInstruction) {
+      runTripNavigationSecondaryInstruction.textContent =
+        nextInstruction;
+    }
+
+    runTripNavigationSecondaryBanner.setAttribute(
+      'aria-label',
+      state.next
+        ? `${formatRunTripNavigationDistance(
+            state.next.distanceMeters
+          )} 이동 후 ${state.next.instruction}`
+        : nextInstruction
+    );
+
+    runTripNavigationSecondaryBanner.classList.remove(
+      'hidden'
+    );
+  }
+
+  if (
+    runTripOffRouteBanner &&
+    !runTripOffRouteBanner.classList.contains('hidden') &&
+    runTripOffRouteBanner.style.display !== 'none'
+  ) {
+    positionRunTripOffRouteBanner();
+  }
 }
 function getRunTripManeuverVoiceInstruction(
   type,
@@ -10222,12 +10744,88 @@ window.testFreeRunTripManeuverMappings =
 
     return summary;
   };
+function announceRunTripImminentNavigation(state) {
+  if (
+    !isRunTripFollowing ||
+    isRunTripPaused ||
+    runTripStandardNavigationVoiceSuppressedForTest ||
+    !state?.current ||
+    state.current.type === 'arrive' ||
+    state.legIndex !== runTripNextWaypointIndex ||
+    !Number.isFinite(state.remainingDistanceMeters) ||
+    state.remainingDistanceMeters > 20 ||
+    state.maneuverId === runTripNavigationImminentKey
+  ) {
+    return false;
+  }
+
+  const instruction = state.current.instruction;
+
+  const voiceInstruction =
+    /[.!?。]$|다$/.test(instruction)
+      ? instruction
+      : /이동$|진입$|접근$/.test(instruction)
+        ? `${instruction}합니다`
+        : `${instruction}입니다`;
+
+  runTripNavigationImminentKey = state.maneuverId;
+
+  // 이 maneuver의 일반 거리 안내도 중복 요청하지 않음
+  runTripStandardNavigationLastAnnouncedStepIndex =
+    state.stepIndex;
+
+    const request = {
+    maneuverId: state.maneuverId,
+    requestedAt: Date.now()
+  };
+
+  runTripNavigationImminentRequest = request;
+
+    requestRunningDynamicVoice(
+    `잠시 후 ${voiceInstruction}`,
+        {
+      waitForEnd: true,
+      isCurrent: function () {
+        return (
+          isRunTripFollowing &&
+          !isRunTripPaused &&
+          runTripNextWaypointIndex === state.legIndex &&
+          runTripNavigationImminentRequest === request &&
+          Date.now() - request.requestedAt <= 8000
+        );
+      }
+    }
+  ).catch(function (error) {
+    console.warn(
+      'FreeRunTrip 임박 음성 요청 실패:',
+      error
+    );
+  }).finally(function () {
+    if (runTripNavigationImminentRequest === request) {
+      runTripNavigationImminentRequest = null;
+    }
+  });
+
+  return true;
+}
 function announceRunTripStandardNavigation(
   stepIndex,
   distanceMeters
 ) {
+  const state = runTripNavigationState;
+  // 임박 음성 처리 중에는 일반 거리 안내를 요청하지 않음
+  if (runTripNavigationImminentRequest !== null) {
+    return;
+  }
   if (
-    runTripStandardNavigationVoiceSuppressedForTest
+    !isRunTripFollowing ||
+    isRunTripPaused ||
+    runTripStandardNavigationVoiceSuppressedForTest ||
+    !state?.current ||
+    state.stepIndex !== stepIndex ||
+    state.legIndex !== runTripNextWaypointIndex ||
+    state.current.type === 'arrive' ||
+    !Number.isFinite(state.displayedDistanceMeters)
   ) {
     return;
   }
@@ -10239,48 +10837,36 @@ function announceRunTripStandardNavigation(
     return;
   }
 
-  const type =
-    getRunTripStandardNavigationType(
-      stepIndex
-    );
-
-  const modifier =
-    getRunTripStandardNavigationModifier(
-      stepIndex
-    );
-
-  const rawInstruction =
-    getRunTripStandardNavigationInstruction(
-      stepIndex
-    );
+  const instruction = state.current.instruction;
 
   const voiceInstruction =
-    getRunTripManeuverVoiceInstruction(
-      type,
-      modifier,
-      rawInstruction
-    );
+    /[.!?。]$|다$/.test(instruction)
+      ? instruction
+      : /이동$|진입$|접근$/.test(instruction)
+        ? `${instruction}합니다`
+        : `${instruction}입니다`;
 
-  if (!voiceInstruction) {
-    return;
-  }
+  const distance = getRunTripNavigationVoiceDistance(
+    state.displayedDistanceMeters
+  );
 
-  const distance =
-    getRunTripNavigationVoiceDistance(
-      distanceMeters
-    );
-
-  const message =
-    distance > 0
-      ? `${distance}미터 앞 ${voiceInstruction}`
-      : voiceInstruction;
+  const message = distance > 0
+    ? `${distance}미터 앞 ${voiceInstruction}`
+    : voiceInstruction;
 
   runTripStandardNavigationLastAnnouncedStepIndex =
     stepIndex;
 
-  requestRunningDynamicVoice(
-    message
-  );
+    requestRunningDynamicVoice(message, {
+    isCurrent: function () {
+      return (
+        isRunTripFollowing &&
+        !isRunTripPaused &&
+        runTripNextWaypointIndex === state.legIndex &&
+        runTripStandardNavigationStepIndex === state.stepIndex
+      );
+    }
+  });
 }
 function getNextTurnNavigationSegment(currentIndex) {
   for (
@@ -10411,13 +10997,13 @@ function updateRunTripNavigationGuidance(
     return;
   }
 
-  if (
+    if (
     !Array.isArray(
       runTripStandardNavigationSteps
     ) ||
     runTripStandardNavigationSteps.length < 2
-  ) {
-    hideRunTripNavigationBanners();
+    ) {
+    showRunTripNavigationUnavailableBanners();
     return;
   }
 
@@ -10440,7 +11026,7 @@ function updateRunTripNavigationGuidance(
     );
 
   if (!target) {
-    hideRunTripNavigationBanners();
+    showRunTripNavigationUnavailableBanners();
     return;
   }
 
@@ -10457,7 +11043,34 @@ function updateRunTripNavigationGuidance(
       runTripStandardNavigationClosestDistance,
       distanceToTarget
     );
+    // step을 넘기기 전에 현재 maneuver의 임박 안내를 처리
+  const currentManeuverKey =
+    `${runTripNextWaypointIndex}:${runTripStandardNavigationStepIndex}`;
 
+  if (
+    distanceToTarget <= 20 &&
+    runTripNavigationImminentKey !== currentManeuverKey &&
+    !runTripStandardNavigationVoiceSuppressedForTest &&
+    getRunTripStandardNavigationType(
+      runTripStandardNavigationStepIndex
+    ) !== 'arrive'
+  ) {
+    showRunTripStandardNavigationBanner(
+      runTripStandardNavigationStepIndex,
+      distanceToTarget
+    );
+
+    const requestedImminent =
+      announceRunTripImminentNavigation(
+        runTripNavigationState
+      );
+
+    if (requestedImminent) {
+      // 이번 GPS 갱신에서는 현재 안내를 유지하고,
+      // 다음 갱신부터 기존 step 전환 조건을 적용
+      return;
+    }
+  }
   const hasPassedRunTripStandardManeuver =
     runTripStandardNavigationClosestDistance <= 30 &&
     distanceToTarget >=
@@ -10480,7 +11093,7 @@ function updateRunTripNavigationGuidance(
       runTripStandardNavigationSteps.length - 2
   ) {
     runTripStandardNavigationStepIndex++;
-
+    runTripNavigationImminentKey = null;
     runTripStandardNavigationLastAnnouncedStepIndex =
       -1;
 
@@ -10519,7 +11132,7 @@ function updateRunTripNavigationGuidance(
   }
 
   if (!target) {
-    hideRunTripNavigationBanners();
+    showRunTripNavigationUnavailableBanners();
     return;
   }
 
@@ -10532,13 +11145,6 @@ function updateRunTripNavigationGuidance(
     arrive는 내비게이션이 RunTrip을 직접 종료하지 않는다.
     실제 경유지/도착 판정은 기존 도착 감지 로직이 담당한다.
   */
-  if (
-    nextType === 'arrive' &&
-    distanceToTarget <= 20
-  ) {
-    hideRunTripNavigationBanners();
-    return;
-  }
 
   showRunTripStandardNavigationBanner(
     runTripStandardNavigationStepIndex,
@@ -12129,6 +12735,7 @@ function restoreActiveRunTripState(
   */
   isRunTripPaused = true;
 
+  setRunTripTopBannerMode('record');
   /*
     복구 직후에는 도착 감지를 다시 활성화한다.
     도착 직전 페이지가 닫힌 경우에도 다음 GPS에서
@@ -13880,6 +14487,8 @@ async function startRunTripFollowing() {
   isRunTripFollowing = true;
   isRunTripPaused = false;
 
+  setRunTripTopBannerMode('navigation');
+  
   if (appBottomNavigation) {
     appBottomNavigation.classList.add(
       'hidden'
@@ -16052,12 +16661,17 @@ function getRunTripPreviewVisibleMapGeometry() {
   let visibleTop = mapRect.top;
   let visibleBottom = mapRect.bottom;
 
+    const visibleTopPanel = isRunTripFollowing
+    ? getRunTripVisibleTopPanel()
+    : runTripEditorCard;
+
   if (
-    runTripEditorCard &&
-    !runTripEditorCard.classList.contains('hidden')
+    visibleTopPanel &&
+    visibleTopPanel.getClientRects().length > 0 &&
+    window.getComputedStyle(visibleTopPanel).visibility !== 'hidden'
   ) {
     const editorRect =
-      runTripEditorCard.getBoundingClientRect();
+      visibleTopPanel.getBoundingClientRect();
 
     if (
       editorRect.bottom > mapRect.top &&
@@ -17609,6 +18223,9 @@ pauseRunTripBtn.addEventListener(
       isRunTripPaused = false;
       isRunTripMapFollowing = true;
 
+      setRunTripTopBannerMode('navigation');
+      showRunTripNavigationWaitingBanners();
+
       startRunTripHeadingTracking();
 
   runTripLastValidPosition = null;
@@ -17631,6 +18248,9 @@ pauseRunTripBtn.addEventListener(
 }
 
     isRunTripPaused = true;
+
+    setRunTripTopBannerMode('record');
+
     stopRunTripHeadingTracking();
  
     cancelFreeRunTripVoiceGuidance();

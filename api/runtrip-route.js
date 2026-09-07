@@ -82,6 +82,11 @@ function normalizeStep(step, legIndex, stepIndex) {
       modifier: String(step?.maneuver?.modifier || ""),
       instruction: String(step?.maneuver?.instruction || ""),
       location: maneuverLocation,
+            exit:
+        Number.isInteger(step?.maneuver?.exit) &&
+        step.maneuver.exit > 0
+          ? step.maneuver.exit
+          : null,
       bearingBefore: Number.isFinite(Number(step?.maneuver?.bearing_before))
         ? Number(step.maneuver.bearing_before)
         : null,
