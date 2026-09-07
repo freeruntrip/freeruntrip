@@ -8320,3 +8320,14 @@ body {
     font-size: 28px;
   }
 }
+/* ========================================
+   2026-09-07 RunTrip 경로 안내 배너 축소 TEST 1
+   - 도착 안내 배너는 변경하지 않음
+   - ①/② 경로 안내 배너의 내부 여백 제거
+   - 배너 정보 구조와 글자 크기는 그대로 유지
+======================================== */
+
+.runtrip-navigation-primary-banner,
+.runtrip-navigation-secondary-banner {
+  padding: 0;
+}

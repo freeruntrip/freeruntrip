@@ -7997,11 +7997,11 @@ let completedRunTripRecordId = null;
 
 const RUNTRIP_NOTICE_VISIBLE_DISTANCE_METERS = 50;
 const RUNTRIP_NOTICE_DISMISS_DISTANCE_METERS = 60;
-const RUNTRIP_ARRIVAL_DISTANCE_METERS = 40;
+const RUNTRIP_ARRIVAL_DISTANCE_METERS = 20;
 const RUNTRIP_ARRIVAL_MAX_ACCURACY_METERS = 40;
 const RUNTRIP_ARRIVAL_MIN_DISTANCE_METERS = 50;
 const RUNTRIP_ARRIVAL_MIN_ELAPSED_SECONDS = 120;
-const RUNTRIP_WAYPOINT_ARRIVAL_DISTANCE_METERS = 35;
+const RUNTRIP_WAYPOINT_ARRIVAL_DISTANCE_METERS = 15;
 const RUNTRIP_WAYPOINT_REQUIRED_HITS = 2;
 const RUNTRIP_DESTINATION_REQUIRED_HITS = 3;
 const RUNTRIP_DIRECTION_ARROW_INTERVAL_METERS = 250;
@@ -10366,13 +10366,18 @@ function updateRunTripNavigationGuidance(
   latitude,
   longitude
 ) {
+  const hasBlockingCheckpointNotice =
+    activeRunTripCheckpointNotice &&
+    activeRunTripCheckpointNotice.type !==
+      'waypoint';
+
   if (
     !isRunTripFollowing ||
     isRunTripPaused ||
-    activeRunTripCheckpointNotice ||
+    hasBlockingCheckpointNotice ||
     runTripNavigationCheckpointHold
   ) {
-    if (activeRunTripCheckpointNotice) {
+    if (hasBlockingCheckpointNotice) {
       hideRunTripNavigationBanners();
     }
 
@@ -11137,22 +11142,30 @@ function showRunTripCheckpointNotice(options = {}) {
     releaseNavigationHold: false
   });
 
-  hideRunTripNavigationBanners();
-  hideRunTripOffRouteBanner();
-
   const isWaypoint =
     options.type === 'waypoint';
 
   /*
-    경유지 도착 알림 동안에는
-    다음 leg가 준비되어 있더라도
-    maneuver step 진행을 허용하지 않는다.
+    경유지 도착 시에는 다음 leg의
+    보행 안내 ①/②를 계속 유지한다.
 
-    최종 도착 알림은 이미 RunTrip 측정이
-    종료된 뒤 표시되므로 HOLD가 필요 없다.
+    최종 도착지는 RunTrip 자체가 종료되므로
+    기존처럼 내비게이션 배너를 숨긴다.
+  */
+  if (!isWaypoint) {
+    hideRunTripNavigationBanners();
+  }
+
+  hideRunTripOffRouteBanner();
+
+  /*
+    이전에는 경유지 도착 알림이 떠 있는 동안
+    다음 leg 내비게이션을 HOLD했지만,
+    이제는 경유지 도착과 동시에
+    다음 leg 안내를 계속 진행한다.
   */
   runTripNavigationCheckpointHold =
-    isWaypoint;
+    false;
 
   const notice =
     document.createElement('div');
