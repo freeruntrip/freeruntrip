@@ -6508,6 +6508,7 @@ let runTripPlannedRouteProgressMetrics = null;
 let runTripPlannedRouteProgressLegIndex = -1;
 let runTripPlannedRouteProgressLegReference = null;
 let runTripPlannedRouteProgressProjection = null;
+let runTripPlannedRouteTransitionStartLatLng = null;
 let runTripPlannedRouteProgressActualDistanceMeters = 0;
 
 const RUNTRIP_PLANNED_ROUTE_INITIAL_SEARCH_METERS = 180;
@@ -6911,6 +6912,9 @@ function resetRunTripPlannedRouteProgress() {
   runTripPlannedRouteProgressLegReference = null;
   runTripPlannedRouteProgressProjection = null;
   runTripPlannedRouteProgressActualDistanceMeters = 0;
+
+  runTripPlannedRouteTransitionStartLatLng =
+    null;
 }
 
 function getRunTripActiveLegIndex() {
@@ -7270,7 +7274,14 @@ function updateRunTripPlannedRouteProgressProjection(
   runTripPlannedRouteProgressProjection =
     projection;
 
-  runTripPlannedRouteProgressActualDistanceMeters =
+  /*
+  새 leg의 정상 projection을 확보했으므로
+  경유지 전환용 임시 연결점은 더 이상 필요하지 않다.
+  */
+  runTripPlannedRouteTransitionStartLatLng =
+     null;
+    
+     runTripPlannedRouteProgressActualDistanceMeters =
     Math.max(
       0,
       Number(
@@ -7450,7 +7461,23 @@ function getRunTripRemainingLegCoordinates() {
         normalizedPoint
       );
     };
+/*
+  경유지 도착 직후 새 leg의 projection이 아직 없으면
+  현재 GPS 위치부터 새 leg 시작점까지 경로를 연결한다.
 
+  projection이 한 번 계산된 뒤에는
+  정상적인 projection 기반 남은 경로 표시로 돌아간다.
+*/
+if (
+  !activeProjection &&
+  Array.isArray(
+    runTripPlannedRouteTransitionStartLatLng
+  )
+) {
+  appendRemainingPoint(
+    runTripPlannedRouteTransitionStartLatLng
+  );
+}
   for (
     let legIndex = activeLegIndex;
     legIndex < legCoordinates.length;
@@ -11373,9 +11400,20 @@ function checkRunTripWaypointArrival(
     runTripNextWaypointIndex++;
     runTripWaypointArrivalHits = 0;
 
-    resetRunTripPlannedRouteProgress();
-    updateRunTripFollowingPlannedRoute();
-    initializeRunTripNavigationForActiveLeg();
+resetRunTripPlannedRouteProgress();
+
+/*
+  경유지 도착 직후 다음 leg의 projection이
+  아직 계산되기 전까지 현재 위치와 새 leg 시작점 사이가
+  끊겨 보이지 않도록 짧은 전환 연결점을 보존한다.
+*/
+runTripPlannedRouteTransitionStartLatLng = [
+  Number(latitude),
+  Number(longitude)
+];
+
+updateRunTripFollowingPlannedRoute();
+initializeRunTripNavigationForActiveLeg();
 
   saveActiveRunTripState();
 }
