@@ -357,6 +357,8 @@ module.exports = async function handler(request, response) {
 
   mapboxUrl.searchParams.set("access_token", mapboxAccessToken);
   mapboxUrl.searchParams.set("alternatives", "false");
+  // Mapbox에 등록된 보행로를 우선하도록 요청한다.
+  mapboxUrl.searchParams.set("walkway_bias", "1");
   mapboxUrl.searchParams.set("steps", "true");
   mapboxUrl.searchParams.set("geometries", "geojson");
   mapboxUrl.searchParams.set("overview", "full");
@@ -420,6 +422,43 @@ module.exports = async function handler(request, response) {
        return response.status(200).json({
       provider: "mapbox",
       profile: "mapbox/walking",
+            routingDiagnostics: {
+        profile: "mapbox/walking",
+        walkwayBias: 1,
+        coordinateOrder: "lat,lng",
+
+        waypoints: [origin, ...waypoints, destination]
+          .filter(isValidCoordinate)
+          .map((point, index) => {
+            const snapped = data.waypoints?.[index];
+
+            return {
+              index,
+
+              requestedLatLng: [
+                Number(point.lat),
+                Number(point.lng),
+              ],
+
+              snappedLatLng: normalizeLatLngFromMapbox(
+                snapped?.location
+              ),
+
+              snapDistanceMeters:
+                typeof snapped?.distance === "number" &&
+                Number.isFinite(snapped.distance)
+                  ? snapped.distance
+                  : null,
+
+              name: String(snapped?.name || ""),
+            };
+          }),
+
+        routeStartLatLng: routeCoordinates[0],
+
+        routeEndLatLng:
+          routeCoordinates[routeCoordinates.length - 1],
+      },
       language: normalizeMapboxLanguage(language),
       coordinates: routeCoordinates,
       distanceMeters: Math.max(0, Number(route?.distance) || 0),
