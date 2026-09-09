@@ -357,8 +357,6 @@ module.exports = async function handler(request, response) {
 
   mapboxUrl.searchParams.set("access_token", mapboxAccessToken);
   mapboxUrl.searchParams.set("alternatives", "false");
-  // Mapbox에 등록된 보행로를 우선하도록 요청한다.
-  mapboxUrl.searchParams.set("walkway_bias", "1");
   mapboxUrl.searchParams.set("steps", "true");
   mapboxUrl.searchParams.set("geometries", "geojson");
   mapboxUrl.searchParams.set("overview", "full");
@@ -424,7 +422,6 @@ module.exports = async function handler(request, response) {
       profile: "mapbox/walking",
             routingDiagnostics: {
         profile: "mapbox/walking",
-        walkwayBias: 1,
         coordinateOrder: "lat,lng",
 
         waypoints: [origin, ...waypoints, destination]
