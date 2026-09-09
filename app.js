@@ -6625,6 +6625,654 @@ const MAPBOX_RUNTRIP_NAVIGATION_ROUTE_LAYER_ID =
 const MAPBOX_RUNTRIP_NAVIGATION_ARROW_LAYER_ID =
   'freeruntrip-runtrip-navigation-arrow-layer';
 
+/*
+  보행 경로의 계산 좌표는 그대로 유지하고,
+  화면에 보이는 예정 경로만 진행 방향 오른쪽의 도로 측면에 표시한다.
+  확대할수록 도로 폭도 넓어지므로 offset을 함께 키운다.
+*/
+function createMapboxRunTripRouteOffsetDirectionExpression() {
+  return [
+    'case',
+    ['has', 'routeOffsetDirection'],
+    ['get', 'routeOffsetDirection'],
+    1
+  ];
+}
+
+function createMapboxRunTripRouteLineOffset() {
+  const direction =
+    createMapboxRunTripRouteOffsetDirectionExpression();
+
+  return [
+    'interpolate',
+    ['linear'],
+    ['zoom'],
+    14, ['*', direction, 2],
+    16, ['*', direction, 4],
+    18, ['*', direction, 7],
+    20, ['*', direction, 10]
+  ];
+}
+
+/*
+  방향 화살표가 이동한 경로선 위에 유지되도록
+  같은 간격을 em 단위로 적용한다.
+*/
+function createMapboxRunTripRouteArrowOffset() {
+  const direction =
+    createMapboxRunTripRouteOffsetDirectionExpression();
+
+  return [
+    'interpolate',
+    ['linear'],
+    ['zoom'],
+    14,
+    [
+      'case',
+      ['<', direction, 0],
+      ['literal', [0, -0.13]],
+      ['literal', [0, 0.13]]
+    ],
+    16,
+    [
+      'case',
+      ['<', direction, 0],
+      ['literal', [0, -0.27]],
+      ['literal', [0, 0.27]]
+    ],
+    18,
+    [
+      'case',
+      ['<', direction, 0],
+      ['literal', [0, -0.47]],
+      ['literal', [0, 0.47]]
+    ],
+    20,
+    [
+      'case',
+      ['<', direction, 0],
+      ['literal', [0, -0.67]],
+      ['literal', [0, 0.67]]
+    ]
+  ];
+}
+/*
+  step geometry가 한 번에 꺾이는 교차로인지,
+  여러 좌표에 걸쳐 계속 휘는 원호인지 계산한다.
+*/
+function getMapboxRunTripStepCurveStats(
+  step
+) {
+  const points =
+    Array.isArray(step?.geometry)
+      ? step.geometry.filter(function (point) {
+          return (
+            Array.isArray(point) &&
+            point.length >= 2 &&
+            Number.isFinite(Number(point[0])) &&
+            Number.isFinite(Number(point[1]))
+          );
+        })
+      : [];
+
+  let signedTurnRadians = 0;
+  let maximumTurnDegrees = 0;
+  let curvedVertices = 0;
+
+  for (
+    let index = 1;
+    index < points.length - 1;
+    index++
+  ) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const next = points[index + 1];
+
+    const longitudeScale =
+      Math.max(
+        0.1,
+        Math.cos(
+          Number(current[0]) *
+            Math.PI / 180
+        )
+      );
+
+    const incomingX =
+      (Number(current[1]) -
+        Number(previous[1])) *
+      longitudeScale;
+
+    const incomingY =
+      Number(current[0]) -
+      Number(previous[0]);
+
+    const outgoingX =
+      (Number(next[1]) -
+        Number(current[1])) *
+      longitudeScale;
+
+    const outgoingY =
+      Number(next[0]) -
+      Number(current[0]);
+
+    const turnRadians =
+      Math.atan2(
+        incomingX * outgoingY -
+          incomingY * outgoingX,
+        incomingX * outgoingX +
+          incomingY * outgoingY
+      );
+
+    const turnDegrees =
+      turnRadians * 180 / Math.PI;
+
+    signedTurnRadians += turnRadians;
+
+    maximumTurnDegrees =
+      Math.max(
+        maximumTurnDegrees,
+        Math.abs(turnDegrees)
+      );
+
+    if (Math.abs(turnDegrees) >= 5) {
+      curvedVertices++;
+    }
+  }
+
+  return {
+    geometryPoints: points.length,
+    totalTurnDegrees:
+      signedTurnRadians * 180 / Math.PI,
+    maximumTurnDegrees,
+    curvedVertices
+  };
+}
+/*
+  회전교차로 step의 곡선 방향을 계산한다.
+
+  왼쪽으로 휘는 경로는 오른쪽이 외측이므로 1,
+  오른쪽으로 휘는 경로는 왼쪽이 외측이므로 -1을 반환한다.
+*/
+function getMapboxRunTripRoundaboutOutsideDirection(
+  step
+) {
+  const curveStats =
+    getMapboxRunTripStepCurveStats(step);
+
+  if (curveStats.totalTurnDegrees > 3) {
+    return 1;
+  }
+
+  if (curveStats.totalTurnDegrees < -3) {
+    return -1;
+  }
+
+  const bearingBefore =
+    Number(step?.maneuver?.bearingBefore);
+
+  const bearingAfter =
+    Number(step?.maneuver?.bearingAfter);
+
+  if (
+    Number.isFinite(bearingBefore) &&
+    Number.isFinite(bearingAfter)
+  ) {
+    const turnDegrees =
+      (
+        bearingAfter -
+        bearingBefore +
+        540
+      ) % 360 - 180;
+
+    if (Math.abs(turnDegrees) > 5) {
+      return turnDegrees > 0 ? -1 : 1;
+    }
+  }
+
+  const modifier = String(
+    step?.maneuver?.modifier || ''
+  ).toLowerCase();
+
+  if (modifier.includes('right')) {
+    return -1;
+  }
+
+  return 1;
+}
+/*
+  전체 legSteps에서 명시적 회전교차로와
+  회전교차로 형태의 원호 구간을 수집한다.
+*/
+function getMapboxRunTripRoundaboutSections(
+  legSteps
+) {
+  const sourceLegSteps =
+    Array.isArray(legSteps)
+      ? legSteps
+      : Array.isArray(
+          latestRunTripRouteSummary?.legSteps
+        )
+        ? latestRunTripRouteSummary.legSteps
+        : [];
+
+  const sections = [];
+
+  sourceLegSteps.forEach(function (steps) {
+    if (!Array.isArray(steps)) {
+      return;
+    }
+
+    steps.forEach(function (step) {
+      const maneuverType = String(
+        step?.maneuver?.type || ''
+      ).toLowerCase();
+
+      const geometry =
+        Array.isArray(step?.geometry)
+          ? step.geometry.filter(
+              function (point) {
+                return (
+                  Array.isArray(point) &&
+                  point.length >= 2 &&
+                  Number.isFinite(
+                    Number(point[0])
+                  ) &&
+                  Number.isFinite(
+                    Number(point[1])
+                  )
+                );
+              }
+            )
+          : [];
+
+      const curveStats =
+        getMapboxRunTripStepCurveStats(
+          step
+        );
+
+      const distanceMeters =
+        Math.max(
+          0,
+          Number(step?.distanceMeters) || 0
+        );
+
+      const isExplicitRoundabout =
+        maneuverType === 'roundabout' ||
+        maneuverType === 'rotary';
+
+      const isRoundaboutLikeCurve =
+        curveStats.geometryPoints >= 5 &&
+        curveStats.curvedVertices >= 4 &&
+        Math.abs(
+          curveStats.totalTurnDegrees
+        ) >= 50 &&
+        curveStats.maximumTurnDegrees <= 30 &&
+        distanceMeters >= 15 &&
+        distanceMeters <= 120;
+
+      if (
+        !isExplicitRoundabout &&
+        !isRoundaboutLikeCurve
+      ) {
+        return;
+      }
+
+      const metrics =
+        buildRunTripNavigationRouteMetrics(
+          geometry
+        );
+
+      if (!metrics) {
+        return;
+      }
+
+      sections.push({
+        metrics,
+        routeOffsetDirection:
+          getMapboxRunTripRoundaboutOutsideDirection(
+            step
+          )
+      });
+    });
+  });
+
+  return sections;
+}
+/*
+  전체 경로 segment와 회전교차로 step segment가
+  같은 방향으로 진행하는지 계산한다.
+
+  1에 가까우면 같은 방향,
+  -1에 가까우면 반대 방향이다.
+*/
+function getMapboxRunTripSegmentAlignment(
+  first,
+  second,
+  section,
+  projection
+) {
+  const sectionPoints =
+    section?.metrics?.points;
+
+  const sectionIndex =
+    Number(projection?.routeSegmentIndex);
+
+  if (
+    !Array.isArray(first) ||
+    !Array.isArray(second) ||
+    !Array.isArray(sectionPoints) ||
+    !Number.isInteger(sectionIndex) ||
+    sectionIndex < 0 ||
+    sectionIndex >=
+      sectionPoints.length - 1
+  ) {
+    return -1;
+  }
+
+  const sectionFirst =
+    sectionPoints[sectionIndex];
+
+  const sectionSecond =
+    sectionPoints[sectionIndex + 1];
+
+  const referenceLatitude =
+    (
+      Number(first[0]) +
+      Number(second[0]) +
+      Number(sectionFirst[0]) +
+      Number(sectionSecond[0])
+    ) / 4;
+
+  const longitudeScale =
+    Math.max(
+      0.1,
+      Math.cos(
+        referenceLatitude *
+          Math.PI / 180
+      )
+    );
+
+  const routeX =
+    (
+      Number(second[1]) -
+      Number(first[1])
+    ) * longitudeScale;
+
+  const routeY =
+    Number(second[0]) -
+    Number(first[0]);
+
+  const sectionX =
+    (
+      Number(sectionSecond[1]) -
+      Number(sectionFirst[1])
+    ) * longitudeScale;
+
+  const sectionY =
+    Number(sectionSecond[0]) -
+    Number(sectionFirst[0]);
+
+  const routeLength =
+    Math.hypot(routeX, routeY);
+
+  const sectionLength =
+    Math.hypot(sectionX, sectionY);
+
+  if (
+    routeLength <= 0 ||
+    sectionLength <= 0
+  ) {
+    return -1;
+  }
+
+  return (
+    routeX * sectionX +
+    routeY * sectionY
+  ) / (
+    routeLength *
+    sectionLength
+  );
+}
+/*
+  일반 구간과 회전교차로 외측 구간 사이의
+  오프셋 방향을 단계적으로 전환한다.
+
+  1 → 0.5 → 0 → -0.5 → -1
+*/
+function smoothMapboxRunTripRouteOffsetDirections(
+  directions
+) {
+  const normalizedDirections =
+    Array.isArray(directions)
+      ? directions.map(function (direction) {
+          return Number(direction) < 0
+            ? -1
+            : 1;
+        })
+      : [];
+
+  return normalizedDirections.map(
+    function (direction, index) {
+      const previousDirection =
+        normalizedDirections[index - 1];
+
+      const nextDirection =
+        normalizedDirections[index + 1];
+
+      if (direction < 0) {
+        const touchesNormalSection =
+          previousDirection > 0 ||
+          nextDirection > 0;
+
+        return touchesNormalSection
+          ? -0.5
+          : -1;
+      }
+
+      const touchesOutsideSection =
+        previousDirection < 0 ||
+        nextDirection < 0;
+
+      if (touchesOutsideSection) {
+        return 0;
+      }
+
+      const twoBeforeDirection =
+        normalizedDirections[index - 2];
+
+      const twoAfterDirection =
+        normalizedDirections[index + 2];
+
+      const approachesOutsideSection =
+        twoBeforeDirection < 0 ||
+        twoAfterDirection < 0;
+
+      if (approachesOutsideSection) {
+        return 0.5;
+      }
+
+      return 1;
+    }
+  );
+}
+/*
+  원본 경로 좌표는 변경하지 않고 Mapbox 표시 데이터만 분리한다.
+
+  일반 구간은 기본 오프셋 1을 사용하고,
+  회전교차로 구간은 계산된 외측 방향을 사용한다.
+*/
+function buildMapboxRunTripRouteDisplayData(
+  coordinates,
+  legSteps
+) {
+  const routePoints =
+    Array.isArray(coordinates)
+      ? coordinates.filter(function (point) {
+          return (
+            Array.isArray(point) &&
+            point.length >= 2 &&
+            Number.isFinite(Number(point[0])) &&
+            Number.isFinite(Number(point[1]))
+          );
+        }).map(function (point) {
+          return [
+            Number(point[0]),
+            Number(point[1])
+          ];
+        })
+      : [];
+
+  if (routePoints.length < 2) {
+    return {
+      type: 'FeatureCollection',
+      features: []
+    };
+  }
+
+  const roundaboutSections =
+    getMapboxRunTripRoundaboutSections(
+      legSteps
+    );
+
+  const segmentDirections = [];
+
+  for (
+    let index = 0;
+    index < routePoints.length - 1;
+    index++
+  ) {
+    const first = routePoints[index];
+    const second = routePoints[index + 1];
+
+    const midpointLatitude =
+      (first[0] + second[0]) / 2;
+
+    const midpointLongitude =
+      (first[1] + second[1]) / 2;
+
+    let closestDistanceMeters = Infinity;
+    let routeOffsetDirection = 1;
+
+        roundaboutSections.forEach(
+      function (section) {
+        const projection =
+          projectRunTripPointToRoute(
+            midpointLatitude,
+            midpointLongitude,
+            {
+              metrics: section.metrics
+            }
+          );
+
+        const directionAlignment =
+          getMapboxRunTripSegmentAlignment(
+            first,
+            second,
+            section,
+            projection
+          );
+
+        if (
+          projection &&
+          projection.distanceToRouteMeters <= 2 &&
+          directionAlignment >= 0.5 &&
+          projection.distanceToRouteMeters <
+            closestDistanceMeters
+        ) {
+          closestDistanceMeters =
+            projection.distanceToRouteMeters;
+
+          routeOffsetDirection =
+            section.routeOffsetDirection;
+        }
+      }
+    );
+
+    segmentDirections.push(
+      routeOffsetDirection
+    );
+  }
+
+    const smoothedSegmentDirections =
+      smoothMapboxRunTripRouteOffsetDirections(
+         segmentDirections
+      );
+
+  for (
+    let index = 0;
+    index < segmentDirections.length;
+    index++
+  ) {
+    segmentDirections[index] =
+      smoothedSegmentDirections[index];
+  }
+  const features = [];
+  let currentDirection =
+    segmentDirections[0] || 1;
+
+  let currentCoordinates = [
+    routePoints[0]
+  ];
+
+  function appendDisplayFeature() {
+    if (currentCoordinates.length < 2) {
+      return;
+    }
+
+    features.push({
+      type: 'Feature',
+      properties: {
+        routeOffsetDirection:
+          currentDirection
+      },
+      geometry: {
+        type: 'LineString',
+        coordinates:
+          currentCoordinates.map(
+            function (point) {
+              return [
+                Number(point[1]),
+                Number(point[0])
+              ];
+            }
+          )
+      }
+    });
+  }
+
+  for (
+    let index = 0;
+    index < segmentDirections.length;
+    index++
+  ) {
+    const direction =
+      segmentDirections[index];
+
+    if (direction !== currentDirection) {
+      appendDisplayFeature();
+
+      currentDirection = direction;
+
+      currentCoordinates = [
+        routePoints[index],
+        routePoints[index + 1]
+      ];
+
+      continue;
+    }
+
+    currentCoordinates.push(
+      routePoints[index + 1]
+    );
+  }
+
+  appendDisplayFeature();
+
+  return {
+    type: 'FeatureCollection',
+    features
+  };
+}
 function initializeMapboxRunTripPlannedRouteLayer() {
   if (!freeRunTripMapboxMainMap) {
     return;
@@ -6645,12 +7293,8 @@ function initializeMapboxRunTripPlannedRouteLayer() {
         type: 'geojson',
 
         data: {
-          type: 'Feature',
-          properties: {},
-          geometry: {
-            type: 'LineString',
-            coordinates: []
-          }
+          type: 'FeatureCollection',
+          features: []
         }
       }
     );
@@ -6675,11 +7319,13 @@ function initializeMapboxRunTripPlannedRouteLayer() {
         'line-join': 'round'
       },
 
-            paint: {
+      paint: {
         'line-color': '#76e4d2',
         'line-width': 6,
+        'line-offset':
+          createMapboxRunTripRouteLineOffset(),
         'line-opacity': 0.95
-      }
+        }
     });
   }
 
@@ -6717,7 +7363,9 @@ function initializeMapboxRunTripPlannedRouteLayer() {
           16, 11,
           18, 14,
           20, 16
-        ],
+       ],
+        'line-offset':
+           createMapboxRunTripRouteLineOffset(),
         'line-opacity': 0.42
       }
     });
@@ -6747,13 +7395,15 @@ function initializeMapboxRunTripPlannedRouteLayer() {
         'line-color': '#76e4d2',
         'line-width': [
           'interpolate',
-          ['linear'],
-          ['zoom'],
-          16, 8,
-          18, 10,
-          20, 12
-        ],
-        'line-opacity': 0.98
+        ['linear'],
+        ['zoom'],
+        16, 8,
+        18, 10,
+        20, 12
+     ],
+       'line-offset':
+          createMapboxRunTripRouteLineOffset(),
+       'line-opacity': 0.98
       }
     });
   }
@@ -6780,6 +7430,8 @@ function initializeMapboxRunTripPlannedRouteLayer() {
         'text-size': 15,
         'text-rotation-alignment': 'map',
         'text-pitch-alignment': 'map',
+        'text-offset':
+          createMapboxRunTripRouteArrowOffset(),
         'text-keep-upright': false,
         'text-allow-overlap': false,
         'text-ignore-placement': true
@@ -6934,7 +7586,8 @@ function initializeMapboxRunTripActualRouteLayer() {
   }
 }
 function updateMapboxRunTripPlannedRoute(
-  coordinates
+  coordinates,
+  legSteps = null
 ) {
   if (!freeRunTripMapboxMainMap) {
     return;
@@ -6957,37 +7610,13 @@ function updateMapboxRunTripPlannedRoute(
     return;
   }
 
-  const mapboxCoordinates =
-    Array.isArray(coordinates)
-      ? coordinates
-          .filter(function (point) {
-            return (
-              Array.isArray(point) &&
-              point.length >= 2 &&
-              Number.isFinite(
-                Number(point[0])
-              ) &&
-              Number.isFinite(
-                Number(point[1])
-              )
-            );
-          })
-          .map(function (point) {
-            return [
-              Number(point[1]),
-              Number(point[0])
-            ];
-          })
-      : [];
+  const displayData =
+    buildMapboxRunTripRouteDisplayData(
+      coordinates,
+      legSteps
+    );
 
-  source.setData({
-    type: 'Feature',
-    properties: {},
-    geometry: {
-      type: 'LineString',
-      coordinates: mapboxCoordinates
-    }
-  });
+  source.setData(displayData);
 }
 
 function clearMapboxRunTripPlannedRoute() {
@@ -7368,7 +7997,7 @@ function updateRunTripPlannedRouteProgressProjection(
   */
   runTripPlannedRouteTransitionStartLatLng =
      null;
-    
+
      runTripPlannedRouteProgressActualDistanceMeters =
     Math.max(
       0,
@@ -8644,7 +9273,7 @@ function handleRunTripDeviceOrientation(
   applyRunTripHeadingToMap(
      smoothedHeading
   );
-    
+
     console.log(
     'FreeRunTrip heading raw:',
     {
@@ -14424,7 +15053,7 @@ function startRunTripLocationWatch() {
           appendRunTripRoutePoint(
             acceptedLatLng
           );
-    
+
 
           if (!runTripFollowMarker) {
             runTripFollowMarker =
@@ -14551,7 +15180,7 @@ async function startRunTripFollowing() {
   }
 
   startRunTripHeadingTracking();
-  
+
   resetRunTripDashboard();
 
   runTripStartTime = new Date();
@@ -14589,7 +15218,7 @@ async function startRunTripFollowing() {
   isRunTripPaused = false;
 
   setRunTripTopBannerMode('navigation');
-  
+
   if (appBottomNavigation) {
     appBottomNavigation.classList.add(
       'hidden'
@@ -14953,7 +15582,7 @@ function resetRunTripDraftState() {
 
 function freezeRunTripAtArrival(savedRecord) {
   stopRunTripHeadingTracking();
-  
+
   clearInterval(runTripTimerInterval);
   runTripTimerInterval = null;
 
@@ -15787,7 +16416,7 @@ runTripSearchInput.value = isDefaultCurrentLocation
     mapboxMainContainer.style.display =
      'none';
   }
-  
+
   setTimeout(function () {
     runTripSearchInput.focus();
   }, 100);
@@ -17294,7 +17923,8 @@ async function renderRunTripMapPreview() {
       lineJoin: 'round'
     }).addTo(runTripPreviewLayer);
     updateMapboxRunTripPlannedRoute(
-  routeCoordinates
+  routeCoordinates,
+  outwardRoute.legSteps
 );
 
     previewMarkers.forEach(function (marker) {
@@ -17349,7 +17979,7 @@ latestRunTripRouteSummary = {
             : [];
         })
     : [],
-  
+
   steps:
     Array.isArray(outwardRoute.steps)
       ? outwardRoute.steps
@@ -18358,7 +18988,7 @@ pauseRunTripBtn.addEventListener(
     setRunTripTopBannerMode('record');
 
     stopRunTripHeadingTracking();
- 
+
     cancelFreeRunTripVoiceGuidance();
     hideRunTripNavigationBanners();
 
@@ -18388,7 +19018,7 @@ pauseRunTripBtn.addEventListener(
     runTripCurrentSmoothedAltitude = null;
     runTripActiveRouteSegment = null;
     runTripActualRouteLine = null;
-    
+
     updateRunTripDashboard();
     saveActiveRunTripState();
   }
@@ -18685,7 +19315,7 @@ function hideAllMainAppScreens() {
     mapboxMainContainer.style.display =
       'none';
   }
-  
+
     controlsSection.style.display =
     'none';
 
