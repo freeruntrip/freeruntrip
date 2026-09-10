@@ -6750,22 +6750,12 @@ function offsetMapboxRunTripDisplayCoordinates(coordinates, offset, zoom) {
     const denominator = 1 + dot;
     let intersection = null;
 
-    if (denominator > 0.02) {
+        if (denominator > 0.02) {
       const dx = -(previous.y + next.y) * offset / denominator;
       const dy = (previous.x + next.x) * offset / denominator;
 
-      const alongPrevious = Math.abs(
-        dx * previous.x + dy * previous.y
-      );
-      const alongNext = Math.abs(
-        dx * next.x + dy * next.y
-      );
-
-      if (
-        Math.hypot(dx, dy) <= Math.abs(offset) * 2 &&
-        alongPrevious <= previous.length * 0.45 &&
-        alongNext <= next.length * 0.45
-      ) {
+      // 모서리 교점의 돌출 길이를 제한한다.
+      if (Math.hypot(dx, dy) <= Math.abs(offset) * 2) {
         intersection = [
           point[0] + dx,
           point[1] + dy
