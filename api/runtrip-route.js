@@ -417,45 +417,9 @@ module.exports = async function handler(request, response) {
     const legNavigationSegments =
        buildRouteLegNavigationSegments(route);
       
-       return response.status(200).json({
+           return response.status(200).json({
       provider: "mapbox",
       profile: "mapbox/walking",
-            routingDiagnostics: {
-        profile: "mapbox/walking",
-        coordinateOrder: "lat,lng",
-
-        waypoints: [origin, ...waypoints, destination]
-          .filter(isValidCoordinate)
-          .map((point, index) => {
-            const snapped = data.waypoints?.[index];
-
-            return {
-              index,
-
-              requestedLatLng: [
-                Number(point.lat),
-                Number(point.lng),
-              ],
-
-              snappedLatLng: normalizeLatLngFromMapbox(
-                snapped?.location
-              ),
-
-              snapDistanceMeters:
-                typeof snapped?.distance === "number" &&
-                Number.isFinite(snapped.distance)
-                  ? snapped.distance
-                  : null,
-
-              name: String(snapped?.name || ""),
-            };
-          }),
-
-        routeStartLatLng: routeCoordinates[0],
-
-        routeEndLatLng:
-          routeCoordinates[routeCoordinates.length - 1],
-      },
       language: normalizeMapboxLanguage(language),
       coordinates: routeCoordinates,
       distanceMeters: Math.max(0, Number(route?.distance) || 0),

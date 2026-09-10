@@ -17755,11 +17755,6 @@ async function requestRunTripRoute(
     );
   }
 
-    console.log(
-    'FreeRunTrip ROUTE snapping',
-    data.routingDiagnostics || null
-  );
-
   return data;
 }
 async function renderRunTripMapPreview() {
