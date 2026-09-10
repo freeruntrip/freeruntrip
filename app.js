@@ -7316,7 +7316,7 @@ function initializeMapboxRunTripPlannedRouteLayer() {
 
       layout: {
         'line-cap': 'round',
-        'line-join': 'round'
+        'line-join': 'bevel'
       },
 
       paint: {
@@ -7351,7 +7351,7 @@ function initializeMapboxRunTripPlannedRouteLayer() {
       layout: {
         visibility: 'none',
         'line-cap': 'round',
-        'line-join': 'round'
+        'line-join': 'bevel'
       },
 
       paint: {
@@ -7388,7 +7388,7 @@ function initializeMapboxRunTripPlannedRouteLayer() {
       layout: {
         visibility: 'none',
         'line-cap': 'round',
-        'line-join': 'round'
+        'line-join': 'bevel'
       },
 
       paint: {
