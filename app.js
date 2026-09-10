@@ -6640,66 +6640,215 @@ function createMapboxRunTripRouteOffsetDirectionExpression() {
 }
 
 function createMapboxRunTripRouteLineOffset() {
-  const direction =
-    createMapboxRunTripRouteOffsetDirectionExpression();
-
-  return [
-    'interpolate',
-    ['linear'],
-    ['zoom'],
-    14, ['*', direction, 2],
-    16, ['*', direction, 4],
-    18, ['*', direction, 7],
-    20, ['*', direction, 10]
-  ];
+  // 표시 좌표를 직접 이동하므로 이중으로 이동하지 않는다.
+  return 0;
 }
 
-/*
-  방향 화살표가 이동한 경로선 위에 유지되도록
-  같은 간격을 em 단위로 적용한다.
-*/
 function createMapboxRunTripRouteArrowOffset() {
-  const direction =
-    createMapboxRunTripRouteOffsetDirectionExpression();
-
-  return [
-    'interpolate',
-    ['linear'],
-    ['zoom'],
-    14,
-    [
-      'case',
-      ['<', direction, 0],
-      ['literal', [0, -0.13]],
-      ['literal', [0, 0.13]]
-    ],
-    16,
-    [
-      'case',
-      ['<', direction, 0],
-      ['literal', [0, -0.27]],
-      ['literal', [0, 0.27]]
-    ],
-    18,
-    [
-      'case',
-      ['<', direction, 0],
-      ['literal', [0, -0.47]],
-      ['literal', [0, 0.47]]
-    ],
-    20,
-    [
-      'case',
-      ['<', direction, 0],
-      ['literal', [0, -0.67]],
-      ['literal', [0, 0.67]]
-    ]
-  ];
+  // 화살표도 이동된 경로 좌표를 공유한다.
+  return [0, 0];
 }
-/*
-  step geometry가 한 번에 꺾이는 교차로인지,
-  여러 좌표에 걸쳐 계속 휘는 원호인지 계산한다.
-*/
+
+// 확대·축소 때 오프셋이 누적되지 않도록 원본 표시 데이터를 보관한다.
+let mapboxRunTripRouteDisplayBaseData = null;
+
+function getMapboxRunTripRouteDisplayOffsetPixels(zoom) {
+  const stops = [[14, 2], [16, 4], [18, 7], [20, 10]];
+
+  if (zoom <= 14) return 2;
+
+  for (let index = 1; index < stops.length; index++) {
+    const [endZoom, endOffset] = stops[index];
+    const [startZoom, startOffset] = stops[index - 1];
+
+    if (zoom <= endZoom) {
+      return startOffset + (endOffset - startOffset) *
+        (zoom - startZoom) / (endZoom - startZoom);
+    }
+  }
+
+  return 10;
+}
+
+// 표시용 좌표만 이동한다. 거리·도착 판정용 원본 좌표는 변경하지 않는다.
+function offsetMapboxRunTripDisplayCoordinates(coordinates, offset, zoom) {
+  const worldSize = 512 * Math.pow(2, zoom);
+  const points = [];
+  let previousLongitude = null;
+
+  for (const coordinate of coordinates) {
+    let longitude = Number(coordinate[0]);
+    const latitude = Math.max(
+      -85.05112878,
+      Math.min(85.05112878, Number(coordinate[1]))
+    );
+
+    if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) {
+      continue;
+    }
+
+    if (previousLongitude !== null) {
+      longitude -= 360 * Math.round(
+        (longitude - previousLongitude) / 360
+      );
+    }
+
+    previousLongitude = longitude;
+
+    const sine = Math.sin(latitude * Math.PI / 180);
+    const point = [
+      (longitude + 180) / 360 * worldSize,
+      (0.5 - Math.log((1 + sine) / (1 - sine)) /
+        (4 * Math.PI)) * worldSize
+    ];
+
+    const previous = points[points.length - 1];
+
+    if (
+      !previous ||
+      Math.hypot(
+        point[0] - previous[0],
+        point[1] - previous[1]
+      ) > 0.01
+    ) {
+      points.push(point);
+    }
+  }
+
+  if (points.length < 2) return [];
+
+  const segments = points.slice(1).map(function (point, index) {
+    const dx = point[0] - points[index][0];
+    const dy = point[1] - points[index][1];
+    const length = Math.hypot(dx, dy);
+
+    return {
+      x: dx / length,
+      y: dy / length,
+      length
+    };
+  });
+
+  const shifted = [];
+
+  function sidePoint(point, segment) {
+    return [
+      point[0] - segment.y * offset,
+      point[1] + segment.x * offset
+    ];
+  }
+
+  shifted.push(sidePoint(points[0], segments[0]));
+
+  for (let index = 1; index < points.length - 1; index++) {
+    const previous = segments[index - 1];
+    const next = segments[index];
+    const point = points[index];
+    const first = sidePoint(point, previous);
+    const second = sidePoint(point, next);
+    const dot = previous.x * next.x + previous.y * next.y;
+    const denominator = 1 + dot;
+    let intersection = null;
+
+    if (denominator > 0.02) {
+      const dx = -(previous.y + next.y) * offset / denominator;
+      const dy = (previous.x + next.x) * offset / denominator;
+
+      const alongPrevious = Math.abs(
+        dx * previous.x + dy * previous.y
+      );
+      const alongNext = Math.abs(
+        dx * next.x + dy * next.y
+      );
+
+      if (
+        Math.hypot(dx, dy) <= Math.abs(offset) * 2 &&
+        alongPrevious <= previous.length * 0.45 &&
+        alongNext <= next.length * 0.45
+      ) {
+        intersection = [
+          point[0] + dx,
+          point[1] + dy
+        ];
+      }
+    }
+
+    if (intersection) {
+      shifted.push(intersection);
+    } else {
+      // 급회전·유턴에서 교점이 길게 튀어나오는 것을 제한한다.
+      shifted.push(first, second);
+    }
+  }
+
+  shifted.push(
+    sidePoint(
+      points[points.length - 1],
+      segments[segments.length - 1]
+    )
+  );
+
+  return shifted.map(function (point) {
+    return [
+      point[0] / worldSize * 360 - 180,
+      Math.atan(
+        Math.sinh(Math.PI * (1 - 2 * point[1] / worldSize))
+      ) * 180 / Math.PI
+    ];
+  });
+}
+
+function createMapboxRunTripRoundedDisplayData(data, zoom) {
+  const offset = getMapboxRunTripRouteDisplayOffsetPixels(zoom);
+
+  return {
+    type: 'FeatureCollection',
+    features: data.features.map(function (feature) {
+      const direction =
+        Number(feature.properties.routeOffsetDirection) < 0 ? -1 : 1;
+
+      return {
+        ...feature,
+        geometry: {
+          type: 'LineString',
+          coordinates: offsetMapboxRunTripDisplayCoordinates(
+            feature.geometry.coordinates,
+            offset * direction,
+            zoom
+          )
+        }
+      };
+    }).filter(function (feature) {
+      return feature.geometry.coordinates.length >= 2;
+    })
+  };
+}
+
+function refreshMapboxRunTripRoundedDisplay() {
+  if (
+    !freeRunTripMapboxMainMap ||
+    !mapboxRunTripRouteDisplayBaseData
+  ) {
+    return;
+  }
+
+  const source = freeRunTripMapboxMainMap.getSource(
+    MAPBOX_RUNTRIP_PLANNED_ROUTE_SOURCE_ID
+  );
+
+  if (!source) return;
+
+  const zoom = Number(freeRunTripMapboxMainMap.getZoom());
+
+  if (!Number.isFinite(zoom)) return;
+
+  source.setData(
+    createMapboxRunTripRoundedDisplayData(
+      mapboxRunTripRouteDisplayBaseData,
+      zoom
+    )
+  );
+}
 function getMapboxRunTripStepCurveStats(
   step
 ) {
@@ -7316,7 +7465,8 @@ function initializeMapboxRunTripPlannedRouteLayer() {
 
       layout: {
         'line-cap': 'round',
-        'line-join': 'bevel'
+        'line-join': 'round',
+        'line-round-limit': 0
       },
 
       paint: {
@@ -7351,7 +7501,8 @@ function initializeMapboxRunTripPlannedRouteLayer() {
       layout: {
         visibility: 'none',
         'line-cap': 'round',
-        'line-join': 'bevel'
+        'line-join': 'round',
+        'line-round-limit': 0
       },
 
       paint: {
@@ -7388,7 +7539,8 @@ function initializeMapboxRunTripPlannedRouteLayer() {
       layout: {
         visibility: 'none',
         'line-cap': 'round',
-        'line-join': 'bevel'
+        'line-join': 'round',
+        'line-round-limit': 0
       },
 
       paint: {
@@ -7616,7 +7768,8 @@ function updateMapboxRunTripPlannedRoute(
       legSteps
     );
 
-  source.setData(displayData);
+    mapboxRunTripRouteDisplayBaseData = displayData;
+    refreshMapboxRunTripRoundedDisplay();
 }
 
 function clearMapboxRunTripPlannedRoute() {
@@ -19218,6 +19371,7 @@ if (runTripMapboxCanvasContainer) {
 freeRunTripMapboxMainMap.on(
   'zoomend',
   function () {
+        refreshMapboxRunTripRoundedDisplay();
     if (
       !isRunTripFollowing ||
       isRunTripPaused ||
