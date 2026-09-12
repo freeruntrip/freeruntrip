@@ -94,6 +94,11 @@ function normalizeStep(step, legIndex, stepIndex) {
         ? Number(step.maneuver.bearing_after)
         : null,
     },
+        // Mapbox 원본 교차로 정보를 그대로 전달한다.
+    // intersections의 location은 [경도, 위도] 순서다.
+    intersections: Array.isArray(step?.intersections)
+      ? step.intersections
+      : [],
     geometry: geometryCoordinates,
   };
 }
