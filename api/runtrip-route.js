@@ -864,8 +864,14 @@ async function fetchRunTripCrossingElements(query) {
     return cached.elements;
   }
 
-  // 만료된 결과는 제거한다.
   RUNTRIP_CROSSING_CACHE.delete(query);
+
+  function lookupError(reason, httpStatus = null) {
+    const error = new Error('Crossing lookup failed');
+    error.crossingReason = reason;
+    error.crossingHttpStatus = httpStatus;
+    return error;
+  }
 
   const controller = new AbortController();
 
@@ -891,21 +897,23 @@ async function fetchRunTripCrossingElements(query) {
     );
 
     if (!response.ok) {
-      return null;
+      throw lookupError('http-error', response.status);
     }
 
     const data = await response.json();
 
-    // 오류 메시지나 불완전한 응답이 있으면 사용하지 않는다.
-    if (
-      data?.remark ||
-      !Array.isArray(data?.elements) ||
-      data.elements.length > 10000
-    ) {
-      return null;
+    if (data?.remark) {
+      throw lookupError('provider-remark');
     }
 
-    // 메모리에 보관하는 검색 결과는 최대 20개로 제한한다.
+    if (!Array.isArray(data?.elements)) {
+      throw lookupError('invalid-response');
+    }
+
+    if (data.elements.length > 10000) {
+      throw lookupError('element-limit');
+    }
+
     if (RUNTRIP_CROSSING_CACHE.size >= 20) {
       const oldestKey =
         RUNTRIP_CROSSING_CACHE.keys().next().value;
@@ -920,8 +928,19 @@ async function fetchRunTripCrossingElements(query) {
 
     return data.elements;
   } catch (error) {
-    // 통신 실패·시간 초과·JSON 해석 실패는 조회 불가로 처리한다.
-    return null;
+    if (error?.crossingReason) {
+      throw error;
+    }
+
+    if (controller.signal.aborted) {
+      throw lookupError('timeout');
+    }
+
+    if (error?.name === 'SyntaxError') {
+      throw lookupError('invalid-json');
+    }
+
+    throw lookupError('fetch-error');
   } finally {
     clearTimeout(timeout);
   }
@@ -988,10 +1007,12 @@ async function enrichRunTripCrossings(legSteps, coordinates) {
       });
     });
 
-    return {
+        return {
       source: 'openstreetmap',
       status: 'unavailable',
-      matched: 0
+      matched: 0,
+      reason: error?.crossingReason || 'processing-error',
+      httpStatus: error?.crossingHttpStatus || null
     };
   }
 }
