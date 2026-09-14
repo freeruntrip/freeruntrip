@@ -10565,7 +10565,229 @@ function initializeRunTripNavigationGuidance(routeSummary) {
     runTripNavigationRuntimeSegments
   );
 }
+// 안내 구간을 횡단 시작점에서 나누기 위한 누적 거리를 계산한다.
+function buildRunTripCrossingStepMetric(points) {
+  const latitude = points[0][0] * Math.PI / 180;
+  const cumulative = [0];
 
+  for (let i = 1; i < points.length; i++) {
+    const previous = points[i - 1];
+    const current = points[i];
+
+    const distance = Math.hypot(
+      (current[0] - previous[0]) * 111320,
+      (current[1] - previous[1]) *
+        111320 * Math.cos(latitude)
+    );
+
+    cumulative.push(
+      cumulative[i - 1] + distance
+    );
+  }
+
+  return {
+    cumulative,
+    total: cumulative[cumulative.length - 1]
+  };
+}
+// 원본 경로를 유지하면서 횡단 안내용 실행 구간을 만든다.
+function buildRunTripCrossingSteps(steps) {
+  const output = [];
+
+  for (const step of steps) {
+    const events = step.crossingEvents;
+    const points = step.geometry;
+
+    if (
+      !Array.isArray(events) ||
+      events.length === 0 ||
+      !Array.isArray(points) ||
+      points.length < 2
+    ) {
+      output.push(step);
+      continue;
+    }
+
+    const metric = buildRunTripCrossingStepMetric(points);
+    const cumulative = metric.cumulative;
+    const total = metric.total;
+
+    if (!Number.isFinite(total) || total <= 0) {
+      output.push(step);
+      continue;
+    }
+
+    const validEvents = events.filter(function (event) {
+      return (
+        event?.source === 'openstreetmap' &&
+        event.evidence === 'tagged-crossing-way-and-node' &&
+        Number.isFinite(event.startMeters) &&
+        Number.isFinite(event.endMeters) &&
+        event.startMeters >= 6 &&
+        event.endMeters > event.startMeters &&
+        event.endMeters <= total &&
+        Array.isArray(event.location) &&
+        event.location.length === 2 &&
+        event.location.every(Number.isFinite) &&
+        Array.isArray(event.endLocation) &&
+        event.endLocation.length === 2 &&
+        event.endLocation.every(Number.isFinite)
+      );
+    }).sort(function (a, b) {
+      return a.startMeters - b.startMeters;
+    });
+
+    if (validEvents.length === 0) {
+      output.push(step);
+      continue;
+    }
+
+    const cuts = [
+      {
+        startMeters: 0,
+        location: points[0],
+        crossing: null
+      },
+      ...validEvents.map(function (event) {
+        return {
+          startMeters: event.startMeters,
+          location: event.location,
+          crossing: event
+        };
+      }),
+      {
+        startMeters: total,
+        location: points[points.length - 1],
+        crossing: null
+      }
+    ];
+
+    for (let i = 0; i < cuts.length - 1; i++) {
+      const start = cuts[i];
+      const end = cuts[i + 1];
+
+      const middlePoints = points.filter(
+        function (point, index) {
+          return (
+            cumulative[index] > start.startMeters &&
+            cumulative[index] < end.startMeters
+          );
+        }
+      );
+
+      const geometry = [
+        start.location,
+        ...middlePoints,
+        end.location
+      ];
+
+      const ratio =
+        (end.startMeters - start.startMeters) / total;
+
+      output.push({
+        ...step,
+        geometry,
+        crossing: start.crossing,
+        crossingEvents: [],
+        distanceMeters: step.distanceMeters * ratio,
+        durationSeconds: step.durationSeconds * ratio,
+        maneuver: start.crossing
+          ? {
+              type: 'crossing',
+              modifier: 'straight',
+              instruction: '길을 건너세요.',
+              location: start.location
+            }
+          : step.maneuver
+      });
+    }
+  }
+
+  return output;
+}
+// 횡단 시작점과 끝점을 기준으로 현재 위치를 계산한다.
+function getRunTripCrossingPosition(
+  stepIndex,
+  latitude,
+  longitude
+) {
+  const crossing =
+    runTripStandardNavigationSteps[stepIndex + 1]?.crossing;
+
+  if (!crossing) {
+    return null;
+  }
+
+  const start = crossing.location;
+  const end = crossing.endLocation;
+
+  const scale = Math.cos(
+    start[0] * Math.PI / 180
+  );
+
+  const dx =
+    (end[1] - start[1]) * 111320 * scale;
+
+  const dy =
+    (end[0] - start[0]) * 111320;
+
+  const px =
+    (longitude - start[1]) * 111320 * scale;
+
+  const py =
+    (latitude - start[0]) * 111320;
+
+  const length = Math.hypot(dx, dy);
+
+  if (!Number.isFinite(length) || length < 1) {
+    return null;
+  }
+
+  const along =
+    (px * dx + py * dy) / length;
+
+  const lateral =
+    Math.abs(px * dy - py * dx) / length;
+
+  return {
+    crossing,
+    along,
+    lateral,
+    length,
+
+    remaining:
+      along >= 0 && lateral <= 10
+        ? 0
+        : Math.hypot(px, py),
+
+    passed:
+      along >= length + 3 &&
+      lateral <= 10
+  };
+}
+// 서버 처리 결과와 현재 실행 구간의 횡단 정보를 확인한다.
+window.getRunTripCrossingDebug = function () {
+  const report = {
+    coverage:
+      latestRunTripRouteSummary?.crossingCoverage || null,
+
+    following: isRunTripFollowing,
+    paused: isRunTripPaused,
+
+    legIndex: runTripNextWaypointIndex,
+    stepIndex: runTripStandardNavigationStepIndex,
+
+    events: runTripStandardNavigationSteps
+      .filter(function (step) {
+        return Boolean(step.crossing);
+      })
+      .map(function (step) {
+        return step.crossing;
+      })
+  };
+
+  return JSON.parse(JSON.stringify(report));
+};
 function initializeRunTripNavigationForActiveLeg() {
   runTripNavigationState = null;
   runTripNavigationImminentKey = null;
@@ -10645,8 +10867,31 @@ function initializeRunTripNavigationForActiveLeg() {
     return;
   }
 
-  runTripStandardNavigationSteps =
-    activeSteps.slice();
+    runTripStandardNavigationSteps =
+    buildRunTripCrossingSteps(activeSteps);
+
+  const hasCrossingGuidance =
+    runTripStandardNavigationSteps.some(function (step) {
+      return Boolean(step.crossing);
+    });
+
+  if (
+    hasCrossingGuidance &&
+    freeRunTripMapboxMainMap &&
+    !freeRunTripMapboxMainMap._runTripCrossingAttribution
+  ) {
+    const attribution = new mapboxgl.AttributionControl({
+      customAttribution:
+        'Crossing data: ' +
+        '<a href="https://www.openstreetmap.org/copyright" ' +
+        'target="_blank" rel="noopener">' +
+        '© OpenStreetMap contributors</a>'
+    });
+
+    freeRunTripMapboxMainMap.addControl(attribution);
+
+    freeRunTripMapboxMainMap._runTripCrossingAttribution = true;
+  }
 
   runTripStandardNavigationStepIndex = 0;
 
@@ -10727,6 +10972,23 @@ function getRunTripStandardNavigationInstruction(
 function buildRunTripManeuverDetail(step) {
   if (!step) {
     return null;
+  }
+
+  if (
+    step.crossing &&
+    step.maneuver?.type === 'crossing'
+  ) {
+    return {
+      type: 'crossing',
+      modifier: 'straight',
+      roadName: '',
+      rawInstruction: '길을 건너세요.',
+      roundaboutExit: null,
+      hasCrosswalkInstruction: false,
+      arrow: '↑',
+      instruction: '길을 건너세요.',
+      crossing: step.crossing
+    };
   }
 
   const type = String(
@@ -10968,10 +11230,17 @@ function getRunTripManeuverDisplayData(
       .trim()
       .toLowerCase();
 
-  /*
+    /*
     type 자체가 의미를 결정하는 maneuver는
     modifier보다 먼저 판단한다.
   */
+
+  if (safeType === 'crossing') {
+    return {
+      arrow: '↑',
+      instruction: '길을 건너세요.'
+    };
+  }
 
   if (safeType === 'arrive') {
     return {
@@ -11367,8 +11636,12 @@ function getRunTripManeuverVoiceInstruction(
       ''
     ).trim();
 
-  if (!instruction) {
+    if (!instruction) {
     return '';
+  }
+
+  if (safeType === 'crossing') {
+    return instruction;
   }
 
   return `${instruction}입니다`;
@@ -11888,13 +12161,23 @@ function updateRunTripNavigationGuidance(
     return;
   }
 
-  let distanceToTarget =
+    let distanceToTarget =
     calculateDistance(
       latitudeNumber,
       longitudeNumber,
       target[0],
       target[1]
     );
+
+  const crossingPosition = getRunTripCrossingPosition(
+    runTripStandardNavigationStepIndex,
+    latitudeNumber,
+    longitudeNumber
+  );
+
+  if (crossingPosition) {
+    distanceToTarget = crossingPosition.remaining;
+  }
 
   runTripStandardNavigationClosestDistance =
     Math.min(
@@ -11905,8 +12188,13 @@ function updateRunTripNavigationGuidance(
   const currentManeuverKey =
     `${runTripNextWaypointIndex}:${runTripStandardNavigationStepIndex}`;
 
-  if (
+    if (
     distanceToTarget <= 20 &&
+    !crossingPosition?.passed &&
+    (
+      !crossingPosition ||
+      crossingPosition.lateral <= 10
+    ) &&
     runTripNavigationImminentKey !== currentManeuverKey &&
     !runTripStandardNavigationVoiceSuppressedForTest &&
     getRunTripStandardNavigationType(
@@ -11934,19 +12222,24 @@ function updateRunTripNavigationGuidance(
     distanceToTarget >=
       runTripStandardNavigationClosestDistance + 8;
 
-  /*
+    /*
     한 GPS 샘플에서는 최대 한 step만 진행한다.
 
-    1) maneuver 18m 이내 진입
-    또는
-    2) 30m 이내까지 접근한 뒤
-       최소 거리보다 8m 이상 다시 멀어짐
+    횡단 안내:
+    횡단 끝점을 통과한 것으로 추정될 때 다음 안내로 전환한다.
+
+    일반 방향 안내:
+    기존의 18m 접근 또는 통과 추정 조건을 사용한다.
   */
+  const canAdvanceManeuver = crossingPosition
+    ? crossingPosition.passed
+    : (
+        distanceToTarget <= 18 ||
+        hasPassedRunTripStandardManeuver
+      );
+
   if (
-    (
-      distanceToTarget <= 18 ||
-      hasPassedRunTripStandardManeuver
-    ) &&
+    canAdvanceManeuver &&
     runTripStandardNavigationStepIndex <
       runTripStandardNavigationSteps.length - 2
   ) {
@@ -11989,9 +12282,19 @@ function updateRunTripNavigationGuidance(
     );
   }
 
-  if (!target) {
+    if (!target) {
     showRunTripNavigationUnavailableBanners();
     return;
+  }
+
+  const nextCrossingPosition = getRunTripCrossingPosition(
+    runTripStandardNavigationStepIndex,
+    latitudeNumber,
+    longitudeNumber
+  );
+
+  if (nextCrossingPosition) {
+    distanceToTarget = nextCrossingPosition.remaining;
   }
 
   const nextType =
@@ -12013,8 +12316,13 @@ function updateRunTripNavigationGuidance(
     다음 maneuver 60m 안에서
     해당 step당 한 번만 음성을 안내한다.
   */
-  if (
+    if (
     distanceToTarget <= 60 &&
+    !nextCrossingPosition?.passed &&
+    (
+      !nextCrossingPosition ||
+      nextCrossingPosition.lateral <= 10
+    ) &&
     nextType !== 'arrive'
   ) {
     announceRunTripStandardNavigation(
@@ -13095,7 +13403,16 @@ function createRunTripRecoveryState() {
         runTripActualRouteSegments
       ),
 
-    plannedRouteSummary: {
+        plannedRouteSummary: {
+      crossingCoverage:
+        latestRunTripRouteSummary.crossingCoverage
+          ? JSON.parse(
+              JSON.stringify(
+                latestRunTripRouteSummary.crossingCoverage
+              )
+            )
+          : null,
+
       distanceKm:
         Number(
           latestRunTripRouteSummary
@@ -13432,7 +13749,16 @@ function restoreActiveRunTripState(
       plannedCoordinates
     );
 
-  latestRunTripRouteSummary = {
+    latestRunTripRouteSummary = {
+    crossingCoverage:
+      plannedSummary.crossingCoverage
+        ? JSON.parse(
+            JSON.stringify(
+              plannedSummary.crossingCoverage
+            )
+          )
+        : null,
+
     distanceKm:
       Math.max(
         0,
@@ -18095,6 +18421,7 @@ const durationMinutes = Math.max(
 );
 
 latestRunTripRouteSummary = {
+  crossingCoverage: outwardRoute.crossingCoverage || null,
   distanceKm: distanceKm,
   durationMinutes: durationMinutes,
   bounds: routeBounds,
@@ -19743,3 +20070,95 @@ function initializeAppWithRunTripRecovery() {
 }
 
 initializeAppWithRunTripRecovery();
+// 현재 로드된 지도 타일에서 횡단보도 후보를 확인한다.
+// 좌표는 GeoJSON의 [경도, 위도] 순서다.
+window.inspectRunTripCrosswalks = function () {
+  const map = freeRunTripMapboxMainMap;
+
+  if (!map || !map.isStyleLoaded()) {
+    console.warn('지도가 로드된 뒤 다시 실행해주세요.');
+    return null;
+  }
+
+  if (map.isMoving() || !map.areTilesLoaded()) {
+    console.warn('지도 이동과 타일 로딩이 끝난 뒤 다시 실행해주세요.');
+    return null;
+  }
+
+  const sources = map.getStyle().sources || {};
+  const checks = [];
+  const candidates = [];
+  const seen = new Set();
+
+  Object.entries(sources).forEach(function ([sourceId, source]) {
+    if (source.type !== 'vector') return;
+
+    ['road', 'structure'].forEach(function (sourceLayer) {
+      try {
+        const features = map.querySourceFeatures(sourceId, {
+          sourceLayer: sourceLayer
+        });
+
+        const matches = features.filter(function (feature) {
+          const properties = feature.properties || {};
+
+          return sourceLayer === 'road'
+            ? properties.type === 'crossing'
+            : properties.class === 'crosswalk';
+        });
+
+        checks.push({
+          sourceId: sourceId,
+          sourceLayer: sourceLayer,
+          loadedFeatures: features.length,
+          matchedFeatures: matches.length
+        });
+
+        matches.forEach(function (feature) {
+          const item = {
+            sourceId: sourceId,
+            sourceLayer: sourceLayer,
+            id: feature.id ?? null,
+            properties: feature.properties || {},
+            geometry: feature.geometry
+          };
+
+          const key = JSON.stringify(item);
+
+          if (!seen.has(key)) {
+            seen.add(key);
+            candidates.push(item);
+          }
+        });
+      } catch (error) {
+        checks.push({
+          sourceId: sourceId,
+          sourceLayer: sourceLayer,
+          error: String(error.message || error)
+        });
+      }
+    });
+  });
+
+  const report = {
+    zoom: map.getZoom(),
+    center: map.getCenter().toArray(),
+    bounds: map.getBounds().toArray(),
+    scope: '현재 로드된 타일 — 화면 밖 일부와 분할 도형 포함 가능',
+    checks: checks,
+    candidates: candidates
+  };
+
+  window.runTripCrosswalkInspection = report;
+
+  console.table(checks);
+  console.log(JSON.stringify(report, null, 2));
+
+  if (candidates.length === 0) {
+    console.warn(
+      '현재 조회에서 후보가 없습니다. 지역 전체에 횡단보도 데이터가 없다는 뜻은 아닙니다.'
+    );
+  }
+
+  return report;
+};
