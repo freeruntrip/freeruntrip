@@ -900,7 +900,17 @@ async function fetchRunTripCrossingElements(query) {
       }
     );
 
-    if (!response.ok) {
+        if (!response.ok) {
+      const errorBody = await response.text().catch(function () {
+        return '';
+      });
+
+      console.warn('FreeRunTrip crossing provider rejection:', {
+        status: response.status,
+        contentType: response.headers.get('content-type'),
+        body: errorBody.slice(0, 1500)
+      });
+
       throw lookupError('http-error', response.status);
     }
 
