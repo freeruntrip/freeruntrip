@@ -888,7 +888,7 @@ async function fetchRunTripCrossingElements(query) {
         headers: {
           'Content-Type':
             'application/x-www-form-urlencoded',
-          Accept: 'application/json',
+            Accept: '*/*',
           'User-Agent':
             'FreeRunTrip/1.0 (+https://freeruntrip.vercel.app/)',
           Referer:
