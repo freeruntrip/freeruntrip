@@ -6576,7 +6576,11 @@ const runTripSearchGuide = document.getElementById(
 const runTripSearchResults = document.getElementById(
   'runTripSearchResults'
 );
+const runTripSearchMapContainer = document.getElementById(
+  'runTripSearchMap'
+);
 
+let freeRunTripMapboxSearchMap = null;
 let activeRunTripSearchTarget = null;
 let runTripSearchTimer = null;
 let runTripSearchRequestId = 0;
@@ -16490,6 +16494,78 @@ async function searchRunTripPlaces(
     );
   }
 }
+function initializeRunTripSearchMap() {
+  if (freeRunTripMapboxSearchMap) {
+    freeRunTripMapboxSearchMap.resize();
+    return freeRunTripMapboxSearchMap;
+  }
+
+  if (
+    !runTripSearchMapContainer ||
+    typeof mapboxgl === 'undefined'
+  ) {
+    console.warn(
+      'FreeRunTrip 장소 검색 지도를 준비하지 못했습니다.'
+    );
+    return null;
+  }
+
+  mapboxgl.accessToken =
+    FREERUNTRIP_MAPBOX_ACCESS_TOKEN;
+
+  let center = [
+    126.9780,
+    37.5665
+  ];
+
+  let zoom = 13;
+
+  if (freeRunTripMapboxMainMap) {
+    const mainCenter =
+      freeRunTripMapboxMainMap.getCenter();
+
+    center = [
+      mainCenter.lng,
+      mainCenter.lat
+    ];
+
+    zoom =
+      freeRunTripMapboxMainMap.getZoom();
+  }
+
+  freeRunTripMapboxSearchMap =
+    new mapboxgl.Map({
+      container: runTripSearchMapContainer,
+      style: FREERUNTRIP_MAPBOX_STYLE_URL,
+      center: center,
+      zoom: zoom,
+      pitch: 0,
+      bearing: 0
+    });
+
+  freeRunTripMapboxSearchMap.on(
+    'load',
+    function () {
+      freeRunTripMapboxSearchMap.resize();
+
+      console.log(
+        'FreeRunTrip 장소 검색 지도 준비 완료'
+      );
+    }
+  );
+
+  freeRunTripMapboxSearchMap.on(
+    'error',
+    function (event) {
+      console.error(
+        'FreeRunTrip 장소 검색 지도 오류:',
+        event.error || event
+      );
+    }
+  );
+
+  return freeRunTripMapboxSearchMap;
+}
 function closeRunTripSearchScreen() {
   runTripSearchRequestId++;
 
@@ -16556,9 +16632,18 @@ runTripSearchInput.value = isDefaultCurrentLocation
      'none';
   }
 
-  setTimeout(function () {
-    runTripSearchInput.focus();
-  }, 100);
+  requestAnimationFrame(function () {
+  const searchMap =
+    initializeRunTripSearchMap();
+
+  if (!searchMap) {
+    return;
+  }
+
+  requestAnimationFrame(function () {
+    searchMap.resize();
+   });
+ });
 }
 
 async function searchPlacesOnRunTripSearchScreen() {
