@@ -1091,6 +1091,66 @@
 ></div>
 </section>
 
+<aside
+  id="runTripMapPlaceSheet"
+  class="runtrip-map-place-sheet hidden"
+  aria-live="polite"
+  aria-label="선택한 장소 정보"
+>
+  <button
+    id="closeRunTripMapPlaceSheetBtn"
+    class="runtrip-map-place-sheet-close"
+    type="button"
+    aria-label="장소 정보 닫기"
+  >
+    ×
+  </button>
+
+  <p
+    id="runTripMapPlaceCategory"
+    class="runtrip-map-place-category"
+  >
+    장소
+  </p>
+
+  <h3 id="runTripMapPlaceName">
+    선택한 장소
+  </h3>
+
+  <p
+    id="runTripMapPlaceAddress"
+    class="runtrip-map-place-address"
+  ></p>
+
+  <p
+    id="runTripMapPlaceBrand"
+    class="runtrip-map-place-brand hidden"
+  ></p>
+
+  <div class="runtrip-map-place-actions">
+    <button
+      id="setRunTripMapPlaceAsOriginBtn"
+      type="button"
+    >
+      출발지
+    </button>
+
+    <button
+      id="addRunTripMapPlaceAsWaypointBtn"
+      type="button"
+    >
+      경유지
+    </button>
+
+    <button
+      id="setRunTripMapPlaceAsDestinationBtn"
+      type="button"
+    >
+      도착지
+    </button>
+  </div>
+</aside>
+
 <!-- FreeRunTrip 하단 내비게이션 -->
 <nav
   id="appBottomNavigation"

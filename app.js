@@ -5540,8 +5540,11 @@ startBtn.addEventListener('click', async function () {
       return;
     }
 
-    announceRunningStart();
+        announceRunningStart();
   }
+
+  hideRunTripMapPlaceSheet();
+
 if (!isRunning) {
   runningIdlePanel.classList.add('hidden');
   runningDashboard.classList.remove('hidden');
@@ -6579,7 +6582,708 @@ const runTripSearchResults = document.getElementById(
 const runTripSearchMapContainer = document.getElementById(
   'runTripSearchMap'
 );
+const runTripMapPlaceSheet =
+  document.getElementById(
+    'runTripMapPlaceSheet'
+  );
 
+const closeRunTripMapPlaceSheetBtn =
+  document.getElementById(
+    'closeRunTripMapPlaceSheetBtn'
+  );
+
+const runTripMapPlaceCategory =
+  document.getElementById(
+    'runTripMapPlaceCategory'
+  );
+
+const runTripMapPlaceName =
+  document.getElementById(
+    'runTripMapPlaceName'
+  );
+
+const runTripMapPlaceAddress =
+  document.getElementById(
+    'runTripMapPlaceAddress'
+  );
+
+const runTripMapPlaceBrand =
+  document.getElementById(
+    'runTripMapPlaceBrand'
+  );
+
+const setRunTripMapPlaceAsOriginBtn =
+  document.getElementById(
+    'setRunTripMapPlaceAsOriginBtn'
+  );
+
+const addRunTripMapPlaceAsWaypointBtn =
+  document.getElementById(
+    'addRunTripMapPlaceAsWaypointBtn'
+  );
+
+const setRunTripMapPlaceAsDestinationBtn =
+  document.getElementById(
+    'setRunTripMapPlaceAsDestinationBtn'
+  );
+
+let selectedRunTripMapPlace = null;
+let runTripMapPlaceDetailRequestId = 0;
+
+function hideRunTripMapPlaceSheet() {
+  selectedRunTripMapPlace = null;
+  runTripMapPlaceDetailRequestId++;
+
+  runTripMapPlaceSheet.classList.add(
+    'hidden'
+  );
+}
+
+function showRunTripMapPlaceSheet(place) {
+  if (!place) {
+    hideRunTripMapPlaceSheet();
+    return;
+  }
+
+    selectedRunTripMapPlace = place;
+
+  const isSearchScreenOpen =
+    !runTripSearchScreen.classList.contains(
+      'hidden'
+    );
+
+  const isRunningInformationOnly =
+    !isSearchScreenOpen &&
+    currentAppPage === 'running';
+
+  const isBottomNavigationVisible =
+    !appBottomNavigation.classList.contains(
+      'hidden'
+    );
+
+  runTripMapPlaceSheet.classList.toggle(
+    'info-only',
+    isRunningInformationOnly
+  );
+
+  runTripMapPlaceSheet.classList.toggle(
+    'above-app-navigation',
+    !isSearchScreenOpen &&
+      isBottomNavigationVisible
+  );
+
+  runTripMapPlaceName.textContent =
+    place.name || '선택한 장소';
+
+  runTripMapPlaceCategory.textContent =
+    place.category || '장소';
+
+  runTripMapPlaceAddress.textContent =
+    place.address ||
+    '상세 주소를 확인하고 있어요.';
+
+  const brand =
+    String(place.brand || '').trim();
+
+  if (brand) {
+    runTripMapPlaceBrand.textContent =
+      `브랜드 · ${brand}`;
+
+    runTripMapPlaceBrand.classList.remove(
+      'hidden'
+    );
+  } else {
+    runTripMapPlaceBrand.textContent = '';
+
+    runTripMapPlaceBrand.classList.add(
+      'hidden'
+    );
+  }
+
+    runTripMapPlaceSheet.classList.remove(
+    'hidden'
+  );
+
+    if (!isRunningInformationOnly) {
+    updateRunTripMapPlaceActionState();
+  }
+}
+
+function updateRunTripMapPlaceActionState() {
+  const waypointLimitReached =
+    runTripWaypointCount >=
+    MAX_RUNTRIP_WAYPOINTS;
+
+  addRunTripMapPlaceAsWaypointBtn.disabled =
+    waypointLimitReached;
+
+  addRunTripMapPlaceAsWaypointBtn.setAttribute(
+    'aria-disabled',
+    String(waypointLimitReached)
+  );
+
+  addRunTripMapPlaceAsWaypointBtn.title =
+    waypointLimitReached
+      ? '경유지는 최대 3개까지 추가할 수 있어요.'
+      : '선택한 장소를 경유지로 추가';
+}
+
+function finishRunTripMapPlaceSelection(
+  statusMessage
+) {
+  hideRunTripMapPlaceSheet();
+  closeRunTripSearchScreen();
+
+  updateRunTripCreateButton();
+  renderRunTripMapPreview();
+
+  runTripStatus.textContent =
+    statusMessage;
+}
+function cleanRunTripMapPlaceText(value) {
+  return String(value || '')
+    .replace(/\\u200B/gi, '')
+    .replace(/\\n/g, ' ')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeRunTripMapPlaceName(value) {
+  return cleanRunTripMapPlaceText(value)
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '');
+}
+function selectBestRunTripMapboxPlace(
+  features,
+  fallbackPlace
+) {
+  if (
+    !Array.isArray(features) ||
+    features.length === 0
+  ) {
+    return null;
+  }
+
+  const targetName =
+    normalizeRunTripMapPlaceName(
+      fallbackPlace?.name
+    );
+
+  const exactMatch =
+    features.find(function (feature) {
+      const featureName =
+        normalizeRunTripMapPlaceName(
+          feature?.properties?.name
+        );
+
+      return (
+        featureName &&
+        targetName &&
+        featureName === targetName
+      );
+    });
+
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const safePartialMatch =
+    features.find(function (feature) {
+      const featureName =
+        normalizeRunTripMapPlaceName(
+          feature?.properties?.name
+        );
+
+      return (
+        featureName &&
+        targetName &&
+        targetName.includes(featureName)
+      );
+    });
+
+  if (safePartialMatch) {
+    return safePartialMatch;
+  }
+
+  return (
+    features.find(function (feature) {
+      return (
+        feature?.properties?.feature_type ===
+        'address'
+      );
+    }) ||
+    null
+  );
+}
+function convertMapboxFeatureToRunTripPlace(
+  feature,
+  fallbackPlace
+) {
+  const properties =
+    feature?.properties || {};
+
+  let coordinates = [
+    fallbackPlace.longitude,
+    fallbackPlace.latitude,
+  ];
+
+  if (
+    properties?.coordinates?.longitude != null &&
+    properties?.coordinates?.latitude != null
+  ) {
+    coordinates = [
+      Number(properties.coordinates.longitude),
+      Number(properties.coordinates.latitude),
+    ];
+  } else if (
+    feature?.geometry?.type === 'Point' &&
+    Array.isArray(
+      feature.geometry.coordinates
+    )
+  ) {
+    coordinates =
+      feature.geometry.coordinates;
+  }
+
+  const category = Array.isArray(
+    properties.poi_category
+  )
+    ? properties.poi_category[0]
+    : properties.poi_category;
+
+  const brand = Array.isArray(
+    properties.brand
+  )
+    ? properties.brand.join(', ')
+    : properties.brand;
+
+  const address =
+    cleanRunTripMapPlaceText(
+      properties.full_address ||
+      properties.address ||
+      properties.place_formatted ||
+      fallbackPlace.address
+    );
+
+    const isAddressFeature =
+      properties.feature_type === 'address';
+
+    const isMapCoordinatePlace =
+  fallbackPlace?.source ===
+  'map-coordinate';
+
+    const name =
+      cleanRunTripMapPlaceText(
+        isAddressFeature &&
+        !isMapCoordinatePlace
+          ? fallbackPlace.name
+          : (
+           properties.name ||
+           properties.full_address ||
+           properties.address ||
+           fallbackPlace.name
+        )
+  );
+
+  return {
+    ...fallbackPlace,
+
+    id:
+      properties.mapbox_id ||
+      fallbackPlace.id,
+
+    mapboxPlaceId:
+      properties.mapbox_id ||
+      fallbackPlace.mapboxPlaceId,
+
+    name,
+    displayName: name,
+    primaryText: name,
+
+    address,
+    secondaryText: address,
+
+    latitude: Number(coordinates[1]),
+    longitude: Number(coordinates[0]),
+
+        category:
+      cleanRunTripMapPlaceText(
+        isAddressFeature
+          ? fallbackPlace.category
+          : (
+              category ||
+              fallbackPlace.category
+            )
+      ),
+
+    brand:
+      cleanRunTripMapPlaceText(
+        isAddressFeature
+          ? fallbackPlace.brand
+          : (
+              brand ||
+              fallbackPlace.brand
+            )
+      ),
+
+    source: 'mapbox-search-box',
+  };
+}
+async function loadRunTripMapPlaceDetails(
+  place
+) {
+  const requestId =
+    ++runTripMapPlaceDetailRequestId;
+
+  const longitude =
+    Number(place?.longitude);
+
+  const latitude =
+    Number(place?.latitude);
+
+  if (
+    !Number.isFinite(longitude) ||
+    !Number.isFinite(latitude)
+  ) {
+    return;
+  }
+
+  const language =
+    typeof detectPlaceSearchLanguage ===
+    'function'
+      ? detectPlaceSearchLanguage(
+          place.name
+        )
+      : 'ko';
+
+  const forwardUrl = new URL(
+    'https://api.mapbox.com/search/searchbox/v1/forward'
+  );
+
+  forwardUrl.searchParams.set(
+    'q',
+    cleanRunTripMapPlaceText(place.name)
+  );
+
+  forwardUrl.searchParams.set(
+    'proximity',
+    `${longitude},${latitude}`
+  );
+
+  forwardUrl.searchParams.set(
+    'types',
+    'poi'
+  );
+
+  forwardUrl.searchParams.set(
+    'limit',
+    '10'
+  );
+
+  forwardUrl.searchParams.set(
+    'language',
+    language
+  );
+
+  forwardUrl.searchParams.set(
+    'auto_complete',
+    'false'
+  );
+
+  forwardUrl.searchParams.set(
+    'access_token',
+    FREERUNTRIP_MAPBOX_ACCESS_TOKEN
+  );
+
+  const reverseUrl = new URL(
+    'https://api.mapbox.com/search/searchbox/v1/reverse'
+  );
+
+  reverseUrl.searchParams.set(
+    'longitude',
+    String(longitude)
+  );
+
+  reverseUrl.searchParams.set(
+    'latitude',
+    String(latitude)
+  );
+
+  reverseUrl.searchParams.set(
+    'types',
+    'poi,address'
+  );
+
+  reverseUrl.searchParams.set(
+    'limit',
+    '10'
+  );
+
+  reverseUrl.searchParams.set(
+    'language',
+    language
+  );
+
+  reverseUrl.searchParams.set(
+    'access_token',
+    FREERUNTRIP_MAPBOX_ACCESS_TOKEN
+  );
+
+  try {
+    let bestFeature = null;
+
+    const forwardResponse =
+      await fetch(
+        forwardUrl.toString()
+      );
+
+    if (forwardResponse.ok) {
+      const forwardData =
+        await forwardResponse.json();
+
+      bestFeature =
+        selectBestRunTripMapboxPlace(
+          forwardData.features,
+          place
+        );
+    }
+
+    if (
+      requestId !==
+      runTripMapPlaceDetailRequestId
+    ) {
+      return;
+    }
+
+    if (!bestFeature) {
+      const reverseResponse =
+        await fetch(
+          reverseUrl.toString()
+        );
+
+      if (reverseResponse.ok) {
+        const reverseData =
+          await reverseResponse.json();
+
+        bestFeature =
+          selectBestRunTripMapboxPlace(
+            reverseData.features,
+            place
+          );
+      }
+    }
+
+    if (
+      requestId !==
+      runTripMapPlaceDetailRequestId
+    ) {
+      return;
+    }
+
+        let detailedPlace =
+      bestFeature
+        ? convertMapboxFeatureToRunTripPlace(
+            bestFeature,
+            place
+          )
+        : {
+            ...place,
+          };
+
+    if (
+      !cleanRunTripMapPlaceText(
+        detailedPlace.address
+      )
+    ) {
+      const googlePlace =
+        await reverseGeocodeRunTripOrigin(
+          latitude,
+          longitude
+        );
+
+      if (
+        requestId !==
+        runTripMapPlaceDetailRequestId
+      ) {
+        return;
+      }
+
+      const googleAddress =
+        getRunTripCurrentLocationAddress(
+          googlePlace
+        );
+
+      if (googleAddress) {
+       const cleanGoogleAddress =
+        cleanRunTripMapPlaceText(
+          googleAddress
+        );
+
+       const googlePlaceName =
+         cleanRunTripMapPlaceText(
+           googlePlace?.primaryText ||
+           googlePlace?.displayName ||
+          googlePlace?.name ||
+        cleanGoogleAddress
+        );
+
+       const isMapCoordinatePlace =
+         detailedPlace?.source ===
+        'map-coordinate';
+
+       detailedPlace = {
+       ...detailedPlace,
+
+       name:
+         isMapCoordinatePlace
+          ? googlePlaceName
+          : detailedPlace.name,
+
+       displayName:
+        isMapCoordinatePlace
+         ? googlePlaceName
+         : detailedPlace.displayName,
+
+       primaryText:
+         isMapCoordinatePlace
+         ? googlePlaceName
+          : detailedPlace.primaryText,
+
+       address: cleanGoogleAddress,
+       secondaryText: cleanGoogleAddress,
+
+       googlePlaceId:
+        googlePlace?.googlePlaceId ||
+        googlePlace?.id ||
+        '',
+
+       addressSource:
+        'google-geocoding',
+      };
+     }
+    }
+
+    if (
+      !cleanRunTripMapPlaceText(
+        detailedPlace.address
+      )
+    ) {
+      runTripMapPlaceAddress.textContent =
+        '주소 정보가 없습니다.';
+
+      return;
+    }
+
+    showRunTripMapPlaceSheet(
+      detailedPlace
+    );
+
+    console.log(
+      'FreeRunTrip MAP PLACE DETAILS',
+      detailedPlace
+    );
+  } catch (error) {
+    if (
+      requestId !==
+      runTripMapPlaceDetailRequestId
+    ) {
+      return;
+    }
+
+    console.warn(
+      'FreeRunTrip: Mapbox 장소 상세 정보를 가져오지 못했습니다.',
+      error
+    );
+
+    runTripMapPlaceAddress.textContent =
+      '주소 정보가 없습니다.';
+  }
+}
+closeRunTripMapPlaceSheetBtn.addEventListener(
+  'click',
+  function () {
+    hideRunTripMapPlaceSheet();
+  }
+);
+
+setRunTripMapPlaceAsOriginBtn.addEventListener(
+  'click',
+  function () {
+    const place = selectedRunTripMapPlace;
+
+    if (!getRunTripPlaceLatLng(place)) {
+      return;
+    }
+
+    const displayName =
+      getRunTripPlaceDisplayName(place);
+
+    selectedRunTripOrigin = place;
+    runTripOriginInput.value = displayName;
+
+    if (runTripReturnToggle.checked) {
+      syncRunTripReturnDestination();
+    }
+
+    finishRunTripMapPlaceSelection(
+      `${displayName}을(를) 출발지로 선택했어요.`
+    );
+  }
+);
+
+addRunTripMapPlaceAsWaypointBtn.addEventListener(
+  'click',
+  function () {
+    const place = selectedRunTripMapPlace;
+
+    if (
+      !getRunTripPlaceLatLng(place) ||
+      runTripWaypointCount >=
+        MAX_RUNTRIP_WAYPOINTS
+    ) {
+      return;
+    }
+
+    const displayName =
+      getRunTripPlaceDisplayName(place);
+
+    addRunTripWaypoint(place, false);
+
+    finishRunTripMapPlaceSelection(
+      `${displayName}을(를) 경유지 ${runTripWaypointCount}(으)로 추가했어요.`
+    );
+  }
+);
+
+setRunTripMapPlaceAsDestinationBtn.addEventListener(
+  'click',
+  function () {
+    const place = selectedRunTripMapPlace;
+
+    if (!getRunTripPlaceLatLng(place)) {
+      return;
+    }
+
+    const displayName =
+      getRunTripPlaceDisplayName(place);
+
+    selectedRunTripDestination = place;
+    isRunTripDestinationAutoSetFromOrigin = false;
+
+    if (runTripReturnToggle.checked) {
+      runTripReturnToggle.checked = false;
+    }
+
+    runTripDestinationInput.value =
+      displayName;
+
+    finishRunTripMapPlaceSelection(
+      `${displayName}을(를) 도착지로 선택했어요.`
+    );
+  }
+);
 let freeRunTripMapboxSearchMap = null;
 let activeRunTripSearchTarget = null;
 let runTripSearchTimer = null;
@@ -15294,9 +15998,11 @@ async function startRunTripFollowing() {
   const countdownCompleted =
     await showRunTripCountdown();
 
-  if (!countdownCompleted) {
+    if (!countdownCompleted) {
     return;
   }
+
+  hideRunTripMapPlaceSheet();
 
   announceRunTripStart();
 
@@ -16494,6 +17200,189 @@ async function searchRunTripPlaces(
     );
   }
 }
+function getRunTripPlaceFromMapClick(
+  mapInstance,
+  event
+) {
+  if (!mapInstance || !event?.point) {
+    return null;
+  }
+
+  const hitPadding = 18;
+
+  const renderedFeatures =
+    mapInstance.queryRenderedFeatures([
+      [
+        event.point.x - hitPadding,
+        event.point.y - hitPadding
+      ],
+      [
+        event.point.x + hitPadding,
+        event.point.y + hitPadding
+      ]
+    ]);
+
+  const selectedFeature =
+    renderedFeatures.find(
+      function (feature) {
+        const properties =
+          feature?.properties || {};
+
+        return Boolean(
+          properties.name ||
+          properties.name_ko ||
+          properties.name_en ||
+          properties.name_local ||
+          properties.name_script ||
+          properties.text ||
+          properties.label
+        );
+      }
+    );
+
+  if (!selectedFeature) {
+  const longitude =
+    Number(event.lngLat?.lng);
+
+  const latitude =
+    Number(event.lngLat?.lat);
+
+  if (
+    !Number.isFinite(longitude) ||
+    !Number.isFinite(latitude)
+  ) {
+    return null;
+  }
+
+  return {
+    id:
+      `coordinate-${longitude}-${latitude}`,
+
+    mapboxPlaceId: '',
+
+    name: '선택한 위치',
+    displayName: '선택한 위치',
+    primaryText: '선택한 위치',
+
+    secondaryText: '',
+    address: '',
+
+    latitude,
+    longitude,
+
+    category: '주소',
+    brand: '',
+
+    source: 'map-coordinate'
+  };
+}
+
+  const properties =
+    selectedFeature.properties || {};
+
+  const featureCoordinates =
+    selectedFeature?.geometry?.type ===
+      'Point' &&
+    Array.isArray(
+      selectedFeature.geometry.coordinates
+    )
+      ? selectedFeature.geometry.coordinates
+      : null;
+
+  const longitude =
+    featureCoordinates &&
+    Number.isFinite(
+      Number(featureCoordinates[0])
+    )
+      ? Number(featureCoordinates[0])
+      : Number(event.lngLat?.lng);
+
+  const latitude =
+    featureCoordinates &&
+    Number.isFinite(
+      Number(featureCoordinates[1])
+    )
+      ? Number(featureCoordinates[1])
+      : Number(event.lngLat?.lat);
+
+  if (
+    !Number.isFinite(longitude) ||
+    !Number.isFinite(latitude)
+  ) {
+    return null;
+  }
+
+  const name =
+    properties.name ||
+    properties.name_ko ||
+    properties.name_en ||
+    properties.name_local ||
+    properties.name_script ||
+    properties.text ||
+    properties.label ||
+    '선택한 장소';
+
+  const category =
+    properties.category ||
+    properties.class ||
+    properties.type ||
+    properties.maki ||
+    '장소';
+
+  const address =
+    properties.full_address ||
+    properties.address ||
+    properties.place_name ||
+    '';
+
+  const brand =
+    properties.brand ||
+    properties.brand_name ||
+    '';
+
+  const mapboxPlaceId =
+    properties.mapbox_id ||
+    properties.mapboxId ||
+    selectedFeature.id ||
+    '';
+
+  return {
+    id:
+      String(mapboxPlaceId || '').trim() ||
+      `map-${longitude}-${latitude}`,
+
+    mapboxPlaceId:
+      String(mapboxPlaceId || '').trim(),
+
+    name:
+      String(name || '').trim(),
+
+    displayName:
+      String(name || '').trim(),
+
+    primaryText:
+      String(name || '').trim(),
+
+    secondaryText:
+      String(address || '').trim(),
+
+    address:
+      String(address || '').trim(),
+
+    latitude,
+    longitude,
+
+    category:
+      String(category || '장소').trim(),
+
+    brand: Array.isArray(brand)
+      ? brand.join(', ')
+      : String(brand || '').trim(),
+
+    source:
+      'mapbox-map-feature'
+  };
+}
 function initializeRunTripSearchMap() {
   if (freeRunTripMapboxSearchMap) {
     freeRunTripMapboxSearchMap.resize();
@@ -16544,15 +17433,39 @@ function initializeRunTripSearchMap() {
     });
 
   freeRunTripMapboxSearchMap.on(
-    'load',
-    function () {
-      freeRunTripMapboxSearchMap.resize();
+  'load',
+  function () {
+    freeRunTripMapboxSearchMap.resize();
 
-      console.log(
-        'FreeRunTrip 장소 검색 지도 준비 완료'
+    console.log(
+      'FreeRunTrip 장소 검색 지도 준비 완료'
+    );
+
+    freeRunTripMapboxSearchMap.on(
+  'click',
+  function (event) {
+    const place =
+      getRunTripPlaceFromMapClick(
+        freeRunTripMapboxSearchMap,
+        event
       );
+
+    if (!place) {
+      hideRunTripMapPlaceSheet();
+      return;
     }
-  );
+
+    showRunTripMapPlaceSheet(place);
+    loadRunTripMapPlaceDetails(place);
+
+    console.log(
+      'FreeRunTrip MAP PLACE SELECTED',
+       place
+     );
+    }
+   );
+  }
+);
 
   freeRunTripMapboxSearchMap.on(
     'error',
@@ -16575,6 +17488,7 @@ function closeRunTripSearchScreen() {
   runTripSearchResults.innerHTML = '';
   runTripSearchInput.value = '';
   activeRunTripSearchTarget = null;
+  hideRunTripMapPlaceSheet();
 
   map.getContainer().style.display =
   'none';
@@ -19521,6 +20435,42 @@ const appNavButtons = document.querySelectorAll(
 );
 
 let currentAppPage = 'home';
+if (freeRunTripMapboxMainMap) {
+  freeRunTripMapboxMainMap.on(
+    'click',
+    function (event) {
+      const canShowPlaceInformation =
+        !isRunning &&
+        !isRunTripFollowing &&
+        runTripSearchScreen.classList.contains(
+          'hidden'
+        ) &&
+        (
+          currentAppPage === 'running' ||
+          currentAppPage === 'runtrip'
+        );
+
+      if (!canShowPlaceInformation) {
+        hideRunTripMapPlaceSheet();
+        return;
+      }
+
+      const place =
+        getRunTripPlaceFromMapClick(
+          freeRunTripMapboxMainMap,
+          event
+        );
+
+      if (!place) {
+        hideRunTripMapPlaceSheet();
+        return;
+      }
+
+      showRunTripMapPlaceSheet(place);
+      loadRunTripMapPlaceDetails(place);
+    }
+  );
+}
 
 function hideAllMainAppScreens() {
   homeScreen.classList.add('hidden');
@@ -19600,12 +20550,14 @@ function hideBottomNavigation() {
 function openAppPage(pageName) {
   /* 실제 러닝 또는 RunTrip 실행 중에는
      다른 탭으로 이동하지 않는다. */
-  if (
+    if (
     isRunning ||
     isRunTripFollowing
   ) {
     return;
   }
+
+  hideRunTripMapPlaceSheet();
 
   hideAllMainAppScreens();
 

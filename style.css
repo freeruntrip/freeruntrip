@@ -1847,7 +1847,153 @@ height: 100%;
 .runtrip-search-map .mapboxgl-canvas {
   outline: none;
 }
+/* RunTrip 지도 장소 정보창 */
+.runtrip-map-place-sheet {
+  position: fixed;
+  left: 50%;
+  right: auto;
+  bottom:
+    calc(
+      env(safe-area-inset-bottom, 0px)
+      + 16px
+    );
+  z-index: 1500;
 
+  box-sizing: border-box;
+  width: min(
+    calc(100% - 32px),
+    calc(var(--app-mobile-width) - 32px)
+  );
+  padding: 20px 18px 18px;
+
+  transform: translateX(-50%);
+
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 24px;
+
+  background: rgba(255, 255, 255, 0.98);
+  color: #0f172a;
+
+  box-shadow:
+    0 18px 50px rgba(15, 23, 42, 0.2);
+
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+.runtrip-map-place-sheet.above-app-navigation {
+  bottom:
+    calc(
+      env(safe-area-inset-bottom, 0px)
+      + 94px
+    );
+}
+
+.runtrip-map-place-sheet.info-only
+  .runtrip-map-place-actions {
+  display: none;
+}
+.runtrip-map-place-sheet.hidden {
+  display: none;
+}
+
+.runtrip-map-place-sheet-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+
+  width: 34px;
+  height: 34px;
+  padding: 0;
+
+  border: none;
+  border-radius: 50%;
+
+  background: #f1f5f9;
+  color: #334155;
+
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.runtrip-map-place-category {
+  margin: 0 46px 7px 0;
+
+  color: #0f766e;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.03em;
+}
+
+.runtrip-map-place-sheet h3 {
+  margin: 0 46px 8px 0;
+
+  color: #0f172a;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.runtrip-map-place-address,
+.runtrip-map-place-brand {
+  margin: 0 46px 6px 0;
+
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.runtrip-map-place-brand.hidden {
+  display: none;
+}
+
+.runtrip-map-place-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+
+  margin-top: 16px;
+}
+
+.runtrip-map-place-actions button {
+  min-width: 0;
+  min-height: 46px;
+  padding: 10px 6px;
+
+  border: none;
+  border-radius: 15px;
+
+  background: #ccfbf1;
+  color: #115e59;
+
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+#setRunTripMapPlaceAsOriginBtn {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+#setRunTripMapPlaceAsDestinationBtn {
+  background: #14b8a6;
+  color: #ffffff;
+}
+
+.runtrip-map-place-actions button:active,
+.runtrip-map-place-sheet-close:active {
+  transform: scale(0.96);
+}
+.runtrip-map-place-actions button:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  transform: none;
+}
 #runTripSearchInput {
   width: 100%;
   box-sizing: border-box;
