@@ -6708,11 +6708,24 @@ function showRunTripMapPlaceSheet(place) {
     updateRunTripMapPlaceActionState();
   }
 }
+function findRunTripEmptyWaypointInput() {
+  const inputs = Array.from(
+    runTripWaypoints.querySelectorAll(
+      '.runtrip-waypoint-input'
+    )
+  );
 
+  return inputs.find(function (input) {
+    return !input.runTripPlace;
+  }) || null;
+}
 function updateRunTripMapPlaceActionState() {
+  const hasEmptyWaypoint =
+    Boolean(findRunTripEmptyWaypointInput());
+
   const waypointLimitReached =
-    runTripWaypointCount >=
-    MAX_RUNTRIP_WAYPOINTS;
+    !hasEmptyWaypoint &&
+    runTripWaypointCount >= MAX_RUNTRIP_WAYPOINTS;
 
   addRunTripMapPlaceAsWaypointBtn.disabled =
     waypointLimitReached;
@@ -7238,21 +7251,52 @@ addRunTripMapPlaceAsWaypointBtn.addEventListener(
   function () {
     const place = selectedRunTripMapPlace;
 
-    if (
-      !getRunTripPlaceLatLng(place) ||
-      runTripWaypointCount >=
-        MAX_RUNTRIP_WAYPOINTS
-    ) {
+    if (!getRunTripPlaceLatLng(place)) {
       return;
     }
+
+    let targetInput =
+      findRunTripEmptyWaypointInput();
+
+    if (!targetInput) {
+      if (
+        runTripWaypointCount >=
+        MAX_RUNTRIP_WAYPOINTS
+      ) {
+        return;
+      }
+
+      addRunTripWaypoint(place, false);
+
+      const inputs =
+        runTripWaypoints.querySelectorAll(
+          '.runtrip-waypoint-input'
+        );
+
+      targetInput = inputs[inputs.length - 1];
+    } else {
+      targetInput.runTripPlace = place;
+      targetInput.value =
+        getRunTripPlaceDisplayName(place);
+    }
+
+    refreshRunTripWaypointLabels();
+    updateRunTripMapPlaceActionState();
+
+    const waypointInputs = Array.from(
+      runTripWaypoints.querySelectorAll(
+        '.runtrip-waypoint-input'
+      )
+    );
+
+    const waypointNumber =
+      waypointInputs.indexOf(targetInput) + 1;
 
     const displayName =
       getRunTripPlaceDisplayName(place);
 
-    addRunTripWaypoint(place, false);
-
     finishRunTripMapPlaceSelection(
-      `${displayName}을(를) 경유지 ${runTripWaypointCount}(으)로 추가했어요.`
+      `${displayName}을(를) 경유지 ${waypointNumber}(으)로 선택했어요.`
     );
   }
 );
