@@ -6747,11 +6747,11 @@ function renderRunTripNearbyPlaces(place) {
     place.language || document.documentElement.lang || 'ko'
   ).toLowerCase().split('-')[0];
 
-  const labels = {
-    ko: '주변 장소 · 원하는 장소를 선택하세요',
-    en: 'Nearby places · Select a place',
-    ja: '周辺の場所 · 場所を選択してください',
-    de: 'Orte in der Nähe · Ort auswählen',
+    const labels = {
+    ko: '이 위치에 등록된 장소 · 선택하세요',
+    en: 'Places registered at this location · Select a place',
+    ja: 'この位置に登録された場所 · 選択してください',
+    de: 'An diesem Standort registrierte Orte · Ort auswählen',
   };
 
   const heading = document.createElement('p');
@@ -7215,6 +7215,13 @@ async function loadRunTripMapPlaceDetails(place) {
     }
 
     const googlePlace = data?.place;
+    const resolvedPlace =
+      data?.placeMatchMethod === 'rooftop-coordinate' &&
+      Array.isArray(data.nearbyPlaces) &&
+      data.nearbyPlaces.length === 1 &&
+      data.resolvedPlace?.id === data.nearbyPlaces[0]?.id
+        ? data.nearbyPlaces[0]
+        : null;
 
     const googleAddress =
       cleanRunTripMapPlaceText(
@@ -7338,12 +7345,22 @@ async function loadRunTripMapPlaceDetails(place) {
       mapDetailsState: 'ready'
     };
 
-    showRunTripMapPlaceSheet(detailedPlace);
+        showRunTripMapPlaceSheet(detailedPlace);
+
+    // 이름 없는 지도 지점은 주소 위치에 일치하는
+    // 단일 매장이 있을 때 해당 매장 정보로 표시한다.
+    if (resolvedPlace && !place.isMapPoi) {
+      selectRunTripNearbyPlace(
+        resolvedPlace,
+        detailedPlace
+      );
+    }
+
     updateRunTripMapPlaceActionState();
 
     console.log(
       'FreeRunTrip MAP PLACE DETAILS',
-      detailedPlace
+      selectedRunTripMapPlace
     );
   } catch (error) {
     if (

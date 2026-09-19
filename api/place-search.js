@@ -908,6 +908,60 @@ async function findMapPoiDetails({
     clearTimeout(timeoutId);
   }
 }
+function filterPlacesAtAddress(places, addressResult) {
+  const geometry = addressResult?.geometry;
+  const addressLocation = geometry?.location;
+
+  if (
+    geometry?.location_type !== 'ROOFTOP' ||
+    !Number.isFinite(addressLocation?.lat) ||
+    !Number.isFinite(addressLocation?.lng) ||
+    !Array.isArray(places)
+  ) {
+    return [];
+  }
+
+  const radians = Math.PI / 180;
+  const matches = new Map();
+
+  for (const place of places) {
+    const latitude = place?.location?.latitude;
+    const longitude = place?.location?.longitude;
+
+    if (
+      !place?.id ||
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      Math.abs(latitude) > 90 ||
+      Math.abs(longitude) > 180
+    ) {
+      continue;
+    }
+
+    const deltaLatitude =
+      (latitude - addressLocation.lat) * radians;
+    const deltaLongitude =
+      (longitude - addressLocation.lng) * radians;
+
+    const a =
+      Math.sin(deltaLatitude / 2) ** 2 +
+      Math.cos(addressLocation.lat * radians) *
+        Math.cos(latitude * radians) *
+        Math.sin(deltaLongitude / 2) ** 2;
+
+    const distanceMeters =
+      6371000 * 2 *
+      Math.asin(Math.sqrt(Math.min(1, Math.max(0, a))));
+
+    // 등록 좌표의 미세한 차이만 허용한다.
+    // 가까운 매장을 임의로 선택하는 반경 검색과 구분한다.
+    if (distanceMeters <= 1) {
+      matches.set(place.id, place);
+    }
+  }
+
+  return [...matches.values()];
+}
 async function requestGoogleNearbyPlaces({
   latitude,
   longitude,
@@ -1247,10 +1301,26 @@ async function handleFetchRequest(request) {
             }),
       ]);
 
+            const addressPlaces = filterPlacesAtAddress(
+        nearbyResult.places,
+        bestResult
+      );
+
+      const resolvedPlace =
+        addressPlaces.length === 1
+          ? addressPlaces[0]
+          : null;
       return jsonResponse({
-        place,
+                place,
         matchedPoi,
-        nearbyPlaces: nearbyResult.places,
+
+        nearbyPlaces: addressPlaces,
+        resolvedPlace,
+
+        placeMatchMethod:
+          addressPlaces.length > 0
+            ? 'rooftop-coordinate'
+            : 'none',
                 nearbyStatus: nearbyResult.status,
 
         addressCandidates: results
