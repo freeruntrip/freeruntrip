@@ -701,6 +701,8 @@ async function requestGooglePlacesTextSearch({
   includedType,
   strictTypeFiltering = false,
   apiKey,
+  biasRadius = 50000,
+  signal,
 }) {
   const body = {
     textQuery: String(query || '').trim(),
@@ -727,7 +729,7 @@ async function requestGooglePlacesTextSearch({
           latitude: Number(locationBias.latitude),
           longitude: Number(locationBias.longitude),
         },
-        radius: 50000,
+                radius: biasRadius,
       },
     };
   }
@@ -740,6 +742,7 @@ async function requestGooglePlacesTextSearch({
     GOOGLE_PLACES_TEXT_SEARCH_URL,
     {
       method: 'POST',
+      signal,
       headers: {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': apiKey,
@@ -769,7 +772,142 @@ async function requestGooglePlacesTextSearch({
     data,
   };
 }
+function normalizeMapPoiName(value) {
+  return String(value || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[^\p{L}\p{N}]/gu, '');
+}
+function selectMapPoiMatch(
+  places,
+  name,
+  latitude,
+  longitude
+) {
+  const target = normalizeMapPoiName(name);
 
+  if (
+    !target ||
+    !Array.isArray(places) ||
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude)
+  ) {
+    return null;
+  }
+
+  const matches = new Map();
+
+  for (const candidate of places) {
+    const rawName = String(
+      candidate?.displayName?.text || ''
+    ).trim();
+
+    const candidateName =
+      normalizeMapPoiName(rawName);
+
+    // 이름이 같거나 기존 이름 뒤에 지점명 등이 붙은 후보.
+    const nameMatches =
+      candidateName === target ||
+      (
+        target.length >= 3 &&
+        candidateName.startsWith(target)
+      );
+
+    const lat = candidate?.location?.latitude;
+    const lng = candidate?.location?.longitude;
+
+    if (
+      !nameMatches ||
+      !candidate?.id ||
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      Math.abs(lat) > 90 ||
+      Math.abs(lng) > 180
+    ) {
+      continue;
+    }
+
+    const radians = Math.PI / 180;
+    const dLat = (lat - latitude) * radians;
+    const dLng = (lng - longitude) * radians;
+
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(latitude * radians) *
+        Math.cos(lat * radians) *
+        Math.sin(dLng / 2) ** 2;
+
+    const distance =
+      6371000 * 2 *
+      Math.asin(Math.sqrt(Math.min(1, a)));
+
+    // 선택한 위치에서 60m를 넘는 후보는 제외한다.
+    if (distance > 60) {
+      continue;
+    }
+
+    matches.set(candidate.id, {
+      name: rawName,
+      googlePlaceId: candidate.id,
+      category: String(
+        candidate.primaryTypeDisplayName?.text || ''
+      ).trim(),
+    });
+  }
+
+  // 후보가 여러 개면 임의로 고르지 않는다.
+  return matches.size === 1
+    ? [...matches.values()][0]
+    : null;
+}
+async function findMapPoiDetails({
+  name,
+  latitude,
+  longitude,
+  language,
+  apiKey,
+}) {
+  if (!name || name.length > 256) {
+    return null;
+  }
+
+  const controller = new AbortController();
+
+  const timeoutId = setTimeout(function () {
+    controller.abort();
+  }, 2500);
+
+  try {
+    const result = await requestGooglePlacesTextSearch({
+      query: name,
+      language,
+      locationBias: {
+        latitude,
+        longitude,
+      },
+      biasRadius: 150,
+      apiKey,
+      signal: controller.signal,
+    });
+
+    if (!result.ok) {
+      return null;
+    }
+
+    return selectMapPoiMatch(
+      result.data?.places,
+      name,
+      latitude,
+      longitude
+    );
+  } catch {
+    // 장소명 조회가 실패해도 기존 주소 조회는 유지한다.
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 async function requestGoogleReverseGeocode({
   latitude,
   longitude,
@@ -983,8 +1121,24 @@ async function handleFetchRequest(request) {
         longitude
       );
 
+            const poiName = String(
+        url.searchParams.get('poiName') || ''
+      ).trim();
+
+      const matchedPoi =
+        place && poiName
+          ? await findMapPoiDetails({
+              name: poiName,
+              latitude,
+              longitude,
+              language,
+              apiKey,
+            })
+          : null;
+
       return jsonResponse({
         place,
+        matchedPoi,
         provider: 'google-geocoding',
         language,
       });
