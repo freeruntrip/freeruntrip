@@ -1251,7 +1251,25 @@ async function handleFetchRequest(request) {
         place,
         matchedPoi,
         nearbyPlaces: nearbyResult.places,
-        nearbyStatus: nearbyResult.status,
+                nearbyStatus: nearbyResult.status,
+
+        addressCandidates: results
+          .filter((result) =>
+            Array.isArray(result.types) &&
+            result.types.some((type) =>
+              ['street_address', 'premise', 'subpremise']
+                .includes(type)
+            )
+          )
+          .map((result) => ({
+            id: result.place_id || '',
+            address: result.formatted_address || '',
+            types: result.types,
+            addressComponents: result.address_components || [],
+            location: result.geometry?.location || null,
+            locationType: result.geometry?.location_type || '',
+          })),
+
         provider: 'google-geocoding',
         language,
       });
