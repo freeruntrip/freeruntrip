@@ -908,6 +908,101 @@ async function findMapPoiDetails({
     clearTimeout(timeoutId);
   }
 }
+async function requestGoogleNearbyPlaces({
+  latitude,
+  longitude,
+  language,
+  apiKey,
+}) {
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    Math.abs(latitude) > 90 ||
+    Math.abs(longitude) > 180
+  ) {
+    return { places: [], status: 'invalid_coordinates' };
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+  try {
+    const response = await fetch(
+      'https://places.googleapis.com/v1/places:searchNearby',
+      {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': [
+            'places.id',
+            'places.displayName',
+            'places.formattedAddress',
+            'places.addressComponents',
+            'places.location',
+            'places.types',
+            'places.primaryTypeDisplayName',
+          ].join(','),
+        },
+        body: JSON.stringify({
+          languageCode: normalizeLanguage(language),
+          maxResultCount: 20,
+          rankPreference: 'DISTANCE',
+          locationRestriction: {
+            circle: {
+              center: { latitude, longitude },
+              radius: 100,
+            },
+          },
+        }),
+      }
+    );
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok || data.error) {
+      console.error('Google Nearby Search failed:', {
+        status: response.status,
+        code: data.error?.status || '',
+      });
+
+      return { places: [], status: 'error' };
+    }
+
+    if (!Array.isArray(data.places)) {
+      return {
+        places: [],
+        status: data.places == null ? 'empty' : 'invalid_response',
+      };
+    }
+
+    const places = data.places.filter((place) => {
+      const location = place?.location;
+
+      return (
+        place?.id &&
+        String(place?.displayName?.text || '').trim() &&
+        Number.isFinite(location?.latitude) &&
+        Number.isFinite(location?.longitude) &&
+        Math.abs(location.latitude) <= 90 &&
+        Math.abs(location.longitude) <= 180
+      );
+    });
+
+    return {
+      places,
+      status: places.length > 0 ? 'ok' : 'empty',
+    };
+  } catch (error) {
+    return {
+      places: [],
+      status: error?.name === 'AbortError' ? 'timeout' : 'error',
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 async function requestGoogleReverseGeocode({
   latitude,
   longitude,
@@ -1121,24 +1216,42 @@ async function handleFetchRequest(request) {
         longitude
       );
 
-            const poiName = String(
+                  const poiName = String(
         url.searchParams.get('poiName') || ''
       ).trim();
 
-      const matchedPoi =
+      const includeNearby =
+        url.searchParams.get('includeNearby') === '1';
+
+      const [matchedPoi, nearbyResult] = await Promise.all([
         place && poiName
-          ? await findMapPoiDetails({
+          ? findMapPoiDetails({
               name: poiName,
               latitude,
               longitude,
               language,
               apiKey,
             })
-          : null;
+          : Promise.resolve(null),
+
+        includeNearby
+          ? requestGoogleNearbyPlaces({
+              latitude,
+              longitude,
+              language,
+              apiKey,
+            })
+          : Promise.resolve({
+              places: [],
+              status: 'not_requested',
+            }),
+      ]);
 
       return jsonResponse({
         place,
         matchedPoi,
+        nearbyPlaces: nearbyResult.places,
+        nearbyStatus: nearbyResult.status,
         provider: 'google-geocoding',
         language,
       });
