@@ -908,59 +908,113 @@ async function findMapPoiDetails({
     clearTimeout(timeoutId);
   }
 }
-function filterPlacesAtAddress(places, addressResult) {
-  const geometry = addressResult?.geometry;
-  const addressLocation = geometry?.location;
+async function filterPlacesAtAddress(
+  places,
+  addressResult,
+  language,
+  apiKey
+) {
+  const addressId = addressResult?.place_id;
+  const addressTypes = addressResult?.types || [];
 
   if (
-    geometry?.location_type !== 'ROOFTOP' ||
-    !Number.isFinite(addressLocation?.lat) ||
-    !Number.isFinite(addressLocation?.lng) ||
+    !addressId ||
+    !addressTypes.some((type) =>
+      ['street_address', 'premise', 'subpremise'].includes(type)
+    ) ||
     !Array.isArray(places)
   ) {
     return [];
   }
 
-  const radians = Math.PI / 180;
-  const matches = new Map();
+  const candidates = [
+    ...new Map(
+      places
+        .filter((place) =>
+          place?.id &&
+          Number.isFinite(place.location?.latitude) &&
+          Number.isFinite(place.location?.longitude) &&
+          Math.abs(place.location.latitude) <= 90 &&
+          Math.abs(place.location.longitude) <= 180
+        )
+        .map((place) => [place.id, place])
+    ).values(),
+  ];
 
-  for (const place of places) {
-    const latitude = place?.location?.latitude;
-    const longitude = place?.location?.longitude;
+  if (!candidates.length) return [];
 
-    if (
-      !place?.id ||
-      !Number.isFinite(latitude) ||
-      !Number.isFinite(longitude) ||
-      Math.abs(latitude) > 90 ||
-      Math.abs(longitude) > 180
-    ) {
-      continue;
-    }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5000);
+  const matches = [];
+  let nextIndex = 0;
+  let incomplete = false;
 
-    const deltaLatitude =
-      (latitude - addressLocation.lat) * radians;
-    const deltaLongitude =
-      (longitude - addressLocation.lng) * radians;
+  async function checkCandidates() {
+    while (nextIndex < candidates.length) {
+      if (controller.signal.aborted) {
+        incomplete = true;
+        return;
+      }
 
-    const a =
-      Math.sin(deltaLatitude / 2) ** 2 +
-      Math.cos(addressLocation.lat * radians) *
-        Math.cos(latitude * radians) *
-        Math.sin(deltaLongitude / 2) ** 2;
+      const candidate = candidates[nextIndex++];
 
-    const distanceMeters =
-      6371000 * 2 *
-      Math.asin(Math.sqrt(Math.min(1, Math.max(0, a))));
+      try {
+        const url = new URL(GOOGLE_GEOCODING_REVERSE_URL);
+        url.searchParams.set(
+          'latlng',
+          `${candidate.location.latitude},${candidate.location.longitude}`
+        );
+        url.searchParams.set('language', normalizeLanguage(language));
+        url.searchParams.set('key', apiKey);
 
-    // 등록 좌표의 미세한 차이만 허용한다.
-    // 가까운 매장을 임의로 선택하는 반경 검색과 구분한다.
-    if (distanceMeters <= 1) {
-      matches.set(place.id, place);
+        const response = await fetch(url, {
+          signal: controller.signal,
+          headers: { Accept: 'application/json' },
+        });
+
+        const data = await response.json();
+
+        if (
+          !response.ok ||
+          !['OK', 'ZERO_RESULTS'].includes(data.status)
+        ) {
+          incomplete = true;
+          continue;
+        }
+
+        if (data.status === 'ZERO_RESULTS') continue;
+
+        if (!Array.isArray(data.results)) {
+          incomplete = true;
+          continue;
+        }
+
+        const candidateAddress =
+          chooseBestReverseGeocodeResult(data.results);
+
+        if (candidateAddress?.place_id === addressId) {
+          matches.push(candidate);
+        }
+      } catch {
+        incomplete = true;
+      }
     }
   }
 
-  return [...matches.values()];
+  try {
+    // 同時 요청은 최대 4개로 제한한다.
+    await Promise.all(
+      Array.from(
+        { length: Math.min(4, candidates.length) },
+        () => checkCandidates()
+      )
+    );
+
+    // 일부 조회가 실패하면 단일 매장이라고 확정하지 않는다.
+    return incomplete ? [] : matches;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 async function requestGoogleNearbyPlaces({
   latitude,
@@ -1301,9 +1355,11 @@ async function handleFetchRequest(request) {
             }),
       ]);
 
-            const addressPlaces = filterPlacesAtAddress(
+                  const addressPlaces = await filterPlacesAtAddress(
         nearbyResult.places,
-        bestResult
+        bestResult,
+        language,
+        apiKey
       );
 
       const resolvedPlace =
@@ -1319,7 +1375,7 @@ async function handleFetchRequest(request) {
 
         placeMatchMethod:
           addressPlaces.length > 0
-            ? 'rooftop-coordinate'
+            ? 'reverse-address-id'
             : 'none',
                 nearbyStatus: nearbyResult.status,
 

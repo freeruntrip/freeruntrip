@@ -7175,9 +7175,9 @@ async function loadRunTripMapPlaceDetails(place) {
 
   const controller = new AbortController();
 
-  const timeoutId = setTimeout(function () {
+    const timeoutId = setTimeout(function () {
     controller.abort();
-  }, 12000);
+  }, 20000);
 
   try {
         let detailsUrl = getReverseGeocodeUrl(
@@ -7216,7 +7216,7 @@ async function loadRunTripMapPlaceDetails(place) {
 
     const googlePlace = data?.place;
     const resolvedPlace =
-      data?.placeMatchMethod === 'rooftop-coordinate' &&
+            data?.placeMatchMethod === 'reverse-address-id' &&
       Array.isArray(data.nearbyPlaces) &&
       data.nearbyPlaces.length === 1 &&
       data.resolvedPlace?.id === data.nearbyPlaces[0]?.id
