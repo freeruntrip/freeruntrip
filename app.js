@@ -6638,188 +6638,71 @@ function hideRunTripMapPlaceSheet() {
     'hidden'
   );
 }
-function selectRunTripNearbyPlace(candidate, parentPlace) {
-  if (selectedRunTripMapPlace !== parentPlace) return;
-
-  const name = cleanRunTripMapPlaceText(
-    candidate?.displayName?.text
-  );
-  const address = cleanRunTripMapPlaceText(
-    candidate?.formattedAddress
-  );
-  const latitude = candidate?.location?.latitude;
-  const longitude = candidate?.location?.longitude;
-
-  if (
-    !candidate?.id ||
-    !name ||
-    !address ||
-    !Number.isFinite(latitude) ||
-    !Number.isFinite(longitude) ||
-    Math.abs(latitude) > 90 ||
-    Math.abs(longitude) > 180
-  ) {
-    return;
-  }
-
-  // 명시적으로 선택한 매장의 이름·주소·좌표를 함께 사용한다.
-  const selectedPlace = {
-    id: candidate.id,
-    googlePlaceId: candidate.id,
-    matchedGooglePlaceId: candidate.id,
-    name,
-    displayName: name,
-    primaryText: name,
-    address,
-    secondaryText: address,
-    roadAddress: '',
-    lotAddress: '',
-    latitude,
-    longitude,
-    category: cleanRunTripMapPlaceText(
-      candidate.primaryTypeDisplayName?.text
-    ),
-    brand: '',
-    source: 'google-places-nearby',
-    nameSource: 'google-places',
-    addressSource: 'google-places',
-    language: parentPlace.language || '',
-    isMapPoi: true,
-    nearbyPlaces: [],
-    nearbyStatus: 'selected',
-    mapDetailsState: 'ready',
-  };
-
-  runTripMapPlaceDetailRequestId++;
-  showRunTripMapPlaceSheet(selectedPlace);
-}
-function renderRunTripNearbyPlaces(place) {
-  let container = document.getElementById(
-    'runTripNearbyPlaces'
-  );
-
-  if (!container) {
-    container = document.createElement('div');
-    container.id = 'runTripNearbyPlaces';
-
-    runTripMapPlaceBrand.insertAdjacentElement(
-      'afterend',
-      container
-    );
-  }
-
-  container.replaceChildren();
-  container.hidden = true;
-
-  if (
-    place.mapDetailsState !== 'ready' ||
-    !Array.isArray(place.nearbyPlaces)
-  ) {
-    return;
-  }
-
-  const seenIds = new Set();
-
-  const candidates = place.nearbyPlaces.filter((candidate) => {
-    const id = candidate?.id;
-    const location = candidate?.location;
-
-    if (
-      !id ||
-      seenIds.has(id) ||
-      !cleanRunTripMapPlaceText(candidate?.displayName?.text) ||
-      !cleanRunTripMapPlaceText(candidate?.formattedAddress) ||
-      !Number.isFinite(location?.latitude) ||
-      !Number.isFinite(location?.longitude) ||
-      Math.abs(location.latitude) > 90 ||
-      Math.abs(location.longitude) > 180
-    ) {
-      return false;
-    }
-
-    seenIds.add(id);
-    return true;
-  });
-
-  if (!candidates.length) return;
-
+function getRunTripMapPlaceLabels() {
   const language = String(
-    place.language || document.documentElement.lang || 'ko'
+    document.documentElement.lang || 'ko'
   ).toLowerCase().split('-')[0];
 
-    const labels = {
-    ko: '이 위치에 등록된 장소 · 선택하세요',
-    en: 'Places registered at this location · Select a place',
-    ja: 'この位置に登録された場所 · 選択してください',
-    de: 'An diesem Standort registrierte Orte · Ort auswählen',
+  const labels = {
+    ko: {
+      location: '선택한 위치',
+      place: '장소',
+      address: '주소',
+      loading: '주소를 확인하고 있어요…',
+      unavailable: '주소 정보가 없습니다',
+      error: '주소를 찾지 못했어요. 같은 지점을 다시 터치해 주세요.',
+      brand: '브랜드'
+    },
+    en: {
+      location: 'Selected location',
+      place: 'Place',
+      address: 'Address',
+      loading: 'Checking the address…',
+      unavailable: 'No address information available',
+      error: 'Could not find the address. Tap the same location to try again.',
+      brand: 'Brand'
+    },
+    ja: {
+      location: '選択した位置',
+      place: '場所',
+      address: '住所',
+      loading: '住所を確認しています…',
+      unavailable: '住所情報がありません',
+      error: '住所を取得できませんでした。同じ位置をもう一度タップしてください。',
+      brand: 'ブランド'
+    },
+    de: {
+      location: 'Ausgewählter Standort',
+      place: 'Ort',
+      address: 'Adresse',
+      loading: 'Adresse wird geprüft…',
+      unavailable: 'Keine Adressinformationen verfügbar',
+      error: 'Adresse nicht gefunden. Tippe erneut auf denselben Standort.',
+      brand: 'Marke'
+    }
   };
 
-  const heading = document.createElement('p');
-  heading.textContent = labels[language] || labels.en;
-  heading.style.cssText =
-    'margin:12px 0 8px;font-size:14px;font-weight:700;color:#0f766e;';
-
-  const list = document.createElement('div');
-  list.style.cssText =
-    'max-height:180px;overflow-y:auto;overscroll-behavior:contain;';
-
-  candidates.forEach((candidate) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.style.cssText =
-      'display:block;width:100%;margin:0 0 8px;padding:12px;' +
-      'border:1px solid #cbd5e1;border-radius:12px;' +
-      'background:#f8fafc;color:#0f172a;text-align:start;' +
-      'font:inherit;cursor:pointer;white-space:normal;';
-
-    const name = document.createElement('strong');
-    name.textContent = cleanRunTripMapPlaceText(
-      candidate.displayName.text
-    );
-    name.style.cssText =
-      'display:block;font-size:15px;overflow-wrap:anywhere;';
-
-    const address = document.createElement('span');
-    address.textContent = cleanRunTripMapPlaceText(
-      candidate.formattedAddress
-    );
-    address.style.cssText =
-      'display:block;margin-top:4px;font-size:12px;' +
-      'color:#475569;overflow-wrap:anywhere;';
-
-    button.append(name, address);
-
-    button.addEventListener('click', () => {
-      selectRunTripNearbyPlace(candidate, place);
-    });
-
-    list.appendChild(button);
-  });
-
-  container.append(heading, list);
-  container.hidden = false;
+  return labels[language] || labels.ko;
 }
+
 function showRunTripMapPlaceSheet(place) {
   if (!place) {
     hideRunTripMapPlaceSheet();
     return;
   }
 
-    selectedRunTripMapPlace = place;
+  selectedRunTripMapPlace = place;
+
+  const labels = getRunTripMapPlaceLabels();
 
   const isSearchScreenOpen =
-    !runTripSearchScreen.classList.contains(
-      'hidden'
-    );
+    !runTripSearchScreen.classList.contains('hidden');
 
   const isRunningInformationOnly =
-    !isSearchScreenOpen &&
-    currentAppPage === 'running';
+    !isSearchScreenOpen && currentAppPage === 'running';
 
   const isBottomNavigationVisible =
-    !appBottomNavigation.classList.contains(
-      'hidden'
-    );
+    !appBottomNavigation.classList.contains('hidden');
 
   runTripMapPlaceSheet.classList.toggle(
     'info-only',
@@ -6828,59 +6711,51 @@ function showRunTripMapPlaceSheet(place) {
 
   runTripMapPlaceSheet.classList.toggle(
     'above-app-navigation',
-    !isSearchScreenOpen &&
-      isBottomNavigationVisible
+    !isSearchScreenOpen && isBottomNavigationVisible
   );
 
-  runTripMapPlaceName.textContent =
-    place.name || '선택한 장소';
+  // 지점 입력창과 같은 대표 이름을 사용한다.
+  const displayedName = cleanRunTripMapPlaceText(
+    getRunTripPlaceDisplayName(place)
+  ) || labels.location;
+
+  const displayedAddress = cleanRunTripMapPlaceText(
+    place.address
+  );
+
+  runTripMapPlaceName.textContent = displayedName;
 
   runTripMapPlaceCategory.textContent =
-    place.category || '장소';
-
-    const displayedName =
-    cleanRunTripMapPlaceText(place.name);
-
-  const displayedAddress =
-    cleanRunTripMapPlaceText(place.address);
-
-  const isDuplicateAddress =
-    place.mapDetailsState === 'ready' &&
-    Boolean(displayedAddress) &&
-    displayedName === displayedAddress;
+    cleanRunTripMapPlaceText(place.category) || labels.place;
 
   runTripMapPlaceAddress.textContent =
     displayedAddress ||
-    '상세 주소를 확인하고 있어요.';
+    (place.mapDetailsState === 'loading'
+      ? labels.loading
+      : place.mapDetailsState === 'error'
+        ? labels.error
+        : labels.unavailable);
 
+  // 주소를 대표 이름으로 표시하면 같은 주소를 두 번 쓰지 않는다.
   runTripMapPlaceAddress.classList.toggle(
     'hidden',
-    isDuplicateAddress
+    Boolean(displayedAddress) &&
+      displayedName === displayedAddress
   );
 
-  const brand =
-    String(place.brand || '').trim();
-
-  if (brand) {
-    runTripMapPlaceBrand.textContent =
-      `브랜드 · ${brand}`;
-
-    runTripMapPlaceBrand.classList.remove(
-      'hidden'
-    );
-  } else {
-    runTripMapPlaceBrand.textContent = '';
-
-    runTripMapPlaceBrand.classList.add(
-      'hidden'
-    );
-  }
-
-    runTripMapPlaceSheet.classList.remove(
-    'hidden'
+  const brand = cleanRunTripMapPlaceText(
+    Array.isArray(place.brand)
+      ? place.brand.join(', ')
+      : place.brand
   );
 
-      renderRunTripNearbyPlaces(place);
+  runTripMapPlaceBrand.textContent = brand
+    ? `${labels.brand} · ${brand}`
+    : '';
+
+  runTripMapPlaceBrand.classList.toggle('hidden', !brand);
+
+  runTripMapPlaceSheet.classList.remove('hidden');
 
   if (!isRunningInformationOnly) {
     updateRunTripMapPlaceActionState();
@@ -7141,241 +7016,179 @@ function convertMapboxFeatureToRunTripPlace(
   };
 }
 async function loadRunTripMapPlaceDetails(place) {
-  const requestId =
-    ++runTripMapPlaceDetailRequestId;
+  const requestId = ++runTripMapPlaceDetailRequestId;
 
-  const latitude = Number(place?.latitude);
-  const longitude = Number(place?.longitude);
+  const rawLatitude = place?.latitude;
+  const rawLongitude = place?.longitude;
+
+  const latitude = Number(rawLatitude);
+  const longitude = Number(rawLongitude);
 
   if (
-    place?.latitude == null ||
-    place?.longitude == null ||
+    rawLatitude == null ||
+    rawLongitude == null ||
+    String(rawLatitude).trim() === '' ||
+    String(rawLongitude).trim() === '' ||
     !Number.isFinite(latitude) ||
     !Number.isFinite(longitude) ||
-    latitude < -90 ||
-    latitude > 90 ||
-    longitude < -180 ||
-    longitude > 180
+    Math.abs(latitude) > 90 ||
+    Math.abs(longitude) > 180
   ) {
     hideRunTripMapPlaceSheet();
     return;
   }
 
+  const labels = getRunTripMapPlaceLabels();
+
+  const originalName = cleanRunTripMapPlaceText(
+    place.name
+  );
+
+  const placeholderNames = new Set([
+    '선택한 위치',
+    '선택한 장소',
+    labels.location
+  ]);
+
+  // 지도에서 장소로 구분된 대상의 이름만 유지한다.
+  // 브랜드명만으로 업체나 지점을 추정하지 않는다.
+  const selectedName =
+    place.source === 'mapbox-map-feature' &&
+    place.isMapPoi === true &&
+    originalName &&
+    !placeholderNames.has(originalName)
+      ? originalName
+      : '';
+
+  const originalAddress = cleanRunTripMapPlaceText(
+    place.address
+  );
+
+  const knownAddress = originalAddress !== originalName
+    ? originalAddress
+    : '';
+
+  const initialName =
+    selectedName || knownAddress || labels.location;
+
   const pendingPlace = {
     ...place,
-    mapDetailsState: 'loading'
+
+    name: initialName,
+    displayName: initialName,
+    primaryText: initialName,
+
+    address: knownAddress,
+    roadAddress: knownAddress,
+    lotAddress: '',
+    secondaryText: knownAddress,
+
+    latitude,
+    longitude,
+
+    category: selectedName
+      ? place.category
+      : labels.address,
+
+    brand: selectedName ? place.brand : '',
+
+    mapDetailsState: knownAddress ? 'ready' : 'loading'
   };
 
   showRunTripMapPlaceSheet(pendingPlace);
 
-  runTripMapPlaceAddress.textContent =
-    '주소를 확인하고 있어요…';
-
-  updateRunTripMapPlaceActionState();
+  // 선택한 대상에 이미 주소가 있으면 다시 조회하지 않는다.
+  if (knownAddress) {
+    return;
+  }
 
   const controller = new AbortController();
 
-    const timeoutId = setTimeout(function () {
+  const timeoutId = setTimeout(function () {
     controller.abort();
   }, 20000);
 
-  try {
-        let detailsUrl = getReverseGeocodeUrl(
-      latitude,
-      longitude
+  const isCurrentRequest = function () {
+    return (
+      requestId === runTripMapPlaceDetailRequestId &&
+      selectedRunTripMapPlace === pendingPlace
     );
+  };
 
-        detailsUrl += '&includeNearby=1';
-    const mapName =
-      cleanRunTripMapPlaceText(place.name);
-
-    if (
-      place.source === 'mapbox-map-feature' &&
-      place.isMapPoi &&
-      mapName &&
-      mapName !== '선택한 장소'
-    ) {
-      detailsUrl +=
-        `&poiName=${encodeURIComponent(mapName)}`;
-    }
-
+  try {
+    // 주소만 요청한다. 업체 후보 조회 옵션은 보내지 않는다.
     const response = await fetch(
-      detailsUrl,
+      getReverseGeocodeUrl(latitude, longitude),
       { signal: controller.signal }
     );
 
     const data = await response.json();
 
-    // 다른 지점을 선택했거나 정보창을 닫았다면 무시한다.
-    if (
-      requestId !== runTripMapPlaceDetailRequestId ||
-      selectedRunTripMapPlace !== pendingPlace
-    ) {
+    if (!isCurrentRequest()) {
       return;
     }
 
-    const googlePlace = data?.place;
-    const resolvedPlace =
-            data?.placeMatchMethod === 'reverse-address-id' &&
-      Array.isArray(data.nearbyPlaces) &&
-      data.nearbyPlaces.length === 1 &&
-      data.resolvedPlace?.id === data.nearbyPlaces[0]?.id
-        ? data.nearbyPlaces[0]
-        : null;
-
-    const googleAddress =
-      cleanRunTripMapPlaceText(
-        googlePlace?.address ||
-        googlePlace?.roadAddress ||
-        googlePlace?.lotAddress
-      );
-
-    if (
-      !response.ok ||
-      !googlePlace ||
-      !googleAddress
-    ) {
+    if (!response.ok) {
       throw new Error(
-        'Google 주소 조회 결과가 없습니다.'
+        data?.error || '주소 조회에 실패했습니다.'
       );
     }
 
-    const placeholderNames = new Set([
-      '선택한 위치',
-      '선택한 장소'
-    ]);
+    // 기존 서버가 업체 후보를 보내더라도 사용하지 않는다.
+    const addressPlace = data?.place;
 
-    // 아이콘 없는 좌표 선택은 이름을 추측하지 않는다.
-    const isCoordinatePlace =
-      place.source === 'map-coordinate';
-
-    const originalName =
-      cleanRunTripMapPlaceText(place.name);
-
-    const placeName =
-      !isCoordinatePlace &&
-      !placeholderNames.has(originalName)
-        ? originalName
-        : '';
-
-    const brandName =
-      !isCoordinatePlace
-        ? cleanRunTripMapPlaceText(
-            Array.isArray(place.brand)
-              ? place.brand.join(', ')
-              : place.brand
-          )
-        : '';
-
-        const matchedPoi =
-      !isCoordinatePlace && place.isMapPoi
-        ? data?.matchedPoi
-        : null;
-
-    const matchedName =
-      cleanRunTripMapPlaceText(matchedPoi?.name);
+    const address = cleanRunTripMapPlaceText(
+      addressPlace?.address ||
+      addressPlace?.roadAddress ||
+      addressPlace?.lotAddress
+    );
 
     const displayName =
-      matchedName ||
-      placeName ||
-      brandName ||
-      googleAddress;
+      selectedName || address || labels.location;
 
     const detailedPlace = {
-      ...place,
+      ...pendingPlace,
 
       name: displayName,
       displayName,
       primaryText: displayName,
 
-      address: googleAddress,
-      roadAddress: googleAddress,
+      address,
+      roadAddress: address,
       lotAddress: '',
-      secondaryText: googleAddress,
+      secondaryText: address,
 
-      // 역지오코딩 결과의 좌표로 이동시키지 않는다.
+      // 주소 응답이나 다른 업체의 좌표로 이동시키지 않는다.
       latitude,
       longitude,
 
       googlePlaceId:
-        googlePlace.googlePlaceId ||
-        googlePlace.id ||
+        addressPlace?.googlePlaceId ||
+        addressPlace?.id ||
         '',
 
-            matchedGooglePlaceId:
-        matchedPoi?.googlePlaceId || '',
+      nameSource: selectedName
+        ? place.source
+        : address
+          ? 'google-geocoding'
+          : '',
 
-      nameSource:
-        matchedName
-          ? 'google-places'
-          : place.source,
+      addressSource: address ? 'google-geocoding' : '',
 
-      category:
-        cleanRunTripMapPlaceText(
-          matchedPoi?.category
-        ) || place.category,
+      language: data?.language || place.language || '',
 
-      brand: brandName,
-
-            addressSource: 'google-geocoding',
-      language: data.language || '',
-
-      nearbyPlaces: Array.isArray(data.nearbyPlaces)
-        ? data.nearbyPlaces.filter((candidate) => {
-            const location = candidate?.location;
-
-            return (
-              candidate?.id &&
-              cleanRunTripMapPlaceText(
-                candidate?.displayName?.text
-              ) &&
-              Number.isFinite(location?.latitude) &&
-              Number.isFinite(location?.longitude) &&
-              Math.abs(location.latitude) <= 90 &&
-              Math.abs(location.longitude) <= 180
-            );
-          })
-        : [],
-
-      nearbyStatus:
-        typeof data.nearbyStatus === 'string'
-          ? data.nearbyStatus
-          : 'not_requested',
-
-      mapDetailsState: 'ready'
+      mapDetailsState: address ? 'ready' : 'empty'
     };
 
-        showRunTripMapPlaceSheet(detailedPlace);
-
-    // 이름 없는 지도 지점은 주소 위치에 일치하는
-    // 단일 매장이 있을 때 해당 매장 정보로 표시한다.
-    if (resolvedPlace && !place.isMapPoi) {
-      selectRunTripNearbyPlace(
-        resolvedPlace,
-        detailedPlace
-      );
-    }
-
-    updateRunTripMapPlaceActionState();
-
-    console.log(
-      'FreeRunTrip MAP PLACE DETAILS',
-      selectedRunTripMapPlace
-    );
+    showRunTripMapPlaceSheet(detailedPlace);
   } catch (error) {
-    if (
-      requestId !== runTripMapPlaceDetailRequestId ||
-      selectedRunTripMapPlace !== pendingPlace
-    ) {
+    if (!isCurrentRequest()) {
       return;
     }
 
     pendingPlace.mapDetailsState = 'error';
 
-    runTripMapPlaceAddress.textContent =
-      '주소를 찾지 못했어요. 같은 지점을 다시 터치해 주세요.';
-
-    updateRunTripMapPlaceActionState();
+    showRunTripMapPlaceSheet(pendingPlace);
 
     console.warn(
       'FreeRunTrip 지도 주소 조회 실패:',
@@ -16928,25 +16741,31 @@ function completeRunTrip(
 
   return savedRecord;
 }
-
 function detectPlaceSearchLanguage(query) {
+  const documentLanguage = String(
+    document.documentElement.lang || 'ko'
+  ).toLowerCase().split('-')[0];
+
+  const fallbackLanguage =
+    ['ko', 'en', 'ja', 'de'].includes(documentLanguage)
+      ? documentLanguage
+      : 'ko';
+
   const text = String(query || '').trim();
 
   if (!text) {
-    return 'en';
+    return fallbackLanguage;
   }
 
-  // Korean
+  // 기존 검색어 언어 판정은 유지한다.
   if (/[\uAC00-\uD7AF\u1100-\u11FF]/.test(text)) {
     return 'ko';
   }
 
-  // Japanese Hiragana / Katakana
   if (/[\u3040-\u30FF]/.test(text)) {
     return 'ja';
   }
 
-  // Japanese place names written mainly with Kanji
   if (
     /[\u4E00-\u9FFF]/.test(text) &&
     /(駅|公園|神社|寺|城|橋|通り|丁目|空港|大学|病院|美術館|博物館)/.test(text)
@@ -16954,20 +16773,16 @@ function detectPlaceSearchLanguage(query) {
     return 'ja';
   }
 
-  // German-specific characters or common place-name words
   if (
     /[äöüßÄÖÜ]/.test(text) ||
-    /\b(tor|platz|strasse|straße|bahnhof|hauptbahnhof|schloss|kirche|rathaus|flughafen)\b/i.test(
-      text
-    )
+    /\b(tor|platz|strasse|straße|bahnhof|hauptbahnhof|schloss|kirche|rathaus|flughafen)\b/i.test(text)
   ) {
     return 'de';
   }
 
-  // Latin alphabet defaults to English until app-level language selection exists.
-  return 'en';
+  // GS25 등 검색어만으로 언어를 구분하기 어려우면 앱 언어를 사용한다.
+  return fallbackLanguage;
 }
-
 function getPlaceSearchUrl(query) {
   const baseUrl =
     window.location.hostname === 'localhost' ||
@@ -17429,198 +17244,174 @@ async function searchRunTripPlaces(
     );
   }
 }
-function getRunTripPlaceFromMapClick(
-  mapInstance,
-  event
-) {
-  if (!mapInstance || !event?.point) {
-    return null;
-  }
-
-  const hitPadding = 18;
-
-  const renderedFeatures =
-    mapInstance.queryRenderedFeatures([
-      [
-        event.point.x - hitPadding,
-        event.point.y - hitPadding
-      ],
-      [
-        event.point.x + hitPadding,
-        event.point.y + hitPadding
-      ]
-    ]);
-
-  const selectedFeature =
-    renderedFeatures.find(
-      function (feature) {
-        const properties =
-          feature?.properties || {};
-
-        return Boolean(
-          properties.name ||
-          properties.name_ko ||
-          properties.name_en ||
-          properties.name_local ||
-          properties.name_script ||
-          properties.text ||
-          properties.label
-        );
-      }
-    );
-
-  if (!selectedFeature) {
-  const longitude =
-    Number(event.lngLat?.lng);
-
-  const latitude =
-    Number(event.lngLat?.lat);
-
+function getRunTripPlaceFromMapClick(mapInstance, event) {
   if (
-    !Number.isFinite(longitude) ||
-    !Number.isFinite(latitude)
+    !mapInstance ||
+    typeof mapInstance.queryRenderedFeatures !== 'function' ||
+    !event?.point
   ) {
     return null;
   }
 
-  return {
-    id:
-      `coordinate-${longitude}-${latitude}`,
+  const validNumber = function (value, limit) {
+    if (value == null || String(value).trim() === '') {
+      return null;
+    }
 
+    const number = Number(value);
+
+    return Number.isFinite(number) && Math.abs(number) <= limit
+      ? number
+      : null;
+  };
+
+  const clickLatitude = validNumber(event.lngLat?.lat, 90);
+  const rawClickLongitude = validNumber(event.lngLat?.lng, Infinity);
+
+  if (clickLatitude === null || rawClickLongitude === null) {
+    return null;
+  }
+
+  // 지도를 좌우로 반복 이동한 경우에도 표준 경도 범위를 사용한다.
+  const clickLongitude =
+    rawClickLongitude >= -180 && rawClickLongitude <= 180
+      ? rawClickLongitude
+      : ((rawClickLongitude + 180) % 360 + 360) % 360 - 180;
+
+  const labels = getRunTripMapPlaceLabels();
+  const language = String(
+    document.documentElement.lang || 'ko'
+  ).toLowerCase().split('-')[0];
+
+  const coordinatePlace = {
+    id: `coordinate-${clickLongitude}-${clickLatitude}`,
     mapboxPlaceId: '',
-
-    name: '선택한 위치',
-    displayName: '선택한 위치',
-    primaryText: '선택한 위치',
-
+    name: labels.location,
+    displayName: labels.location,
+    primaryText: labels.location,
     secondaryText: '',
     address: '',
-
-    latitude,
-    longitude,
-
-    category: '주소',
+    latitude: clickLatitude,
+    longitude: clickLongitude,
+    category: labels.address,
     brand: '',
-
+    isMapPoi: false,
     source: 'map-coordinate'
   };
-}
 
-  const properties =
-    selectedFeature.properties || {};
+  let renderedFeatures;
 
-  const featureCoordinates =
-    selectedFeature?.geometry?.type ===
-      'Point' &&
-    Array.isArray(
-      selectedFeature.geometry.coordinates
-    )
-      ? selectedFeature.geometry.coordinates
-      : null;
-
-  const longitude =
-    featureCoordinates &&
-    Number.isFinite(
-      Number(featureCoordinates[0])
-    )
-      ? Number(featureCoordinates[0])
-      : Number(event.lngLat?.lng);
-
-  const latitude =
-    featureCoordinates &&
-    Number.isFinite(
-      Number(featureCoordinates[1])
-    )
-      ? Number(featureCoordinates[1])
-      : Number(event.lngLat?.lat);
-
-  if (
-    !Number.isFinite(longitude) ||
-    !Number.isFinite(latitude)
-  ) {
-    return null;
+  try {
+    // 주변 18px까지 넓히지 않고 실제 터치 지점만 확인한다.
+    renderedFeatures = mapInstance.queryRenderedFeatures(event.point);
+  } catch (error) {
+    console.warn('FreeRunTrip 지도 터치 대상 조회 실패:', error);
+    return coordinatePlace;
   }
 
-  const name =
-    properties.name ||
-    properties.name_ko ||
-    properties.name_en ||
-    properties.name_local ||
-    properties.name_script ||
-    properties.text ||
-    properties.label ||
-    '선택한 장소';
+  const candidates = new Map();
+  const excludedLayers = new Set([
+    'road', 'road_label', 'place_label', 'admin',
+    'building', 'housenum_label', 'motorway_junction'
+  ]);
 
-  const category =
-    properties.category ||
-    properties.class ||
-    properties.type ||
-    properties.maki ||
-    '장소';
+  for (const feature of renderedFeatures || []) {
+    const properties = feature?.properties || {};
+    const sourceLayer = String(
+      feature?.sourceLayer || feature?.layer?.['source-layer'] || ''
+    ).toLowerCase();
 
-  const address =
-    properties.full_address ||
-    properties.address ||
-    properties.place_name ||
-    '';
+    // 도로·행정구역·건물 면이 아니라 장소 아이콘/라벨만 대상으로 한다.
+    if (
+      feature?.layer?.type !== 'symbol' ||
+      excludedLayers.has(sourceLayer)
+    ) {
+      continue;
+    }
 
-  const brand =
-    properties.brand ||
-    properties.brand_name ||
-    '';
+    const hasPoiInformation =
+      /(^|[-_])poi([-_]|$)/i.test(sourceLayer) ||
+      properties.feature_type === 'poi' ||
+      Boolean(cleanRunTripMapPlaceText(properties.poi_category)) ||
+      Boolean(cleanRunTripMapPlaceText(properties.maki));
 
-  const mapboxPlaceId =
-    properties.mapbox_id ||
-    properties.mapboxId ||
-    selectedFeature.id ||
-    '';
+    if (!hasPoiInformation) {
+      continue;
+    }
 
-  return {
-    id:
-      String(mapboxPlaceId || '').trim() ||
-      `map-${longitude}-${latitude}`,
+    const name = [
+      properties[`name_${language}`],
+      properties.name,
+      properties.name_local,
+      properties.name_en,
+      properties.name_ko,
+      properties.name_ja,
+      properties.name_de,
+      properties.text,
+      properties.label
+    ].map(cleanRunTripMapPlaceText).find(Boolean) || '';
 
-    mapboxPlaceId:
-      String(mapboxPlaceId || '').trim(),
+    // 브랜드만 있고 장소 이름이 없으면 특정 지점으로 확정하지 않는다.
+    if (!name) {
+      continue;
+    }
 
-    name:
-      String(name || '').trim(),
+    let latitude = clickLatitude;
+    let longitude = clickLongitude;
 
-    displayName:
-      String(name || '').trim(),
+    if (feature.geometry?.type === 'Point') {
+      const coordinates = feature.geometry.coordinates;
+      latitude = validNumber(coordinates?.[1], 90);
+      longitude = validNumber(coordinates?.[0], 180);
 
-    primaryText:
-      String(name || '').trim(),
+      if (latitude === null || longitude === null) {
+        continue;
+      }
+    }
 
-    secondaryText:
-      String(address || '').trim(),
+    // place_name은 주소라고 보장할 수 없어 주소 대용으로 사용하지 않는다.
+    const address = [properties.full_address, properties.address]
+      .map(cleanRunTripMapPlaceText).find(Boolean) || '';
 
-    address:
-      String(address || '').trim(),
+    const rawBrand = properties.brand || properties.brand_name || '';
+    const brand = cleanRunTripMapPlaceText(
+      Array.isArray(rawBrand) ? rawBrand.join(', ') : rawBrand
+    );
 
-    latitude,
-    longitude,
+    const mapboxPlaceId = cleanRunTripMapPlaceText(
+      properties.mapbox_id || properties.mapboxId
+    );
+    const featureId = String(feature.id ?? '').trim();
+    const identity = mapboxPlaceId
+      ? `mapbox:${mapboxPlaceId}`
+      : featureId
+        ? `${feature.source || ''}:${sourceLayer}:${featureId}`
+        : `${sourceLayer}:${name}:${longitude}:${latitude}`;
 
-    category:
-      String(category || '장소').trim(),
+    candidates.set(identity, {
+      id: mapboxPlaceId || featureId || `map-${longitude}-${latitude}`,
+      mapboxPlaceId,
+      name,
+      displayName: name,
+      primaryText: name,
+      secondaryText: address,
+      address,
+      latitude,
+      longitude,
+      category: cleanRunTripMapPlaceText(
+        properties.category || properties.class ||
+        properties.type || properties.maki
+      ) || labels.place,
+      brand,
+      isMapPoi: true,
+      source: 'mapbox-map-feature'
+    });
+  }
 
-    brand: Array.isArray(brand)
-      ? brand.join(', ')
-      : String(brand || '').trim(),
-
-        isMapPoi:
-      /poi/i.test(
-        String(selectedFeature.sourceLayer || '')
-      ) ||
-      Boolean(
-        properties.maki ||
-        properties.poi_category ||
-        brand
-      ),
-
-    source:
-      'mapbox-map-feature'
-  };
+  // 겹친 서로 다른 장소가 여러 개면 임의 선택하지 않고 주소로 처리한다.
+  return candidates.size === 1
+    ? candidates.values().next().value
+    : coordinatePlace;
 }
 function initializeRunTripSearchMap() {
   if (freeRunTripMapboxSearchMap) {

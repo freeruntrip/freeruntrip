@@ -649,17 +649,28 @@ function chooseBestReverseGeocodeResult(results) {
 }
 
 function getExplicitProximity(url) {
-  const latitude = Number(
-    url.searchParams.get('proximityLat')
-  );
+  const latitudeParam = url.searchParams.get('proximityLat');
+  const longitudeParam = url.searchParams.get('proximityLng');
 
-  const longitude = Number(
-    url.searchParams.get('proximityLng')
-  );
+  // 값이 없거나 비어 있으면 위치 기준을 만들지 않는다.
+  // Number(null), Number('')가 0으로 바뀌는 것을 방지한다.
+  if (
+    latitudeParam === null ||
+    longitudeParam === null ||
+    latitudeParam.trim() === '' ||
+    longitudeParam.trim() === ''
+  ) {
+    return null;
+  }
+
+  const latitude = Number(latitudeParam);
+  const longitude = Number(longitudeParam);
 
   if (
     !Number.isFinite(latitude) ||
-    !Number.isFinite(longitude)
+    !Number.isFinite(longitude) ||
+    Math.abs(latitude) > 90 ||
+    Math.abs(longitude) > 180
   ) {
     return null;
   }
@@ -772,345 +783,7 @@ async function requestGooglePlacesTextSearch({
     data,
   };
 }
-function normalizeMapPoiName(value) {
-  return String(value || '')
-    .normalize('NFKC')
-    .toLowerCase()
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
-    .replace(/[^\p{L}\p{N}]/gu, '');
-}
-function selectMapPoiMatch(
-  places,
-  name,
-  latitude,
-  longitude
-) {
-  const target = normalizeMapPoiName(name);
 
-  if (
-    !target ||
-    !Array.isArray(places) ||
-    !Number.isFinite(latitude) ||
-    !Number.isFinite(longitude)
-  ) {
-    return null;
-  }
-
-  const matches = new Map();
-
-  for (const candidate of places) {
-    const rawName = String(
-      candidate?.displayName?.text || ''
-    ).trim();
-
-    const candidateName =
-      normalizeMapPoiName(rawName);
-
-    // 이름이 같거나 기존 이름 뒤에 지점명 등이 붙은 후보.
-    const nameMatches =
-      candidateName === target ||
-      (
-        target.length >= 3 &&
-        candidateName.startsWith(target)
-      );
-
-    const lat = candidate?.location?.latitude;
-    const lng = candidate?.location?.longitude;
-
-    if (
-      !nameMatches ||
-      !candidate?.id ||
-      !Number.isFinite(lat) ||
-      !Number.isFinite(lng) ||
-      Math.abs(lat) > 90 ||
-      Math.abs(lng) > 180
-    ) {
-      continue;
-    }
-
-    const radians = Math.PI / 180;
-    const dLat = (lat - latitude) * radians;
-    const dLng = (lng - longitude) * radians;
-
-    const a =
-      Math.sin(dLat / 2) ** 2 +
-      Math.cos(latitude * radians) *
-        Math.cos(lat * radians) *
-        Math.sin(dLng / 2) ** 2;
-
-    const distance =
-      6371000 * 2 *
-      Math.asin(Math.sqrt(Math.min(1, a)));
-
-    // 선택한 위치에서 60m를 넘는 후보는 제외한다.
-    if (distance > 60) {
-      continue;
-    }
-
-    matches.set(candidate.id, {
-      name: rawName,
-      googlePlaceId: candidate.id,
-      category: String(
-        candidate.primaryTypeDisplayName?.text || ''
-      ).trim(),
-    });
-  }
-
-  // 후보가 여러 개면 임의로 고르지 않는다.
-  return matches.size === 1
-    ? [...matches.values()][0]
-    : null;
-}
-async function findMapPoiDetails({
-  name,
-  latitude,
-  longitude,
-  language,
-  apiKey,
-}) {
-  if (!name || name.length > 256) {
-    return null;
-  }
-
-  const controller = new AbortController();
-
-  const timeoutId = setTimeout(function () {
-    controller.abort();
-  }, 2500);
-
-  try {
-    const result = await requestGooglePlacesTextSearch({
-      query: name,
-      language,
-      locationBias: {
-        latitude,
-        longitude,
-      },
-      biasRadius: 150,
-      apiKey,
-      signal: controller.signal,
-    });
-
-    if (!result.ok) {
-      return null;
-    }
-
-    return selectMapPoiMatch(
-      result.data?.places,
-      name,
-      latitude,
-      longitude
-    );
-  } catch {
-    // 장소명 조회가 실패해도 기존 주소 조회는 유지한다.
-    return null;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-async function filterPlacesAtAddress(
-  places,
-  addressResult,
-  language,
-  apiKey
-) {
-  const addressId = addressResult?.place_id;
-  const addressTypes = addressResult?.types || [];
-
-  if (
-    !addressId ||
-    !addressTypes.some((type) =>
-      ['street_address', 'premise', 'subpremise'].includes(type)
-    ) ||
-    !Array.isArray(places)
-  ) {
-    return [];
-  }
-
-  const candidates = [
-    ...new Map(
-      places
-        .filter((place) =>
-          place?.id &&
-          Number.isFinite(place.location?.latitude) &&
-          Number.isFinite(place.location?.longitude) &&
-          Math.abs(place.location.latitude) <= 90 &&
-          Math.abs(place.location.longitude) <= 180
-        )
-        .map((place) => [place.id, place])
-    ).values(),
-  ];
-
-  if (!candidates.length) return [];
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 5000);
-  const matches = [];
-  let nextIndex = 0;
-  let incomplete = false;
-
-  async function checkCandidates() {
-    while (nextIndex < candidates.length) {
-      if (controller.signal.aborted) {
-        incomplete = true;
-        return;
-      }
-
-      const candidate = candidates[nextIndex++];
-
-      try {
-        const url = new URL(GOOGLE_GEOCODING_REVERSE_URL);
-        url.searchParams.set(
-          'latlng',
-          `${candidate.location.latitude},${candidate.location.longitude}`
-        );
-        url.searchParams.set('language', normalizeLanguage(language));
-        url.searchParams.set('key', apiKey);
-
-        const response = await fetch(url, {
-          signal: controller.signal,
-          headers: { Accept: 'application/json' },
-        });
-
-        const data = await response.json();
-
-        if (
-          !response.ok ||
-          !['OK', 'ZERO_RESULTS'].includes(data.status)
-        ) {
-          incomplete = true;
-          continue;
-        }
-
-        if (data.status === 'ZERO_RESULTS') continue;
-
-        if (!Array.isArray(data.results)) {
-          incomplete = true;
-          continue;
-        }
-
-        const candidateAddress =
-          chooseBestReverseGeocodeResult(data.results);
-
-        if (candidateAddress?.place_id === addressId) {
-          matches.push(candidate);
-        }
-      } catch {
-        incomplete = true;
-      }
-    }
-  }
-
-  try {
-    // 同時 요청은 최대 4개로 제한한다.
-    await Promise.all(
-      Array.from(
-        { length: Math.min(4, candidates.length) },
-        () => checkCandidates()
-      )
-    );
-
-    // 일부 조회가 실패하면 단일 매장이라고 확정하지 않는다.
-    return incomplete ? [] : matches;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-async function requestGoogleNearbyPlaces({
-  latitude,
-  longitude,
-  language,
-  apiKey,
-}) {
-  if (
-    !Number.isFinite(latitude) ||
-    !Number.isFinite(longitude) ||
-    Math.abs(latitude) > 90 ||
-    Math.abs(longitude) > 180
-  ) {
-    return { places: [], status: 'invalid_coordinates' };
-  }
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-  try {
-    const response = await fetch(
-      'https://places.googleapis.com/v1/places:searchNearby',
-      {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Goog-Api-Key': apiKey,
-          'X-Goog-FieldMask': [
-            'places.id',
-            'places.displayName',
-            'places.formattedAddress',
-            'places.addressComponents',
-            'places.location',
-            'places.types',
-            'places.primaryTypeDisplayName',
-          ].join(','),
-        },
-        body: JSON.stringify({
-          languageCode: normalizeLanguage(language),
-          maxResultCount: 20,
-          rankPreference: 'DISTANCE',
-          locationRestriction: {
-            circle: {
-              center: { latitude, longitude },
-              radius: 100,
-            },
-          },
-        }),
-      }
-    );
-
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok || data.error) {
-      console.error('Google Nearby Search failed:', {
-        status: response.status,
-        code: data.error?.status || '',
-      });
-
-      return { places: [], status: 'error' };
-    }
-
-    if (!Array.isArray(data.places)) {
-      return {
-        places: [],
-        status: data.places == null ? 'empty' : 'invalid_response',
-      };
-    }
-
-    const places = data.places.filter((place) => {
-      const location = place?.location;
-
-      return (
-        place?.id &&
-        String(place?.displayName?.text || '').trim() &&
-        Number.isFinite(location?.latitude) &&
-        Number.isFinite(location?.longitude) &&
-        Math.abs(location.latitude) <= 90 &&
-        Math.abs(location.longitude) <= 180
-      );
-    });
-
-    return {
-      places,
-      status: places.length > 0 ? 'ok' : 'empty',
-    };
-  } catch (error) {
-    return {
-      places: [],
-      status: error?.name === 'AbortError' ? 'timeout' : 'error',
-    };
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
 async function requestGoogleReverseGeocode({
   latitude,
   longitude,
@@ -1209,10 +882,27 @@ async function handleFetchRequest(request) {
     ? Number(longitudeParam)
     : NaN;
 
-  const isReverseRequest =
+    const isReverseRequest =
     hasReverseParams &&
     Number.isFinite(latitude) &&
-    Number.isFinite(longitude);
+    Number.isFinite(longitude) &&
+    Math.abs(latitude) <= 90 &&
+    Math.abs(longitude) <= 180;
+
+  // 좌표가 하나라도 전달됐다면 올바른 좌표 쌍인지 확인한다.
+  const hasAnyReverseParam =
+    latitudeParam !== null || longitudeParam !== null;
+
+  if (hasAnyReverseParam && !isReverseRequest) {
+    return jsonResponse(
+      {
+        error: '올바른 위도(-90~90)와 경도(-180~180)를 입력해 주세요.',
+        place: null,
+        places: [],
+      },
+      400
+    );
+  }
 
   if (!query && !isReverseRequest) {
     return jsonResponse(
@@ -1324,81 +1014,22 @@ async function handleFetchRequest(request) {
         longitude
       );
 
-                  const poiName = String(
-        url.searchParams.get('poiName') || ''
-      ).trim();
-
-      const includeNearby =
-        url.searchParams.get('includeNearby') === '1';
-
-      const [matchedPoi, nearbyResult] = await Promise.all([
-        place && poiName
-          ? findMapPoiDetails({
-              name: poiName,
-              latitude,
-              longitude,
-              language,
-              apiKey,
-            })
-          : Promise.resolve(null),
-
-        includeNearby
-          ? requestGoogleNearbyPlaces({
-              latitude,
-              longitude,
-              language,
-              apiKey,
-            })
-          : Promise.resolve({
-              places: [],
-              status: 'not_requested',
-            }),
-      ]);
-
-                  const addressPlaces = await filterPlacesAtAddress(
-        nearbyResult.places,
-        bestResult,
-        language,
-        apiKey
-      );
-
-      const resolvedPlace =
-        addressPlaces.length === 1
-          ? addressPlaces[0]
-          : null;
+           // 지도 터치는 주소만 조회한다.
+      // 상호명과 좌표는 사용자가 선택한 지도 대상의 값을 유지한다.
       return jsonResponse({
-                place,
-        matchedPoi,
+        place,
 
-        nearbyPlaces: addressPlaces,
-        resolvedPlace,
-
-        placeMatchMethod:
-          addressPlaces.length > 0
-            ? 'reverse-address-id'
-            : 'none',
-                nearbyStatus: nearbyResult.status,
-
-        addressCandidates: results
-          .filter((result) =>
-            Array.isArray(result.types) &&
-            result.types.some((type) =>
-              ['street_address', 'premise', 'subpremise']
-                .includes(type)
-            )
-          )
-          .map((result) => ({
-            id: result.place_id || '',
-            address: result.formatted_address || '',
-            types: result.types,
-            addressComponents: result.address_components || [],
-            location: result.geometry?.location || null,
-            locationType: result.geometry?.location_type || '',
-          })),
+        // 기존 app.js와의 호환용 빈 값이다.
+        // 업체 후보를 조회하거나 단일 업체로 자동 확정하지 않는다.
+        matchedPoi: null,
+        nearbyPlaces: [],
+        resolvedPlace: null,
+        placeMatchMethod: 'none',
+        nearbyStatus: 'not_requested',
 
         provider: 'google-geocoding',
         language,
-      });
+      });             
     } catch (error) {
       console.error(
         'Google reverse geocoding server error:',
