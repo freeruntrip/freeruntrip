@@ -17382,12 +17382,23 @@ function getRunTripPlaceFromMapClick(mapInstance, event) {
     ).toLowerCase();
 
     // 도로·행정구역·건물 면이 아니라 장소 아이콘/라벨만 대상으로 한다.
-    if (
-      feature?.layer?.type !== 'symbol' ||
-      excludedLayers.has(sourceLayer)
-    ) {
-      continue;
-    }
+    const layerId = String(
+  feature?.layer?.id || ''
+).toLowerCase();
+
+/*
+  Mapbox 스타일에 따라 queryRenderedFeatures() 결과의
+  layer.type이 비어 있을 수 있다.
+
+  따라서 symbol 여부만으로 POI를 버리지 않고,
+  도로·건물·행정 레이어만 명시적으로 제외한다.
+*/
+if (
+  excludedLayers.has(sourceLayer) ||
+  excludedLayers.has(layerId)
+) {
+  continue;
+}
 
     const hasPoiInformation =
       /(^|[-_])poi([-_]|$)/i.test(sourceLayer) ||
