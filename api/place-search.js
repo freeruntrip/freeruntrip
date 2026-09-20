@@ -145,7 +145,25 @@ function getGooglePlaceName(place) {
     ''
   ).trim();
 }
+function isGoogleAddressNumberName(value) {
+  const compact = String(value || '')
+    .normalize('NFKC')
+    .replace(/\s+/g, '')
+    .trim();
 
+  if (!compact) {
+    return false;
+  }
+
+  /*
+    주소 검색에서 Google이 대표 이름을
+    "602", "597-8", "110", "12A"처럼
+    건물·번지 번호만 보내는 경우를 판별한다.
+  */
+  return /^\d+(?:[-–—]\d+)?[A-Za-z]?$/.test(
+    compact
+  );
+}
 function normalizeGooglePlace(place) {
   if (!place) {
     return null;
@@ -176,30 +194,51 @@ function normalizeGooglePlace(place) {
     place?.primaryTypeDisplayName?.text || ''
   ).trim();
 
-  const types = Array.isArray(place?.types)
+    const types = Array.isArray(place?.types)
     ? place.types.filter(Boolean)
     : [];
 
-  const countryCode = getCountryCodeFromGooglePlace(place);
+  const addressResultTypes =
+    new Set([
+      'street_address',
+      'premise',
+      'subpremise'
+    ]);
+
+  const isAddressResult =
+    addressResultTypes.has(primaryType) ||
+    types.some(function (type) {
+      return addressResultTypes.has(type);
+    });
+
+  const resolvedPrimaryText =
+    isAddressResult &&
+    isGoogleAddressNumberName(primaryText) &&
+    formattedAddress
+      ? formattedAddress
+      : primaryText || formattedAddress;
+
+  const countryCode =
+    getCountryCodeFromGooglePlace(place);
 
   return {
     id:
       String(place?.id || '').trim() ||
       `${longitude}-${latitude}`,
 
-    name: primaryText || formattedAddress,
-    displayName: primaryText || formattedAddress,
-    primaryText: primaryText || formattedAddress,
+    name: resolvedPrimaryText,
+    displayName: resolvedPrimaryText,
+    primaryText: resolvedPrimaryText,
 
     secondaryText:
-      formattedAddress === primaryText
+      formattedAddress === resolvedPrimaryText
         ? ''
         : formattedAddress,
 
     address: formattedAddress,
     roadAddress: formattedAddress,
     lotAddress: '',
-    buildingName: primaryText,
+    buildingName: resolvedPrimaryText,
 
     latitude,
     longitude,

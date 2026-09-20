@@ -16790,14 +16790,74 @@ function getPlaceSearchUrl(query) {
       ? 'https://freeruntrip.vercel.app/api/place-search'
       : '/api/place-search';
 
-  const language = detectPlaceSearchLanguage(query);
+  const language =
+    detectPlaceSearchLanguage(query);
+
+  const params =
+    new URLSearchParams();
+
+  params.set(
+    'q',
+    String(query || '').trim()
+  );
+
+  params.set(
+    'language',
+    language
+  );
+
+  /*
+    브랜드명·상호명 검색은
+    사용자가 현재 보고 있는 검색 지도 주변을 우선한다.
+
+    지역을 강제로 제한하는 것이 아니라
+    Google Places의 location bias로만 사용한다.
+  */
+  let searchCenter = null;
+
+  if (
+    freeRunTripMapboxSearchMap &&
+    typeof freeRunTripMapboxSearchMap.getCenter ===
+      'function'
+  ) {
+    searchCenter =
+      freeRunTripMapboxSearchMap.getCenter();
+  } else if (
+    freeRunTripMapboxMainMap &&
+    typeof freeRunTripMapboxMainMap.getCenter ===
+      'function'
+  ) {
+    searchCenter =
+      freeRunTripMapboxMainMap.getCenter();
+  }
+
+  const latitude =
+    Number(searchCenter?.lat);
+
+  const longitude =
+    Number(searchCenter?.lng);
+
+  if (
+    Number.isFinite(latitude) &&
+    Number.isFinite(longitude) &&
+    Math.abs(latitude) <= 90 &&
+    Math.abs(longitude) <= 180
+  ) {
+    params.set(
+      'proximityLat',
+      String(latitude)
+    );
+
+    params.set(
+      'proximityLng',
+      String(longitude)
+    );
+  }
 
   return (
-    `${baseUrl}?q=${encodeURIComponent(query)}` +
-    `&language=${encodeURIComponent(language)}`
+    `${baseUrl}?${params.toString()}`
   );
 }
-
 
 function getReverseGeocodeUrl(
   latitude,
@@ -17378,15 +17438,32 @@ function getRunTripPlaceFromMapClick(mapInstance, event) {
       Array.isArray(rawBrand) ? rawBrand.join(', ') : rawBrand
     );
 
-    const mapboxPlaceId = cleanRunTripMapPlaceText(
-      properties.mapbox_id || properties.mapboxId
-    );
-    const featureId = String(feature.id ?? '').trim();
-    const identity = mapboxPlaceId
-      ? `mapbox:${mapboxPlaceId}`
-      : featureId
-        ? `${feature.source || ''}:${sourceLayer}:${featureId}`
-        : `${sourceLayer}:${name}:${longitude}:${latitude}`;
+    const mapboxPlaceId =
+  cleanRunTripMapPlaceText(
+    properties.mapbox_id ||
+    properties.mapboxId
+  );
+
+const featureId =
+  String(feature.id ?? '').trim();
+
+const normalizedName =
+  normalizeRunTripMapPlaceName(name);
+
+/*
+  같은 POI의 아이콘과 글자가 서로 다른 feature ID로
+  반환되어도 하나의 장소로 취급한다.
+
+  mapbox_id가 있으면 가장 우선하고,
+  없으면 표시된 장소명을 기준으로 묶는다.
+*/
+const identity = mapboxPlaceId
+  ? `mapbox:${mapboxPlaceId}`
+  : normalizedName
+    ? `name:${normalizedName}`
+    : featureId
+      ? `${feature.source || ''}:${sourceLayer}:${featureId}`
+      : `${sourceLayer}:${longitude}:${latitude}`;
 
     candidates.set(identity, {
       id: mapboxPlaceId || featureId || `map-${longitude}-${latitude}`,
