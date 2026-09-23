@@ -7380,7 +7380,10 @@ function syncRunTripCafeIcons(mapInstance) {
 
   const features = cafes.map((cafe) => ({
     type: 'Feature',
-    properties: { cafeId: cafe.id },
+    properties: {
+      cafeId: cafe.id,
+      name: cafe.name
+    },
     geometry: {
       type: 'Point',
       coordinates: [cafe.longitude, cafe.latitude]
@@ -7392,9 +7395,10 @@ function syncRunTripCafeIcons(mapInstance) {
   // 같은 데이터로 아이콘을 반복 생성하지 않는다.
   if (exists && state.signature === signature) return;
 
-  const cafeStyle = {
+    const cafeStyle = {
     version: 8,
     sprite,
+    glyphs: 'mapbox://fonts/mapbox/{fontstack}/{range}.pbf',
     sources: {
       cafes: {
         type: 'geojson',
@@ -7420,10 +7424,29 @@ function syncRunTripCafeIcons(mapInstance) {
         }],
         'icon-size': 1,
         'icon-allow-overlap': true,
-        'icon-ignore-placement': true
+                'icon-ignore-placement': true,
+        'text-field': ['get', 'name'],
+        'text-font': [
+          'Open Sans Semibold',
+          'Arial Unicode MS Regular'
+        ],
+        'text-size': 12,
+        'text-anchor': 'top',
+        'text-offset': [0, 1.1],
+        'text-justify': 'center',
+        'text-max-width': 10,
+        'text-line-height': 1.2,
+        'text-padding': 3,
+        'text-allow-overlap': false,
+        'text-ignore-placement': false,
+        'text-optional': true
       },
       paint: {
-        'icon-emissive-strength': 0.9
+        'icon-emissive-strength': 0.9,
+        'text-color': '#536f80',
+        'text-halo-color': '#ffffff',
+        'text-halo-width': 1,
+        'text-emissive-strength': 0.9
       }
     }]
   };
