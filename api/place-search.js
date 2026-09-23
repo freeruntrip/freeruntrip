@@ -1021,6 +1021,8 @@ async function requestGoogleNearbyPlaces({
   longitude,
   language,
   apiKey,
+  cafeOnly = false,
+  radius = 100,
 }) {
   if (
     !Number.isFinite(latitude) ||
@@ -1055,12 +1057,15 @@ async function requestGoogleNearbyPlaces({
         },
         body: JSON.stringify({
           languageCode: normalizeLanguage(language),
+          ...(cafeOnly
+            ? { includedTypes: ['cafe', 'coffee_shop'] }
+            : {}),
           maxResultCount: 20,
           rankPreference: 'DISTANCE',
           locationRestriction: {
             circle: {
               center: { latitude, longitude },
-              radius: 100,
+              radius,
             },
           },
         }),
@@ -1245,7 +1250,42 @@ async function handleFetchRequest(request) {
       500
     );
   }
+  if (url.searchParams.get('mode') === 'cafes') {
+    const radiusParam = url.searchParams.get('radius');
+    const radius = radiusParam === null ? 300 : Number(radiusParam);
 
+    if (
+      !isReverseRequest ||
+      Math.abs(latitude) > 90 ||
+      Math.abs(longitude) > 180 ||
+      !Number.isFinite(radius) ||
+      radius < 50 || radius > 1000
+    ) {
+      return jsonResponse({
+        places: [],
+        status: 'invalid_request',
+      }, 400);
+    }
+
+    const result = await requestGoogleNearbyPlaces({
+      latitude,
+      longitude,
+      language,
+      apiKey,
+      cafeOnly: true,
+      radius,
+    });
+
+    const succeeded =
+      result.status === 'ok' || result.status === 'empty';
+
+    return jsonResponse({
+      mode: 'cafes',
+      places: result.places,
+      status: result.status,
+      mayBeTruncated: result.places.length >= 20,
+    }, succeeded ? 200 : result.status === 'timeout' ? 504 : 502);
+  }
   const regionCode = getRequestRegionCode(request);
 
   if (isReverseRequest) {

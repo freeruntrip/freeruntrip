@@ -122,6 +122,7 @@ function initializeFreeRunTripMapboxMainMap() {
       'FreeRunTrip Mapbox 메인 지도 준비 완료'
     );
 
+    syncRunTripCafeIcons(freeRunTripMapboxMainMap);
     initializeMapboxRunningRouteLayer();
 
     freeRunTripMapboxMainMap.once(
@@ -6832,14 +6833,17 @@ function showRunTripMapPlaceSheet(place) {
       isBottomNavigationVisible
   );
 
+  const representative = getRunTripCafeRepresentative(place);
+
   runTripMapPlaceName.textContent =
-    place.name || '선택한 장소';
+    representative?.name || place.name || '선택한 장소';
 
   runTripMapPlaceCategory.textContent =
-    place.category || '장소';
+    representative?.category || place.category || '장소';
 
-    const displayedName =
-    cleanRunTripMapPlaceText(place.name);
+  const displayedName = cleanRunTripMapPlaceText(
+    representative?.name || place.name
+  );
 
   const displayedAddress =
     cleanRunTripMapPlaceText(place.address);
@@ -6858,8 +6862,9 @@ function showRunTripMapPlaceSheet(place) {
     isDuplicateAddress
   );
 
-  const brand =
-    String(place.brand || '').trim();
+    const brand = representative
+     ? ''
+     : String(place.brand || '').trim();
 
   if (brand) {
     runTripMapPlaceBrand.textContent =
@@ -7140,6 +7145,473 @@ function convertMapboxFeatureToRunTripPlace(
     source: 'mapbox-search-box',
   };
 }
+// 실제 카페 데이터만 보관한다. 기존 대표 이름 처리와 별개다.
+const runTripCafeIconPlaces = new Map();
+const runTripCafeIconMapStates = new WeakMap();
+const runTripCafeAutoLoadStates = new WeakMap();
+
+function initializeRunTripCafeAutoLoad(mapInstance) {
+  if (!mapInstance || runTripCafeAutoLoadStates.has(mapInstance)) return;
+
+  const state = {
+    timer: null,
+    controller: null,
+    removed: false,
+    lastAttemptAt: 0,
+    cache: new Map()
+  };
+  runTripCafeAutoLoadStates.set(mapInstance, state);
+
+  const cancel = () => {
+    clearTimeout(state.timer);
+    state.controller?.abort();
+    state.controller = null;
+  };
+
+  const load = async () => {
+    const container = mapInstance.getContainer();
+    if (
+      state.removed ||
+      mapInstance.isMoving() ||
+      mapInstance.getZoom() < 15 ||
+      !mapInstance.isStyleLoaded() ||
+      !container.getClientRects().length ||
+      !container.clientWidth || !container.clientHeight
+    ) return;
+
+    const center = mapInstance.getCenter().wrap();
+    const bounds = mapInstance.getBounds();
+    if (!bounds) return;
+
+    const corners = [
+      bounds.getNorthEast(), bounds.getNorthWest(),
+      bounds.getSouthEast(), bounds.getSouthWest()
+    ];
+    const distance = Math.max(
+      ...corners.map((point) => center.distanceTo(point))
+    );
+    if (!Number.isFinite(distance)) return;
+
+    const radius = Math.min(
+      1000,
+      Math.max(100, Math.ceil(distance / 50) * 50 + 50)
+    );
+
+    const url = new URL(
+      getReverseGeocodeUrl(
+        Number(center.lat.toFixed(4)),
+        Number(center.lng.toFixed(4))
+      ),
+      window.location.href
+    );
+    url.searchParams.set('mode', 'cafes');
+    url.searchParams.set('radius', String(radius));
+
+    const key = url.toString();
+    const cachedAt = state.cache.get(key);
+
+    if (
+      cachedAt !== undefined &&
+      Date.now() - cachedAt < 120000
+    ) return;
+
+    const controller = new AbortController();
+    state.controller = controller;
+    state.lastAttemptAt = Date.now();
+
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      8000
+    );
+
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal
+      });
+      const data = await response.json();
+
+      if (state.removed || controller.signal.aborted) return;
+
+      if (
+        !response.ok ||
+        data.mode !== 'cafes' ||
+        !['ok', 'empty'].includes(data.status) ||
+        !Array.isArray(data.places)
+      ) {
+        throw new Error(
+          `Cafe lookup failed (${response.status})`
+        );
+      }
+
+      state.cache.delete(key);
+      state.cache.set(key, Date.now());
+
+      while (state.cache.size > 24) {
+        state.cache.delete(state.cache.keys().next().value);
+      }
+
+      collectRunTripCafeIconPlaces(data.places);
+      syncRunTripCafeIcons(freeRunTripMapboxMainMap);
+      syncRunTripCafeIcons(freeRunTripMapboxSearchMap);
+    } catch (error) {
+      if (!controller.signal.aborted && !state.removed) {
+        console.warn(
+          '카페 자동 조회를 완료하지 못했어요.',
+          error
+        );
+      }
+    } finally {
+      clearTimeout(timeoutId);
+
+      if (state.controller === controller) {
+        state.controller = null;
+      }
+    }
+  };
+
+  const schedule = () => {
+    if (state.removed) return;
+
+    clearTimeout(state.timer);
+
+    const delay = Math.max(
+      650,
+      state.lastAttemptAt + 5000 - Date.now()
+    );
+    state.timer = setTimeout(load, delay);
+  };
+
+  mapInstance.on('movestart', cancel);
+  mapInstance.on('moveend', schedule);
+  mapInstance.on('resize', schedule);
+  mapInstance.on('style.load', schedule);
+  mapInstance.once('idle', schedule);
+
+  mapInstance.once('remove', () => {
+    state.removed = true;
+    cancel();
+
+    mapInstance.off('movestart', cancel);
+    mapInstance.off('moveend', schedule);
+    mapInstance.off('resize', schedule);
+    mapInstance.off('style.load', schedule);
+    mapInstance.off('idle', schedule);
+
+    runTripCafeAutoLoadStates.delete(mapInstance);
+  });
+
+  schedule();
+}
+
+function getRunTripCafeIconSprite() {
+  const paths = new Set();
+
+  for (const entry of performance.getEntriesByType('resource')) {
+    try {
+      const url = new URL(entry.name);
+
+      if (
+        url.hostname === 'api.mapbox.com' &&
+        url.pathname.includes('/styles/v1/mapbox/standard/') &&
+        url.pathname.endsWith('/iconset.pbf')
+      ) {
+        paths.add(url.pathname);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  // 원본이 여러 개라면 임의로 선택하지 않는다.
+  if (paths.size !== 1) return '';
+
+  return [...paths][0]
+    .replace('/styles/v1/', 'mapbox://sprites/')
+    .replace(/\/iconset\.pbf$/, '');
+}
+
+function syncRunTripCafeIcons(mapInstance) {
+  if (!mapInstance) return;
+
+  initializeRunTripCafeAutoLoad(mapInstance);
+
+  let state = runTripCafeIconMapStates.get(mapInstance);
+
+  if (!state) {
+    state = { signature: '', warned: false };
+    runTripCafeIconMapStates.set(mapInstance, state);
+
+    const refresh = () => syncRunTripCafeIcons(mapInstance);
+
+    const reset = () => {
+      state.signature = '';
+      state.warned = false;
+    };
+
+    // 로딩 중 받은 데이터는 지도가 준비되면 반영한다.
+    mapInstance.on('idle', refresh);
+    mapInstance.on('style.load', reset);
+
+    mapInstance.once('remove', () => {
+      mapInstance.off('idle', refresh);
+      mapInstance.off('style.load', reset);
+      runTripCafeIconMapStates.delete(mapInstance);
+    });
+  }
+
+  if (!mapInstance.isStyleLoaded()) return;
+
+  const importId = 'freeruntrip-cafe-icons';
+  const imports = mapInstance.getStyle()?.imports || [];
+  const exists = imports.some((item) => item.id === importId);
+  const cafes = Array.from(runTripCafeIconPlaces.values());
+
+  if (!cafes.length && !exists) return;
+
+  const sprite = getRunTripCafeIconSprite();
+
+  if (!sprite) {
+    if (!state.warned) {
+      console.warn('카페 아이콘 원본을 하나로 확인하지 못했어요.');
+      state.warned = true;
+    }
+    return;
+  }
+
+  const features = cafes.map((cafe) => ({
+    type: 'Feature',
+    properties: { cafeId: cafe.id },
+    geometry: {
+      type: 'Point',
+      coordinates: [cafe.longitude, cafe.latitude]
+    }
+  }));
+
+  const signature = JSON.stringify([sprite, features]);
+
+  // 같은 데이터로 아이콘을 반복 생성하지 않는다.
+  if (exists && state.signature === signature) return;
+
+  const cafeStyle = {
+    version: 8,
+    sprite,
+    sources: {
+      cafes: {
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features
+        }
+      }
+    },
+    layers: [{
+      id: 'cafe-icons',
+      type: 'symbol',
+      source: 'cafes',
+      minzoom: 15,
+      layout: {
+        'icon-image': ['image', 'cafe', {
+          params: {
+            background: '#536f80',
+            icon: '#ffffff',
+            'background-stroke': '#ffffff',
+            'icon-stroke': 'rgba(0,0,0,0)'
+          }
+        }],
+        'icon-size': 1,
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true
+      },
+      paint: {
+        'icon-emissive-strength': 0.9
+      }
+    }]
+  };
+
+  try {
+    if (exists) {
+      // URL은 유지하고 데이터만 갱신한다.
+      mapInstance.updateImport(importId, {
+        data: cafeStyle
+      });
+    } else {
+      mapInstance.addImport({
+        id: importId,
+        url: 'data:application/json,' +
+          encodeURIComponent(JSON.stringify(cafeStyle)),
+        data: cafeStyle
+      });
+    }
+
+    state.signature = signature;
+    state.warned = false;
+  } catch (error) {
+    if (!state.warned) {
+      console.warn(
+        '카페 아이콘 자동 표시를 완료하지 못했어요.',
+        error
+      );
+      state.warned = true;
+    }
+  }
+}
+function collectRunTripCafeIconPlaces(candidates) {
+  if (!Array.isArray(candidates)) return;
+
+  for (const candidate of candidates) {
+    const types = Array.isArray(candidate?.types)
+      ? candidate.types
+      : [];
+
+    if (
+      !types.includes('cafe') &&
+      !types.includes('coffee_shop')
+    ) {
+      continue;
+    }
+
+    const id = typeof candidate.id === 'string'
+      ? candidate.id.trim()
+      : '';
+
+    const name = cleanRunTripMapPlaceText(
+      candidate.displayName?.text
+    );
+    const address = cleanRunTripMapPlaceText(
+      candidate.formattedAddress
+    );
+    const latitude = candidate.location?.latitude;
+    const longitude = candidate.location?.longitude;
+
+    if (
+      !id || !name || !address ||
+      name.normalize('NFC') === address.normalize('NFC') ||
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      Math.abs(latitude) > 90 ||
+      Math.abs(longitude) > 180
+    ) {
+      continue;
+    }
+
+    // 같은 주소의 다른 카페는 유지하고, 같은 장소 ID만 갱신한다.
+    runTripCafeIconPlaces.set(id, {
+      id,
+      googlePlaceId: id,
+      name,
+      address,
+      latitude,
+      longitude,
+      category: cleanRunTripMapPlaceText(
+        candidate.primaryTypeDisplayName?.text
+      ) || 'cafe',
+      types: [...types]
+    });
+  }
+}
+function applyRunTripCafePriorityAtAddress(place, data) {
+  if (!place || place.mapDetailsState !== 'ready') return place;
+
+  // 이번 조회 결과로 대표 이름을 다시 판단한다.
+  const nextPlace = { ...place };
+  delete nextPlace.runTripCafeRepresentative;
+
+  const addressId = cleanRunTripMapPlaceText(
+    data?.place?.googlePlaceId || data?.place?.id
+  );
+  const currentAddressId = cleanRunTripMapPlaceText(
+    place.googlePlaceId || place.id
+  );
+  const responseAddress = cleanRunTripMapPlaceText(
+    data?.place?.address ||
+    data?.place?.roadAddress ||
+    data?.place?.lotAddress
+  );
+  const addressTypes = Array.isArray(data?.place?.types)
+    ? data.place.types
+    : [];
+
+  if (
+    place.isCurrentLocation === true ||
+    data?.placeMatchMethod !== 'reverse-address-id' ||
+    !addressId ||
+    addressId !== currentAddressId ||
+    !responseAddress ||
+    responseAddress !== cleanRunTripMapPlaceText(place.address) ||
+    !addressTypes.some(function (type) {
+      return ['street_address', 'premise', 'subpremise'].includes(type);
+    }) ||
+    !Number.isFinite(place.latitude) ||
+    !Number.isFinite(place.longitude) ||
+    Math.abs(place.latitude) > 90 ||
+    Math.abs(place.longitude) > 180 ||
+    !Array.isArray(data.nearbyPlaces) ||
+    data.nearbyPlaces.length === 0
+  ) {
+    return nextPlace;
+  }
+
+  // 아이콘 없는 위치의 단일 매장 선택은 기존 처리에 맡긴다.
+  if (!place.isMapPoi && data.nearbyPlaces.length === 1) {
+    return nextPlace;
+  }
+
+  const seenIds = new Set();
+  const cafes = [];
+
+  for (const candidate of data.nearbyPlaces) {
+    const id = typeof candidate?.id === 'string'
+      ? candidate.id.trim()
+      : '';
+    const name = cleanRunTripMapPlaceText(candidate?.displayName?.text);
+    const address = cleanRunTripMapPlaceText(candidate?.formattedAddress);
+    const location = candidate?.location;
+
+    // 불완전한 후보를 제외한 뒤 '카페 한 곳'이라고 단정하지 않는다.
+    if (
+      !id || seenIds.has(id) || !name || !address ||
+      !Array.isArray(candidate?.types) ||
+      !Number.isFinite(location?.latitude) ||
+      !Number.isFinite(location?.longitude) ||
+      Math.abs(location.latitude) > 90 ||
+      Math.abs(location.longitude) > 180
+    ) {
+      return nextPlace;
+    }
+    seenIds.add(id);
+
+    if (
+      candidate.types.includes('cafe') ||
+      candidate.types.includes('coffee_shop')
+    ) {
+      // 카페의 이름 자리에 주소만 있다면 대표 이름으로 쓰지 않는다.
+      if (name.normalize('NFC') === address.normalize('NFC')) {
+        return nextPlace;
+      }
+      cafes.push(candidate);
+    }
+  }
+
+  // 카페가 없거나 여러 곳이면 임의로 대표 카페를 정하지 않는다.
+  if (cafes.length !== 1) return nextPlace;
+
+  const cafe = cafes[0];
+
+  // 원래 이름·ID·주소·좌표·목록은 보존하고 표시 정보만 연결한다.
+  nextPlace.runTripCafeRepresentative = {
+    placeId: cafe.id.trim(),
+    name: cleanRunTripMapPlaceText(cafe.displayName.text),
+    category:
+      cleanRunTripMapPlaceText(cafe.primaryTypeDisplayName?.text) || 'cafe',
+    matchMethod: 'reverse-address-id',
+    addressId,
+    address: place.address,
+    latitude: place.latitude,
+    longitude: place.longitude
+  };
+
+  return nextPlace;
+}
 async function loadRunTripMapPlaceDetails(place) {
   const requestId =
     ++runTripMapPlaceDetailRequestId;
@@ -7344,15 +7816,22 @@ async function loadRunTripMapPlaceDetails(place) {
 
       mapDetailsState: 'ready'
     };
+      collectRunTripCafeIconPlaces(data.nearbyPlaces);
 
-        showRunTripMapPlaceSheet(detailedPlace);
+      syncRunTripCafeIcons(freeRunTripMapboxMainMap);
+      syncRunTripCafeIcons(freeRunTripMapboxSearchMap);
+      const displayedPlace = applyRunTripCafePriorityAtAddress(
+        detailedPlace,
+        data
+      );
 
-    // 이름 없는 지도 지점은 주소 위치에 일치하는
-    // 단일 매장이 있을 때 해당 매장 정보로 표시한다.
+    showRunTripMapPlaceSheet(displayedPlace);
+
+    // 단일 매장인 경우에는 기존 동작을 유지한다.
     if (resolvedPlace && !place.isMapPoi) {
       selectRunTripNearbyPlace(
         resolvedPlace,
-        detailedPlace
+        displayedPlace
       );
     }
 
@@ -17149,11 +17628,10 @@ function escapePlaceSearchText(value) {
     .replace(/'/g, '&#039;');
 }
 function getRunTripPlaceDisplayName(place) {
-  if (!place) {
-    return '';
-  }
+  if (!place) return '';
 
   return (
+    getRunTripCafeRepresentative(place)?.name ||
     place.displayName ||
     place.name ||
     place.address ||
@@ -17162,11 +17640,10 @@ function getRunTripPlaceDisplayName(place) {
 }
 
 function getRunTripPlacePrimaryText(place) {
-  if (!place) {
-    return '';
-  }
+  if (!place) return '';
 
   return (
+    getRunTripCafeRepresentative(place)?.name ||
     place.primaryText ||
     place.name ||
     place.address ||
@@ -17679,6 +18156,7 @@ function initializeRunTripSearchMap() {
     console.log(
       'FreeRunTrip 장소 검색 지도 준비 완료'
     );
+    syncRunTripCafeIcons(freeRunTripMapboxSearchMap);
 
     freeRunTripMapboxSearchMap.on(
   'click',
@@ -17798,7 +18276,171 @@ runTripSearchInput.value = isDefaultCurrentLocation
    });
  });
 }
+function getRunTripCafeAddressKey(place) {
+  if (
+    !place ||
+    place.isCurrentLocation === true ||
+    !Number.isFinite(place.latitude) ||
+    !Number.isFinite(place.longitude) ||
+    Math.abs(place.latitude) > 90 ||
+    Math.abs(place.longitude) > 180
+  ) {
+    return '';
+  }
 
+  const address = typeof place.address === 'string'
+    ? place.address.normalize('NFC').replace(/\s+/g, ' ').trim()
+    : '';
+
+  const countryCode = typeof place.countryCode === 'string'
+    ? place.countryCode.trim().toUpperCase()
+    : '';
+
+  const types = Array.isArray(place.types) ? place.types : [];
+  const areaTypes = new Set([
+    'country', 'locality', 'postal_town', 'neighborhood',
+    'route', 'intersection', 'postal_code', 'plus_code'
+  ]);
+
+  // 도시·도로 전체를 특정 카페의 주소로 취급하지 않는다.
+  const isArea = [...types, place.resultType].some(function (type) {
+    return typeof type === 'string' && (
+      areaTypes.has(type) ||
+      /^(administrative_area_level_|sublocality)/.test(type)
+    );
+  });
+
+  if (!address || !/^[A-Z]{2}$/.test(countryCode) || isArea) {
+    return '';
+  }
+
+  // 층·호수·지번·하이픈을 지우거나 다른 주소로 변환하지 않는다.
+  return JSON.stringify([countryCode, address]);
+}
+
+function applyRunTripCafeRepresentativeNames(places) {
+  if (!Array.isArray(places)) return [];
+
+  // 재적용할 때 이전 대표 이름을 새 응답의 근거로 사용하지 않는다.
+  const sourcePlaces = places.map(function (place) {
+    if (!place?.runTripCafeRepresentative) return place;
+
+    const original = { ...place };
+    delete original.runTripCafeRepresentative;
+    return original;
+  });
+
+  const cafesByAddress = new Map();
+
+  sourcePlaces.forEach(function (place) {
+    const addressKey = getRunTripCafeAddressKey(place);
+    const types = Array.isArray(place?.types) ? place.types : [];
+
+    if (
+      !addressKey ||
+      !(types.includes('cafe') || types.includes('coffee_shop'))
+    ) {
+      return;
+    }
+
+    const placeId = [place.googlePlaceId, place.id]
+      .find(function (value) {
+        return typeof value === 'string' && value.trim();
+      });
+
+    const name = [place.primaryText, place.displayName, place.name]
+      .find(function (value) {
+        return typeof value === 'string' && value.trim();
+      });
+
+    if (!placeId || !name) return;
+
+    const cleanedName = cleanRunTripMapPlaceText(name);
+    const normalizedAddress = place.address
+      .normalize('NFC').replace(/\s+/g, ' ').trim();
+
+    // 상호명 없이 주소만 반환된 카페는 대표 이름으로 사용하지 않는다.
+    if (!cleanedName || cleanedName.normalize('NFC') === normalizedAddress) {
+      return;
+    }
+
+    if (!cafesByAddress.has(addressKey)) {
+      cafesByAddress.set(addressKey, new Map());
+    }
+
+    cafesByAddress.get(addressKey).set(placeId.trim(), {
+      placeId: placeId.trim(),
+      name: cleanedName,
+      category: cleanRunTripMapPlaceText(place.category) || 'cafe',
+      addressKey
+    });
+  });
+
+  // 순서·개수와 원본 장소의 이름·주소·좌표·ID는 그대로 둔다.
+  return sourcePlaces.map(function (place) {
+    const addressKey = getRunTripCafeAddressKey(place);
+    const cafes = cafesByAddress.get(addressKey);
+    const types = Array.isArray(place?.types) ? place.types : [];
+
+    // 원래 카페인 결과는 본인의 이름을 유지한다.
+    if (
+      !cafes ||
+      cafes.size !== 1 ||
+      types.includes('cafe') ||
+      types.includes('coffee_shop')
+    ) {
+      return place;
+    }
+
+    // 카페 ID는 원래 장소 ID를 덮어쓰지 않고 별도로 보관한다.
+    return {
+      ...place,
+      runTripCafeRepresentative: {
+        ...cafes.values().next().value
+      }
+    };
+  });
+}
+
+function getRunTripCafeRepresentative(place) {
+  const representative = place?.runTripCafeRepresentative;
+  if (!representative?.name) return null;
+
+  // 지도 조회는 기존 서버의 주소 ID 일치 판정을 사용한다.
+  if (representative.matchMethod === 'reverse-address-id') {
+    const addressId = cleanRunTripMapPlaceText(
+      place.googlePlaceId || place.id
+    );
+
+    if (
+      place.mapDetailsState !== 'ready' ||
+      place.isCurrentLocation === true ||
+      !representative.placeId ||
+      !representative.addressId ||
+      representative.addressId !== addressId ||
+      !cleanRunTripMapPlaceText(place.address) ||
+      representative.address !== place.address ||
+      !Number.isFinite(place.latitude) ||
+      !Number.isFinite(place.longitude) ||
+      Math.abs(place.latitude) > 90 ||
+      Math.abs(place.longitude) > 180 ||
+      representative.latitude !== place.latitude ||
+      representative.longitude !== place.longitude
+    ) {
+      return null;
+    }
+
+    return representative;
+  }
+
+  // 직접 입력 검색의 기존 국가 코드·전체 주소 비교는 유지한다.
+  const addressKey = getRunTripCafeAddressKey(place);
+  if (!addressKey || representative.addressKey !== addressKey) {
+    return null;
+  }
+
+  return representative;
+}
 async function searchPlacesOnRunTripSearchScreen() {
   const query = runTripSearchInput.value.trim();
   const requestId = ++runTripSearchRequestId;
@@ -17834,8 +18476,9 @@ async function searchPlacesOnRunTripSearchScreen() {
       );
     }
 
-    const places = data.places || [];
-
+    const places = applyRunTripCafeRepresentativeNames(
+      data.places || []
+    );
     if (places.length === 0) {
       runTripSearchGuide.textContent =
         '검색 결과가 없어요. 다른 장소명이나 주소를 입력해 주세요.';
