@@ -7149,7 +7149,452 @@ function convertMapboxFeatureToRunTripPlace(
 const runTripCafeIconPlaces = new Map();
 const runTripCafeIconMapStates = new WeakMap();
 const runTripCafeAutoLoadStates = new WeakMap();
+// 편의점 자동 표시용 데이터와 지도 상태
+const runTripConveniencePlaces = new Map();
+const runTripConvenienceAutoLoadStates = new WeakMap();
+const runTripConvenienceMapStates = new WeakMap();
 
+const RUNTRIP_CONVENIENCE_SOURCE =
+  'freeruntrip-convenience-places';
+
+const RUNTRIP_CONVENIENCE_LAYER =
+  'freeruntrip-convenience-icons';
+
+const RUNTRIP_CONVENIENCE_IMAGE =
+  'freeruntrip-convenience-shop';
+
+// Google 조회 결과 중 편의점만 보관한다.
+function collectRunTripConveniencePlaces(candidates) {
+  if (!Array.isArray(candidates)) return;
+
+  for (const candidate of candidates) {
+    const types = Array.isArray(candidate?.types)
+      ? candidate.types
+      : [];
+
+    if (!types.includes('convenience_store')) {
+      continue;
+    }
+
+    const id = typeof candidate.id === 'string'
+      ? candidate.id.trim()
+      : '';
+
+    const name = cleanRunTripMapPlaceText(
+      candidate.displayName?.text
+    );
+
+    const address = cleanRunTripMapPlaceText(
+      candidate.formattedAddress
+    );
+
+    const latitude = candidate.location?.latitude;
+    const longitude = candidate.location?.longitude;
+
+    if (
+      !id ||
+      !name ||
+      !address ||
+      name.normalize('NFC') === address.normalize('NFC') ||
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      Math.abs(latitude) > 90 ||
+      Math.abs(longitude) > 180
+    ) {
+      continue;
+    }
+
+    // 같은 장소 ID는 갱신하고, 같은 주소의 다른 매장은 유지한다.
+    runTripConveniencePlaces.set(id, {
+      id,
+      googlePlaceId: id,
+      name,
+      address,
+      latitude,
+      longitude,
+      category: cleanRunTripMapPlaceText(
+        candidate.primaryTypeDisplayName?.text
+      ) || 'convenience_store',
+      types: [...types],
+    });
+  }
+}
+
+// 청회색 원 안에 흰색 가게 모양 아이콘을 만든다.
+function createRunTripConvenienceImage() {
+  const canvas = document.createElement('canvas');
+
+  canvas.width = 40;
+  canvas.height = 40;
+
+  const ctx = canvas.getContext('2d');
+
+  ctx.scale(2, 2);
+
+  // 원형 배경
+  ctx.fillStyle = '#536f80';
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1;
+
+  ctx.beginPath();
+  ctx.arc(10, 10, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // 가게 본체
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(5.5, 9, 9, 6);
+
+  // 가게 차양
+  ctx.beginPath();
+  ctx.moveTo(5, 8.5);
+  ctx.lineTo(6.5, 5.5);
+  ctx.lineTo(13.5, 5.5);
+  ctx.lineTo(15, 8.5);
+  ctx.closePath();
+  ctx.fill();
+
+  // 창문과 출입문
+  ctx.fillStyle = '#536f80';
+  ctx.fillRect(7, 10.5, 2, 2);
+  ctx.fillRect(11, 10.5, 2, 4.5);
+
+  return ctx.getImageData(0, 0, 40, 40);
+}
+function initializeRunTripConvenienceAutoLoad(mapInstance) {
+  if (
+    !mapInstance ||
+    runTripConvenienceAutoLoadStates.has(mapInstance)
+  ) {
+    return;
+  }
+
+  const state = {
+    timer: null,
+    controller: null,
+    removed: false,
+    lastAttemptAt: 0,
+    cache: new Map(),
+  };
+
+  runTripConvenienceAutoLoadStates.set(mapInstance, state);
+
+  const cancel = () => {
+    clearTimeout(state.timer);
+    state.controller?.abort();
+    state.controller = null;
+  };
+
+  const load = async () => {
+    const container = mapInstance.getContainer();
+
+    if (
+      state.removed ||
+      mapInstance.isMoving() ||
+      mapInstance.getZoom() < 15 ||
+      !mapInstance.isStyleLoaded() ||
+      !container.getClientRects().length ||
+      !container.clientWidth ||
+      !container.clientHeight
+    ) {
+      return;
+    }
+
+    const center = mapInstance.getCenter().wrap();
+    const bounds = mapInstance.getBounds();
+
+    if (!bounds) return;
+
+    const corners = [
+      bounds.getNorthEast(),
+      bounds.getNorthWest(),
+      bounds.getSouthEast(),
+      bounds.getSouthWest(),
+    ];
+
+    const distance = Math.max(
+      ...corners.map(point => center.distanceTo(point))
+    );
+
+    if (!Number.isFinite(distance)) return;
+
+    const radius = Math.min(
+      1000,
+      Math.max(100, Math.ceil(distance / 50) * 50 + 50)
+    );
+
+    const url = new URL(
+      getReverseGeocodeUrl(
+        Number(center.lat.toFixed(4)),
+        Number(center.lng.toFixed(4))
+      ),
+      window.location.href
+    );
+
+    url.searchParams.set('mode', 'convenience-stores');
+    url.searchParams.set('radius', String(radius));
+
+    const key = url.toString();
+    const cachedAt = state.cache.get(key);
+
+    if (
+      cachedAt !== undefined &&
+      Date.now() - cachedAt < 120000
+    ) {
+      return;
+    }
+
+    const controller = new AbortController();
+
+    state.controller = controller;
+    state.lastAttemptAt = Date.now();
+
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      8000
+    );
+
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+      });
+
+      const data = await response.json();
+
+      if (
+        state.removed ||
+        controller.signal.aborted
+      ) {
+        return;
+      }
+
+      if (
+        !response.ok ||
+        data.mode !== 'convenience-stores' ||
+        !['ok', 'empty'].includes(data.status) ||
+        !Array.isArray(data.places)
+      ) {
+        throw new Error(
+          `Convenience lookup failed (${response.status})`
+        );
+      }
+
+      state.cache.delete(key);
+      state.cache.set(key, Date.now());
+
+      while (state.cache.size > 24) {
+        state.cache.delete(
+          state.cache.keys().next().value
+        );
+      }
+
+      collectRunTripConveniencePlaces(data.places);
+
+      syncRunTripConvenienceIcons(
+        freeRunTripMapboxMainMap
+      );
+
+      syncRunTripConvenienceIcons(
+        freeRunTripMapboxSearchMap
+      );
+    } catch (error) {
+      if (
+        !controller.signal.aborted &&
+        !state.removed
+      ) {
+        console.warn(
+          '편의점 자동 조회를 완료하지 못했어요.',
+          error
+        );
+      }
+    } finally {
+      clearTimeout(timeoutId);
+
+      if (state.controller === controller) {
+        state.controller = null;
+      }
+    }
+  };
+
+  const schedule = () => {
+    if (state.removed) return;
+
+    clearTimeout(state.timer);
+
+    const delay = Math.max(
+      650,
+      state.lastAttemptAt + 5000 - Date.now()
+    );
+
+    state.timer = setTimeout(load, delay);
+  };
+
+  mapInstance.on('movestart', cancel);
+  mapInstance.on('moveend', schedule);
+  mapInstance.on('resize', schedule);
+  mapInstance.on('style.load', schedule);
+  mapInstance.once('idle', schedule);
+
+  mapInstance.once('remove', () => {
+    state.removed = true;
+    cancel();
+
+    mapInstance.off('movestart', cancel);
+    mapInstance.off('moveend', schedule);
+    mapInstance.off('resize', schedule);
+    mapInstance.off('style.load', schedule);
+    mapInstance.off('idle', schedule);
+
+    runTripConvenienceAutoLoadStates.delete(mapInstance);
+  });
+
+  schedule();
+}
+
+function syncRunTripConvenienceIcons(mapInstance) {
+  if (!mapInstance) return;
+
+  initializeRunTripConvenienceAutoLoad(mapInstance);
+
+  let state = runTripConvenienceMapStates.get(mapInstance);
+
+  if (!state) {
+    state = {
+      signature: '',
+      warned: false,
+    };
+
+    runTripConvenienceMapStates.set(mapInstance, state);
+
+    const refresh = () => {
+      syncRunTripConvenienceIcons(mapInstance);
+    };
+
+    const reset = () => {
+      state.signature = '';
+      state.warned = false;
+    };
+
+    mapInstance.on('idle', refresh);
+    mapInstance.on('style.load', reset);
+
+    mapInstance.once('remove', () => {
+      mapInstance.off('idle', refresh);
+      mapInstance.off('style.load', reset);
+      runTripConvenienceMapStates.delete(mapInstance);
+    });
+  }
+
+  if (!mapInstance.isStyleLoaded()) return;
+
+  if (
+    !runTripConveniencePlaces.size &&
+    !mapInstance.getSource(RUNTRIP_CONVENIENCE_SOURCE)
+  ) {
+    return;
+  }
+
+  try {
+    if (!mapInstance.hasImage(RUNTRIP_CONVENIENCE_IMAGE)) {
+      mapInstance.addImage(
+        RUNTRIP_CONVENIENCE_IMAGE,
+        createRunTripConvenienceImage(),
+        { pixelRatio: 2 }
+      );
+    }
+
+    const features = [
+      ...runTripConveniencePlaces.values(),
+    ].map(place => ({
+      type: 'Feature',
+      id: place.id,
+      properties: {
+        convenienceId: place.id,
+        name: place.name,
+      },
+      geometry: {
+        type: 'Point',
+        coordinates: [
+          place.longitude,
+          place.latitude,
+        ],
+      },
+    }));
+
+    const data = {
+      type: 'FeatureCollection',
+      features,
+    };
+
+    const signature = JSON.stringify(features);
+
+    const source = mapInstance.getSource(
+      RUNTRIP_CONVENIENCE_SOURCE
+    );
+
+    if (!source) {
+      mapInstance.addSource(
+        RUNTRIP_CONVENIENCE_SOURCE,
+        {
+          type: 'geojson',
+          data,
+        }
+      );
+    } else if (signature !== state.signature) {
+      source.setData(data);
+    }
+
+    if (!mapInstance.getLayer(RUNTRIP_CONVENIENCE_LAYER)) {
+      mapInstance.addLayer({
+        id: RUNTRIP_CONVENIENCE_LAYER,
+        type: 'symbol',
+        source: RUNTRIP_CONVENIENCE_SOURCE,
+        slot: 'top',
+        minzoom: 15,
+        layout: {
+          'icon-image': RUNTRIP_CONVENIENCE_IMAGE,
+          'icon-size': 1,
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'text-field': ['get', 'name'],
+          'text-font': [
+            'Open Sans Semibold',
+            'Arial Unicode MS Regular',
+          ],
+          'text-size': 12,
+          'text-anchor': 'top',
+          'text-offset': [0, 1.1],
+          'text-justify': 'center',
+          'text-max-width': 10,
+          'text-line-height': 1.2,
+          'text-padding': 3,
+          'text-allow-overlap': false,
+          'text-ignore-placement': false,
+          'text-optional': true,
+        },
+        paint: {
+          'icon-emissive-strength': 0.9,
+          'text-color': '#536f80',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 1,
+          'text-emissive-strength': 0.9,
+        },
+      });
+    }
+
+    state.signature = signature;
+    state.warned = false;
+  } catch (error) {
+    if (!state.warned) {
+      console.warn(
+        '편의점 아이콘 표시를 완료하지 못했어요.',
+        error
+      );
+
+      state.warned = true;
+    }
+  }
+}
 function initializeRunTripCafeAutoLoad(mapInstance) {
   if (!mapInstance || runTripCafeAutoLoadStates.has(mapInstance)) return;
 
@@ -7332,6 +7777,8 @@ function getRunTripCafeIconSprite() {
 
 function syncRunTripCafeIcons(mapInstance) {
   if (!mapInstance) return;
+
+  syncRunTripConvenienceIcons(mapInstance);
 
   initializeRunTripCafeAutoLoad(mapInstance);
 
@@ -7638,6 +8085,16 @@ function applyRunTripCafePriorityAtAddress(place, data) {
 async function loadRunTripMapPlaceDetails(place) {
   const requestId =
     ++runTripMapPlaceDetailRequestId;
+
+  // 편의점 아이콘은 조회된 매장 정보를 그대로 사용한다.
+  // 주변 건물이나 다른 매장 정보로 덮어쓰지 않는다.
+  if (
+    place?.source === 'google-convenience-icon' &&
+    place.mapDetailsState === 'ready'
+  ) {
+    showRunTripMapPlaceSheet(place);
+    return;
+  }
 
   const latitude = Number(place?.latitude);
   const longitude = Number(place?.longitude);
@@ -17929,12 +18386,87 @@ async function searchRunTripPlaces(
     );
   }
 }
+function getRunTripConvenienceFromMapClick(
+  mapInstance,
+  event
+) {
+  if (
+    !mapInstance ||
+    !event?.point ||
+    !mapInstance.getLayer(RUNTRIP_CONVENIENCE_LAYER) ||
+    mapInstance.getZoom() < 15
+  ) {
+    return null;
+  }
+
+  const hits = mapInstance.queryRenderedFeatures(
+    event.point,
+    {
+      layers: [RUNTRIP_CONVENIENCE_LAYER],
+    }
+  );
+
+  const candidates = hits
+    .map(feature => {
+      const id = feature.properties?.convenienceId;
+      return runTripConveniencePlaces.get(id);
+    })
+    .filter(Boolean);
+
+  const distance = place => {
+    const point = mapInstance.project([
+      place.longitude,
+      place.latitude,
+    ]);
+
+    return Math.hypot(
+      point.x - event.point.x,
+      point.y - event.point.y
+    );
+  };
+
+  candidates.sort(
+    (a, b) => distance(a) - distance(b)
+  );
+
+  const place = candidates[0];
+
+  if (!place) return null;
+
+  return {
+    ...place,
+    matchedGooglePlaceId: place.id,
+    displayName: place.name,
+    primaryText: place.name,
+    secondaryText: place.address,
+    roadAddress: '',
+    lotAddress: '',
+    brand: '',
+    source: 'google-convenience-icon',
+    nameSource: 'google-places',
+    addressSource: 'google-places',
+    isMapPoi: true,
+    nearbyPlaces: [],
+    nearbyStatus: 'selected',
+    mapDetailsState: 'ready',
+  };
+}
 function getRunTripPlaceFromMapClick(
   mapInstance,
   event
 ) {
   if (!mapInstance || !event?.point) {
     return null;
+  }
+
+  const conveniencePlace =
+    getRunTripConvenienceFromMapClick(
+      mapInstance,
+      event
+    );
+
+  if (conveniencePlace) {
+    return conveniencePlace;
   }
 
   const hitPadding = 18;
