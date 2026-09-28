@@ -1068,13 +1068,14 @@ async function requestGoogleNearbyPlaces({
             'places.addressComponents',
             'places.location',
             'places.types',
+            'places.primaryType',
             'places.primaryTypeDisplayName',
           ].join(','),
         },
         body: JSON.stringify({
           languageCode: normalizeLanguage(language),
           ...(barOnly
-  ? { includedTypes: RUNTRIP_BAR_TYPES }
+  ? { includedPrimaryTypes: RUNTRIP_BAR_TYPES }
   : convenienceStoreOnly
   ? { includedTypes: ['convenience_store'] }
   : cafeOnly

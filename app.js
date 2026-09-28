@@ -7822,8 +7822,8 @@ function collectRunTripBarPlaces(candidates) {
       ? candidate.types
       : [];
 
-    if (!types.some(type => RUNTRIP_BAR_TYPES.has(type))) {
-      continue;
+    if (!RUNTRIP_BAR_TYPES.has(candidate.primaryType)) {
+        continue;
     }
 
     const id = typeof candidate.id === 'string'
