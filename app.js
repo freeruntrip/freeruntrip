@@ -6630,8 +6630,245 @@ const setRunTripMapPlaceAsDestinationBtn =
 
 let selectedRunTripMapPlace = null;
 let runTripMapPlaceDetailRequestId = 0;
+let runTripPlaceMoreController = null;
+let runTripPlaceMoreVersion = 0;
+let runTripPlaceMoreData = null;
+
+function getRunTripPlaceMoreText(place) {
+  const lang = String(
+    place?.language || document.documentElement.lang || 'ko'
+  ).toLowerCase().split('-')[0];
+
+  const labels = {
+    ko: {
+      more: '더보기',
+      less: '접기',
+      loading: '정보를 불러오고 있어요…',
+      phone: '연락처',
+      hours: '일반 영업시간 · 현지 시간',
+      noPhone: '등록된 연락처가 없어요.',
+      noHours: '등록된 영업시간이 없어요.',
+      unknown: '선택한 장소의 업장 정보를 확인하지 못했어요.',
+      error: '정보를 불러오지 못했어요. 접었다가 다시 펼쳐 주세요.',
+      note: '연락처와 영업시간은 실제와 다를 수 있어요. 방문 전 업장에 연락해 영업 여부를 확인해 주세요.'
+    },
+    en: {
+      more: 'More',
+      less: 'Less',
+      loading: 'Loading…',
+      phone: 'Phone',
+      hours: 'Regular hours · local time',
+      noPhone: 'No phone number listed.',
+      noHours: 'No opening hours listed.',
+      unknown: 'Business details could not be identified for this place.',
+      error: 'Could not load details. Close and reopen to retry.',
+      note: 'Contact details and hours may be outdated. Contact the business before visiting to confirm it is operating.'
+    },
+    ja: {
+      more: '詳細',
+      less: '閉じる',
+      loading: '読み込み中…',
+      phone: '電話番号',
+      hours: '通常の営業時間 · 現地時間',
+      noPhone: '電話番号は未登録です。',
+      noHours: '営業時間は未登録です。',
+      unknown: 'この場所の店舗情報を確認できませんでした。',
+      error: '取得できませんでした。閉じてから再度開いてください。',
+      note: '連絡先や営業時間は実際と異なる場合があります。訪問前に店舗へ連絡し、営業状況をご確認ください。'
+    },
+    de: {
+      more: 'Mehr',
+      less: 'Weniger',
+      loading: 'Wird geladen…',
+      phone: 'Telefon',
+      hours: 'Reguläre Öffnungszeiten · Ortszeit',
+      noPhone: 'Keine Telefonnummer hinterlegt.',
+      noHours: 'Keine Öffnungszeiten hinterlegt.',
+      unknown: 'Der Betrieb an diesem Ort konnte nicht zugeordnet werden.',
+      error: 'Laden fehlgeschlagen. Zum Wiederholen schließen und erneut öffnen.',
+      note: 'Kontaktdaten und Öffnungszeiten können veraltet sein. Bitte kontaktieren Sie den Betrieb vor Ihrem Besuch, um den Betriebsstatus zu prüfen.'
+    }
+  };
+
+  return {
+    lang: labels[lang] ? lang : 'en',
+    ...(labels[lang] || labels.en)
+  };
+}
+
+function resetRunTripPlaceMore(place) {
+  runTripPlaceMoreVersion++;
+  runTripPlaceMoreController?.abort();
+  runTripPlaceMoreController = null;
+  runTripPlaceMoreData = null;
+
+  const button = document.getElementById('runTripPlaceMoreBtn');
+  const panel = document.getElementById('runTripPlaceMorePanel');
+
+  button.textContent = getRunTripPlaceMoreText(place).more;
+  button.setAttribute('aria-expanded', 'false');
+  button.disabled = !place || place.mapDetailsState === 'loading';
+
+  panel.hidden = true;
+  panel.replaceChildren();
+
+  runTripMapPlaceSheet.classList.remove('more-open');
+}
+
+function renderRunTripPlaceMore(text, data, message = '') {
+  const panel = document.getElementById('runTripPlaceMorePanel');
+  panel.replaceChildren();
+
+  function paragraph(value, className = '') {
+    const p = document.createElement('p');
+    p.textContent = value;
+    p.className = className;
+    panel.appendChild(p);
+    return p;
+  }
+
+  if (message) {
+    paragraph(message);
+  }
+
+  if (data) {
+    paragraph(text.phone, 'place-more-label');
+
+    const phone = String(data.phone || '').trim();
+    const dial = String(data.dialPhone || phone)
+      .replace(/[^+\d]/g, '');
+
+    if (phone && /^\+?\d+$/.test(dial)) {
+      const link = document.createElement('a');
+      link.href = `tel:${dial}`;
+      link.textContent = phone;
+      panel.appendChild(link);
+    } else {
+      paragraph(phone || text.noPhone);
+    }
+
+    paragraph(text.hours, 'place-more-label');
+
+    const hours = Array.isArray(data.weekdayHours)
+      ? data.weekdayHours
+      : [];
+
+    if (hours.length) {
+      hours.forEach(line => paragraph(line));
+    } else {
+      paragraph(text.noHours);
+    }
+  }
+
+  paragraph(text.note, 'place-more-note');
+}
+
+async function toggleRunTripPlaceMore() {
+  const place = selectedRunTripMapPlace;
+  if (!place) return;
+
+  const button = document.getElementById('runTripPlaceMoreBtn');
+  const panel = document.getElementById('runTripPlaceMorePanel');
+  const text = getRunTripPlaceMoreText(place);
+
+  const expanded =
+    button.getAttribute('aria-expanded') !== 'true';
+
+  const version = ++runTripPlaceMoreVersion;
+
+  runTripPlaceMoreController?.abort();
+  runTripPlaceMoreController = null;
+
+  button.setAttribute('aria-expanded', String(expanded));
+  button.textContent = expanded ? text.less : text.more;
+  panel.hidden = !expanded;
+
+  runTripMapPlaceSheet.classList.toggle('more-open', expanded);
+
+  if (!expanded) return;
+
+  if (runTripPlaceMoreData) {
+    renderRunTripPlaceMore(text, runTripPlaceMoreData);
+    return;
+  }
+
+  // 주소 ID 대신 실제로 선택·매칭된 매장의 ID를 사용한다.
+  const representative = getRunTripCafeRepresentative(place);
+  const placeId =
+    representative?.placeId ||
+    place.matchedGooglePlaceId ||
+    '';
+
+  if (!placeId) {
+    renderRunTripPlaceMore(text, null, text.unknown);
+    return;
+  }
+
+  renderRunTripPlaceMore(text, null, text.loading);
+
+  const controller = new AbortController();
+  runTripPlaceMoreController = controller;
+
+  const timer = setTimeout(() => controller.abort(), 10000);
+
+  try {
+    const url = new URL(
+      getReverseGeocodeUrl(place.latitude, place.longitude),
+      window.location.href
+    );
+
+    url.search = '';
+    url.searchParams.set('mode', 'details');
+    url.searchParams.set('placeId', placeId);
+    url.searchParams.set('language', text.lang);
+
+    const response = await fetch(url, {
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      throw new Error('Details unavailable');
+    }
+
+    const data = await response.json();
+
+    if (data.placeId !== placeId) {
+      throw new Error('Place ID mismatch');
+    }
+
+    // 다른 매장을 선택하거나 접은 뒤 도착한 응답은 무시한다.
+    if (
+      version !== runTripPlaceMoreVersion ||
+      selectedRunTripMapPlace !== place
+    ) {
+      return;
+    }
+
+    runTripPlaceMoreData = data;
+    renderRunTripPlaceMore(text, data);
+  } catch {
+    if (
+      version !== runTripPlaceMoreVersion ||
+      selectedRunTripMapPlace !== place
+    ) {
+      return;
+    }
+
+    renderRunTripPlaceMore(text, null, text.error);
+  } finally {
+    clearTimeout(timer);
+
+    if (runTripPlaceMoreController === controller) {
+      runTripPlaceMoreController = null;
+    }
+  }
+}
+
+document.getElementById('runTripPlaceMoreBtn')
+  .addEventListener('click', toggleRunTripPlaceMore);
 
 function hideRunTripMapPlaceSheet() {
+  resetRunTripPlaceMore(null);
   selectedRunTripMapPlace = null;
   runTripMapPlaceDetailRequestId++;
 
@@ -6929,6 +7166,7 @@ function showRunTripMapPlaceSheet(place) {
   }
 
     selectedRunTripMapPlace = place;
+    resetRunTripPlaceMore(place);
     renderRunTripBuildingStations(place);
 
   const isSearchScreenOpen =
@@ -8921,6 +9159,7 @@ async function loadRunTripMapPlaceDetails(place) {
     }
 
     pendingPlace.mapDetailsState = 'error';
+    resetRunTripPlaceMore(pendingPlace);
 
     runTripMapPlaceAddress.textContent =
       '주소를 찾지 못했어요. 같은 지점을 다시 터치해 주세요.';

@@ -8628,3 +8628,84 @@ body {
   padding-left: 4px;
   padding-right: 4px;
 }
+#runTripPlaceMoreBtn {
+  position: absolute;
+  top: 54px;
+  right: 18px;
+  width: 44px;
+  min-height: 34px;
+  margin: 0;
+  padding: 0;
+
+  border: none;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #0f766e;
+
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+#runTripPlaceMoreBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+#runTripPlaceMorePanel[hidden] {
+  display: none;
+}
+
+#runTripPlaceMorePanel {
+  max-height: min(240px, 35dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+#runTripPlaceMorePanel p {
+  margin: 0 0 4px;
+}
+
+#runTripPlaceMorePanel .place-more-label {
+  margin-top: 10px;
+  color: #0f172a;
+  font-weight: 800;
+}
+
+#runTripPlaceMorePanel .place-more-label:first-child {
+  margin-top: 0;
+}
+
+#runTripPlaceMorePanel a {
+  color: #0f766e;
+  text-decoration: underline;
+}
+
+#runTripPlaceMorePanel .place-more-note {
+  margin-top: 12px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.runtrip-map-place-sheet.more-open {
+  max-height: calc(
+    100dvh - env(safe-area-inset-bottom, 0px) - 32px
+  );
+  overflow-y: auto;
+}
+
+.runtrip-map-place-sheet.more-open.above-app-navigation {
+  max-height: calc(
+    100dvh - env(safe-area-inset-bottom, 0px) - 110px
+  );
+}

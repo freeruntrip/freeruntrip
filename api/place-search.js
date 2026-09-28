@@ -1201,7 +1201,83 @@ async function requestGoogleReverseGeocode({
     data,
   };
 }
+async function requestRunTripBusinessDetails(placeId, language) {
+  const id = String(placeId || '').trim();
 
+  if (!id || id.length > 512 || /[\s/]/.test(id)) {
+    return jsonResponse(
+      { error: '올바른 장소 ID가 필요해요.' },
+      400
+    );
+  }
+
+  const apiKey = getGoogleMapsApiKey();
+
+  if (!apiKey) {
+    return jsonResponse(
+      { error: 'Google Maps API 키가 설정되지 않았어요.' },
+      500
+    );
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    const endpoint = new URL(
+      `https://places.googleapis.com/v1/places/${encodeURIComponent(id)}`
+    );
+
+    endpoint.searchParams.set('languageCode', language);
+
+    const response = await fetch(endpoint, {
+      signal: controller.signal,
+      headers: {
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask':
+          'id,nationalPhoneNumber,internationalPhoneNumber,regularOpeningHours.weekdayDescriptions'
+      }
+    });
+
+    if (!response.ok) {
+      return jsonResponse(
+        { error: '장소 상세 정보를 불러오지 못했어요.' },
+        response.status === 404 ? 404 : 502
+      );
+    }
+
+    const data = await response.json();
+
+    if (data.id !== id) {
+      throw new Error('Place ID mismatch');
+    }
+
+    return jsonResponse({
+      placeId: data.id,
+      phone:
+        data.nationalPhoneNumber ||
+        data.internationalPhoneNumber ||
+        '',
+      dialPhone:
+        data.internationalPhoneNumber ||
+        data.nationalPhoneNumber ||
+        '',
+      weekdayHours:
+        Array.isArray(data.regularOpeningHours?.weekdayDescriptions)
+          ? data.regularOpeningHours.weekdayDescriptions.filter(
+              value => typeof value === 'string'
+            )
+          : []
+    });
+  } catch {
+    return jsonResponse(
+      { error: '장소 상세 정보를 불러오지 못했어요.' },
+      502
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
 async function handleFetchRequest(request) {
   if (request.method === 'OPTIONS') {
     return new Response(null, {
@@ -1236,6 +1312,12 @@ async function handleFetchRequest(request) {
     'ko'
   );
 
+    if (url.searchParams.get('mode') === 'details') {
+    return requestRunTripBusinessDetails(
+      url.searchParams.get('placeId'),
+      language
+    );
+  }
   const latitudeParam = url.searchParams.get('lat');
   const longitudeParam = url.searchParams.get('lng');
 
