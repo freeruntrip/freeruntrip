@@ -1070,6 +1070,7 @@ async function requestGoogleNearbyPlaces({
             'places.types',
             'places.primaryType',
             'places.primaryTypeDisplayName',
+            'places.businessStatus',
           ].join(','),
         },
         body: JSON.stringify({
@@ -1111,8 +1112,25 @@ async function requestGoogleNearbyPlaces({
       };
     }
 
-    const places = data.places.filter((place) => {
+        const places = data.places.filter((place) => {
       const location = place?.location;
+
+      const isAutoIconRequest =
+        cafeOnly || convenienceStoreOnly || barOnly;
+
+      const businessStatus = String(
+        place?.businessStatus || ''
+      ).trim();
+
+      if (
+        isAutoIconRequest &&
+        (
+          businessStatus === 'CLOSED_PERMANENTLY' ||
+          businessStatus === 'CLOSED_TEMPORARILY'
+        )
+      ) {
+        return false;
+      }
 
       return (
         place?.id &&
