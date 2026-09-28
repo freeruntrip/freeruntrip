@@ -1,3 +1,17 @@
+const RUNTRIP_BAR_TYPES = [
+  'bar',
+  'pub',
+  'wine_bar',
+  'bar_and_grill',
+  'cocktail_bar',
+  'beer_garden',
+  'brewpub',
+  'sports_bar',
+  'irish_pub',
+  'lounge_bar',
+  'gastropub',
+  'japanese_izakaya_restaurant',
+];
 const GOOGLE_PLACES_TEXT_SEARCH_URL =
   'https://places.googleapis.com/v1/places:searchText';
 
@@ -1023,6 +1037,7 @@ async function requestGoogleNearbyPlaces({
   apiKey,
   cafeOnly = false,
   convenienceStoreOnly = false,
+  barOnly = false,
   radius = 100,
 }) {
   if (
@@ -1058,11 +1073,13 @@ async function requestGoogleNearbyPlaces({
         },
         body: JSON.stringify({
           languageCode: normalizeLanguage(language),
-          ...(convenienceStoreOnly
-        ? { includedTypes: ['convenience_store'] }
-        : cafeOnly
-        ? { includedTypes: ['cafe', 'coffee_shop'] }
-        : {}),
+          ...(barOnly
+  ? { includedTypes: RUNTRIP_BAR_TYPES }
+  : convenienceStoreOnly
+  ? { includedTypes: ['convenience_store'] }
+  : cafeOnly
+  ? { includedTypes: ['cafe', 'coffee_shop'] }
+  : {}),
           maxResultCount: 20,
           rankPreference: 'DISTANCE',
           locationRestriction: {
@@ -1257,7 +1274,8 @@ async function handleFetchRequest(request) {
 
 if (
   nearbyMode === 'cafes' ||
-  nearbyMode === 'convenience-stores'
+  nearbyMode === 'convenience-stores' ||
+  nearbyMode === 'bars'
 ) {
   const radiusParam = url.searchParams.get('radius');
   const radius = radiusParam === null
@@ -1279,15 +1297,16 @@ if (
   }
 
   const result = await requestGoogleNearbyPlaces({
-    latitude,
-    longitude,
-    language,
-    apiKey,
-    cafeOnly: nearbyMode === 'cafes',
-    convenienceStoreOnly:
-      nearbyMode === 'convenience-stores',
-    radius,
-  });
+  latitude,
+  longitude,
+  language,
+  apiKey,
+  cafeOnly: nearbyMode === 'cafes',
+  convenienceStoreOnly:
+    nearbyMode === 'convenience-stores',
+  barOnly: nearbyMode === 'bars',
+  radius,
+});
 
   const succeeded =
     result.status === 'ok' ||

@@ -7731,6 +7731,570 @@ function syncRunTripConvenienceIcons(mapInstance) {
     }
   }
 }
+// 술집 자동 표시용 유형과 지도 상태
+const RUNTRIP_BAR_TYPES = new Set([
+  'bar',
+  'pub',
+  'wine_bar',
+  'bar_and_grill',
+  'cocktail_bar',
+  'beer_garden',
+  'brewpub',
+  'sports_bar',
+  'irish_pub',
+  'lounge_bar',
+  'gastropub',
+  'japanese_izakaya_restaurant',
+]);
+
+const runTripBarPlaces = new Map();
+const runTripBarAutoLoadStates = new WeakMap();
+const runTripBarMapStates = new WeakMap();
+
+const RUNTRIP_BAR_SOURCE = 'freeruntrip-bar-places';
+const RUNTRIP_BAR_LAYER = 'freeruntrip-bar-icons';
+const RUNTRIP_BAR_IMAGE = 'freeruntrip-bar-shop';
+
+// 화면에 표시된 기존 지도 POI를 확인한다.
+function getRunTripVisibleBasePois(mapInstance) {
+  return mapInstance.queryRenderedFeatures().filter(feature =>
+    feature.layer?.type === 'symbol' &&
+    feature.geometry?.type === 'Point' &&
+    !String(feature.source || '').startsWith('freeruntrip-') &&
+    !String(feature.layer?.id || '').startsWith('freeruntrip-') &&
+    !feature.properties?.cafeId &&
+    !feature.properties?.convenienceId &&
+    !feature.properties?.barId
+  );
+}
+
+// 이름이 같고 좌표가 가까운 기존 POI가 있는지 확인한다.
+function hasRunTripBarBasePoi(place, features) {
+  const normalize = value => String(value || '')
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '');
+
+  const name = normalize(place.name);
+
+  if (!name) return false;
+
+  return features.some(feature => {
+    const properties = feature.properties || {};
+
+    const names = [
+      properties.name,
+      properties.name_ko,
+      properties.name_en,
+      properties.name_ja,
+      properties.name_de,
+      properties.name_local,
+      properties.name_script,
+      properties.text,
+      properties.label,
+    ];
+
+    if (!names.some(value => normalize(value) === name)) {
+      return false;
+    }
+
+    const [longitude, latitude] = feature.geometry.coordinates;
+
+    return (
+      Number.isFinite(longitude) &&
+      Number.isFinite(latitude) &&
+      calculateDistance(
+        place.latitude,
+        place.longitude,
+        latitude,
+        longitude
+      ) <= 35
+    );
+  });
+}
+
+// Google 조회 결과 중 술집 유형만 보관한다.
+function collectRunTripBarPlaces(candidates) {
+  if (!Array.isArray(candidates)) return;
+
+  for (const candidate of candidates) {
+    const types = Array.isArray(candidate?.types)
+      ? candidate.types
+      : [];
+
+    if (!types.some(type => RUNTRIP_BAR_TYPES.has(type))) {
+      continue;
+    }
+
+    const id = typeof candidate.id === 'string'
+      ? candidate.id.trim()
+      : '';
+
+    const name = cleanRunTripMapPlaceText(
+      candidate.displayName?.text
+    );
+
+    const address = cleanRunTripMapPlaceText(
+      candidate.formattedAddress
+    );
+
+    const latitude = candidate.location?.latitude;
+    const longitude = candidate.location?.longitude;
+
+    if (
+      !id ||
+      !name ||
+      !address ||
+      name.normalize('NFC') === address.normalize('NFC') ||
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      Math.abs(latitude) > 90 ||
+      Math.abs(longitude) > 180
+    ) {
+      continue;
+    }
+
+    runTripBarPlaces.set(id, {
+      id,
+      googlePlaceId: id,
+      name,
+      address,
+      latitude,
+      longitude,
+      category: cleanRunTripMapPlaceText(
+        candidate.primaryTypeDisplayName?.text
+      ) || 'bar',
+      types: [...types],
+    });
+  }
+}
+
+// 보라색 원 안에 흰색 맥주잔 아이콘을 만든다.
+function createRunTripBarImage() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 40;
+  canvas.height = 40;
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(2, 2);
+
+  // 원형 배경
+  ctx.fillStyle = '#80608f';
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(10, 10, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  // 손잡이
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(13, 8);
+  ctx.lineTo(16, 8);
+  ctx.lineTo(16, 12);
+  ctx.lineTo(13, 12);
+  ctx.stroke();
+
+  // 맥주잔 본체와 거품
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(5.5, 7, 8, 8.5);
+  ctx.beginPath();
+  ctx.arc(7, 6.5, 2, 0, Math.PI * 2);
+  ctx.arc(10, 6, 2, 0, Math.PI * 2);
+  ctx.arc(12, 6.5, 1.7, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#80608f';
+  ctx.fillRect(7.5, 9, 1, 4.5);
+  ctx.fillRect(10.5, 9, 1, 4.5);
+
+  return ctx.getImageData(0, 0, 40, 40);
+}
+
+// 지도 로딩·이동 시 주변 술집을 자동 조회한다.
+function initializeRunTripBarAutoLoad(mapInstance) {
+  if (
+    !mapInstance ||
+    runTripBarAutoLoadStates.has(mapInstance)
+  ) {
+    return;
+  }
+
+  const state = {
+    timer: null,
+    controller: null,
+    removed: false,
+    lastAttemptAt: 0,
+    cache: new Map(),
+  };
+
+  runTripBarAutoLoadStates.set(mapInstance, state);
+
+  const cancel = () => {
+    clearTimeout(state.timer);
+    state.controller?.abort();
+    state.controller = null;
+  };
+
+  const load = async () => {
+    const container = mapInstance.getContainer();
+
+    if (
+      state.removed ||
+      mapInstance.isMoving() ||
+      mapInstance.getZoom() < 15 ||
+      !mapInstance.isStyleLoaded() ||
+      !container.getClientRects().length ||
+      !container.clientWidth ||
+      !container.clientHeight
+    ) {
+      return;
+    }
+
+    const center = mapInstance.getCenter().wrap();
+    const bounds = mapInstance.getBounds();
+
+    if (!bounds) return;
+
+    const corners = [
+      bounds.getNorthEast(),
+      bounds.getNorthWest(),
+      bounds.getSouthEast(),
+      bounds.getSouthWest(),
+    ];
+
+    const distance = Math.max(
+      ...corners.map(point => center.distanceTo(point))
+    );
+
+    if (!Number.isFinite(distance)) return;
+
+    const radius = Math.min(
+      1000,
+      Math.max(100, Math.ceil(distance / 50) * 50 + 50)
+    );
+
+    const url = new URL(
+      getReverseGeocodeUrl(
+        Number(center.lat.toFixed(4)),
+        Number(center.lng.toFixed(4))
+      ),
+      window.location.href
+    );
+
+    url.searchParams.set('mode', 'bars');
+    url.searchParams.set('radius', String(radius));
+
+    const key = url.toString();
+    const cachedAt = state.cache.get(key);
+
+    if (
+      cachedAt !== undefined &&
+      Date.now() - cachedAt < 120000
+    ) {
+      return;
+    }
+
+    const controller = new AbortController();
+    state.controller = controller;
+    state.lastAttemptAt = Date.now();
+
+    const timeoutId = setTimeout(
+      () => controller.abort(),
+      8000
+    );
+
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+      });
+
+      const data = await response.json();
+
+      if (state.removed || controller.signal.aborted) {
+        return;
+      }
+
+      if (
+        !response.ok ||
+        data.mode !== 'bars' ||
+        !['ok', 'empty'].includes(data.status) ||
+        !Array.isArray(data.places)
+      ) {
+        throw new Error(
+          `Bar lookup failed (${response.status})`
+        );
+      }
+
+      state.cache.delete(key);
+      state.cache.set(key, Date.now());
+
+      while (state.cache.size > 24) {
+        state.cache.delete(
+          state.cache.keys().next().value
+        );
+      }
+
+      collectRunTripBarPlaces(data.places);
+      syncRunTripBarIcons(freeRunTripMapboxMainMap);
+      syncRunTripBarIcons(freeRunTripMapboxSearchMap);
+    } catch (error) {
+      if (!controller.signal.aborted && !state.removed) {
+        console.warn(
+          '술집 자동 조회를 완료하지 못했어요.',
+          error
+        );
+      }
+    } finally {
+      clearTimeout(timeoutId);
+
+      if (state.controller === controller) {
+        state.controller = null;
+      }
+    }
+  };
+
+  const schedule = () => {
+    if (state.removed) return;
+
+    clearTimeout(state.timer);
+
+    const delay = Math.max(
+      650,
+      state.lastAttemptAt + 5000 - Date.now()
+    );
+
+    state.timer = setTimeout(load, delay);
+  };
+
+  mapInstance.on('movestart', cancel);
+  mapInstance.on('moveend', schedule);
+  mapInstance.on('resize', schedule);
+  mapInstance.on('style.load', schedule);
+  mapInstance.once('idle', schedule);
+
+  mapInstance.once('remove', () => {
+    state.removed = true;
+    cancel();
+
+    mapInstance.off('movestart', cancel);
+    mapInstance.off('moveend', schedule);
+    mapInstance.off('resize', schedule);
+    mapInstance.off('style.load', schedule);
+    mapInstance.off('idle', schedule);
+
+    runTripBarAutoLoadStates.delete(mapInstance);
+  });
+
+  schedule();
+}
+
+// 술집 아이콘과 상호명을 지도에 표시한다.
+function syncRunTripBarIcons(mapInstance) {
+  if (!mapInstance) return;
+
+  initializeRunTripBarAutoLoad(mapInstance);
+
+  let state = runTripBarMapStates.get(mapInstance);
+
+  if (!state) {
+    state = {
+      signature: '',
+      warned: false,
+    };
+
+    runTripBarMapStates.set(mapInstance, state);
+
+    const refresh = () => {
+      syncRunTripBarIcons(mapInstance);
+    };
+
+    const reset = () => {
+      state.signature = '';
+      state.warned = false;
+      syncRunTripBarIcons(mapInstance);
+    };
+
+    mapInstance.on('idle', refresh);
+    mapInstance.on('style.load', reset);
+
+    mapInstance.once('remove', () => {
+      mapInstance.off('idle', refresh);
+      mapInstance.off('style.load', reset);
+      runTripBarMapStates.delete(mapInstance);
+    });
+  }
+
+  if (!mapInstance.isStyleLoaded()) return;
+
+  if (
+    !runTripBarPlaces.size &&
+    !mapInstance.getSource(RUNTRIP_BAR_SOURCE)
+  ) {
+    return;
+  }
+
+  try {
+    if (!mapInstance.hasImage(RUNTRIP_BAR_IMAGE)) {
+      mapInstance.addImage(
+        RUNTRIP_BAR_IMAGE,
+        createRunTripBarImage(),
+        { pixelRatio: 2 }
+      );
+    }
+
+    const basePois = getRunTripVisibleBasePois(mapInstance);
+
+    const features = [...runTripBarPlaces.values()]
+      .filter(place => !hasRunTripBarBasePoi(place, basePois))
+      .map(place => ({
+        type: 'Feature',
+        id: place.id,
+        properties: {
+          barId: place.id,
+          name: place.name,
+        },
+        geometry: {
+          type: 'Point',
+          coordinates: [
+            place.longitude,
+            place.latitude,
+          ],
+        },
+      }));
+
+    const data = {
+      type: 'FeatureCollection',
+      features,
+    };
+
+    const signature = JSON.stringify(features);
+    const source = mapInstance.getSource(RUNTRIP_BAR_SOURCE);
+
+    if (!source) {
+      mapInstance.addSource(RUNTRIP_BAR_SOURCE, {
+        type: 'geojson',
+        data,
+      });
+    } else if (signature !== state.signature) {
+      source.setData(data);
+    }
+
+    if (!mapInstance.getLayer(RUNTRIP_BAR_LAYER)) {
+      mapInstance.addLayer({
+        id: RUNTRIP_BAR_LAYER,
+        type: 'symbol',
+        source: RUNTRIP_BAR_SOURCE,
+        slot: 'top',
+        minzoom: 15,
+        layout: {
+          'icon-image': RUNTRIP_BAR_IMAGE,
+          'icon-size': 1,
+          'icon-allow-overlap': true,
+          'icon-ignore-placement': true,
+          'text-field': ['get', 'name'],
+          'text-font': [
+            'Open Sans Semibold',
+            'Arial Unicode MS Regular',
+          ],
+          'text-size': 12,
+          'text-anchor': 'top',
+          'text-offset': [0, 1.1],
+          'text-justify': 'center',
+          'text-max-width': 10,
+          'text-line-height': 1.2,
+          'text-padding': 3,
+          'text-allow-overlap': false,
+          'text-ignore-placement': false,
+          'text-optional': true,
+        },
+        paint: {
+          'icon-emissive-strength': 0.9,
+          'text-color': '#80608f',
+          'text-halo-color': '#ffffff',
+          'text-halo-width': 1,
+          'text-emissive-strength': 0.9,
+        },
+      });
+    }
+
+    state.signature = signature;
+    state.warned = false;
+  } catch (error) {
+    if (!state.warned) {
+      console.warn(
+        '술집 아이콘 표시를 완료하지 못했어요.',
+        error
+      );
+
+      state.warned = true;
+    }
+  }
+}
+
+// 사용자가 직접 누른 술집의 정보를 반환한다.
+function getRunTripBarFromMapClick(mapInstance, event) {
+  if (
+    !mapInstance ||
+    !event?.point ||
+    !mapInstance.getLayer(RUNTRIP_BAR_LAYER) ||
+    mapInstance.getZoom() < 15
+  ) {
+    return null;
+  }
+
+  const hits = mapInstance.queryRenderedFeatures(
+    event.point,
+    { layers: [RUNTRIP_BAR_LAYER] }
+  );
+
+  const candidates = hits
+    .map(feature => {
+      const id = feature.properties?.barId;
+      return runTripBarPlaces.get(id);
+    })
+    .filter(Boolean);
+
+  const distance = place => {
+    const point = mapInstance.project([
+      place.longitude,
+      place.latitude,
+    ]);
+
+    return Math.hypot(
+      point.x - event.point.x,
+      point.y - event.point.y
+    );
+  };
+
+  candidates.sort(
+    (a, b) => distance(a) - distance(b)
+  );
+
+  const place = candidates[0];
+
+  if (!place) return null;
+
+  return {
+    ...place,
+    matchedGooglePlaceId: place.id,
+    displayName: place.name,
+    primaryText: place.name,
+    secondaryText: place.address,
+    roadAddress: '',
+    lotAddress: '',
+    brand: '',
+    source: 'google-bar-icon',
+    nameSource: 'google-places',
+    addressSource: 'google-places',
+    isMapPoi: true,
+    nearbyPlaces: [],
+    nearbyStatus: 'selected',
+    mapDetailsState: 'ready',
+  };
+}
 function initializeRunTripCafeAutoLoad(mapInstance) {
   if (!mapInstance || runTripCafeAutoLoadStates.has(mapInstance)) return;
 
@@ -7915,6 +8479,7 @@ function syncRunTripCafeIcons(mapInstance) {
   if (!mapInstance) return;
 
   syncRunTripConvenienceIcons(mapInstance);
+  syncRunTripBarIcons(mapInstance);
 
   initializeRunTripCafeAutoLoad(mapInstance);
 
@@ -8128,12 +8693,15 @@ async function loadRunTripMapPlaceDetails(place) {
   // 편의점 아이콘은 조회된 매장 정보를 그대로 사용한다.
   // 주변 건물이나 다른 매장 정보로 덮어쓰지 않는다.
   if (
-    place?.source === 'google-convenience-icon' &&
-    place.mapDetailsState === 'ready'
-  ) {
-    showRunTripMapPlaceSheet(place);
-    return;
-  }
+  [
+    'google-convenience-icon',
+    'google-bar-icon',
+  ].includes(place?.source) &&
+  place.mapDetailsState === 'ready'
+) {
+  showRunTripMapPlaceSheet(place);
+  return;
+}
 
   const latitude = Number(place?.latitude);
   const longitude = Number(place?.longitude);
@@ -18591,15 +19159,30 @@ function getRunTripPlaceFromMapClick(
     return null;
   }
 
-  const conveniencePlace =
-    getRunTripConvenienceFromMapClick(
-      mapInstance,
-      event
-    );
+  const customPlaces = [
+  getRunTripConvenienceFromMapClick(mapInstance, event),
+  getRunTripBarFromMapClick(mapInstance, event),
+].filter(Boolean);
 
-  if (conveniencePlace) {
-    return conveniencePlace;
-  }
+if (customPlaces.length) {
+  const distance = place => {
+    const point = mapInstance.project([
+      place.longitude,
+      place.latitude,
+    ]);
+
+    return Math.hypot(
+      point.x - event.point.x,
+      point.y - event.point.y
+    );
+  };
+
+  customPlaces.sort(
+    (a, b) => distance(a) - distance(b)
+  );
+
+  return customPlaces[0];
+}
 
   const hitPadding = 18;
 
