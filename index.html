@@ -206,49 +206,17 @@
     </article>
 
     <!-- 광고 콘텐츠 -->
-    <article class="feed-post sponsored-feed-post" data-feed-type="sponsored">
-      <header class="feed-post-header">
-        <div class="feed-post-profile">
-          <div class="feed-post-avatar sponsored-avatar">
-            A
-          </div>
-
-          <div>
-            <strong>runnerstay.seoul</strong>
-            <span>광고</span>
-          </div>
-        </div>
-
-        <button
-          class="feed-post-menu-btn"
-          type="button"
-          aria-label="광고 메뉴"
-        >
-          ···
-        </button>
-      </header>
-
-      <div class="feed-post-visual sponsored-visual">
-        <div class="feed-post-visual-placeholder">
-          <span>SPONSORED</span>
-          <strong>러너를 위한 한강 근처 숙소</strong>
-          <small>숙소에서 바로 출발하는 서울 러닝 여행</small>
-        </div>
-      </div>
-
-      <div class="feed-post-body">
-        <p>
-          여행지에서도 러닝을 이어갈 수 있도록 한강 러닝 코스와 가까운 숙소를 만나보세요.
-        </p>
-
-        <button
-          class="feed-sponsored-action-btn"
-          type="button"
-        >
-          자세히 보기
-        </button>
-      </div>
-    </article>
+    <!-- 홈 피드 네이티브 광고 공간 -->
+   <aside
+      class="frt-ad-slot frt-ad-slot--native"
+      data-ad-slot="home-feed-native"
+      aria-label="광고 공간 미리보기"
+    >
+   <span class="frt-ad-slot-label">광고 · 미리보기</span>
+   <div class="frt-ad-slot-body">
+      네이티브 광고 공간
+   </div>
+   </aside>
   </main>
 </section>
 
@@ -529,6 +497,17 @@
     </button>
   </div>
 
+  <!-- 기록 목록 배너 광고 공간 -->
+<aside
+  class="frt-ad-slot frt-ad-slot--banner"
+  data-ad-slot="records-list-banner"
+  aria-label="광고 공간 미리보기"
+>
+  <span class="frt-ad-slot-label">광고 · 미리보기</span>
+  <div class="frt-ad-slot-body">
+    배너 광고 공간
+  </div>
+</aside>
   <div class="records-list-heading">
     <div>
       <p class="records-eyebrow">
@@ -705,6 +684,17 @@
     <div id="detailSplitsList"></div>
   </section>
 
+  <!-- 기록 상세 네이티브 광고 공간 -->
+  <aside
+  class="frt-ad-slot frt-ad-slot--native"
+  data-ad-slot="record-detail-native"
+  aria-label="광고 공간 미리보기"
+>
+  <span class="frt-ad-slot-label">광고 · 미리보기</span>
+  <div class="frt-ad-slot-body">
+    네이티브 광고 공간
+  </div>
+</aside>
   <section class="detail-photo-actions">
   <button
     id="detailTakePhotoBtn"
@@ -739,7 +729,17 @@
     </div>
   </div>
 
-
+ <!-- 기록 상세 배너 광고 공간 -->
+  <aside
+    class="frt-ad-slot frt-ad-slot--banner"
+    data-ad-slot="record-detail-banner"
+    aria-label="광고 공간 미리보기"
+  >
+    <span class="frt-ad-slot-label">광고 · 미리보기</span>
+    <div class="frt-ad-slot-body">
+      배너 광고 공간
+    </div>
+  </aside>
 </div>
 
 <section id="profileFeedScreen" class="screen hidden">
@@ -803,6 +803,17 @@
   <h3>Recent Runs</h3>
   <div id="profileRecentRuns"></div>
 </div>
+<!-- 기록 프로필 배너 광고 공간 -->
+<aside
+  class="frt-ad-slot frt-ad-slot--banner"
+  data-ad-slot="profile-feed-banner"
+  aria-label="광고 공간 미리보기"
+>
+  <span class="frt-ad-slot-label">광고 · 미리보기</span>
+  <div class="frt-ad-slot-body">
+    배너 광고 공간
+  </div>
+</aside>
 </section>
 <section id="monthlyReportScreen" class="screen hidden">
   <div class="monthly-report-header">
