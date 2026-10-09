@@ -23181,3 +23181,731 @@ function initializeAppWithRunTripRecovery() {
 }
 
 initializeAppWithRunTripRecovery();
+/* FreeRunTrip 이메일 회원가입·로그인 */
+(function initializeFreeRunTripAuth() {
+  'use strict';
+
+  const client = window.freeRunTripSupabase;
+  const el = (id) => document.getElementById(id);
+  const dialog = el('frtAccountDialog');
+
+  if (!dialog) return;
+
+  const title = el('frtAuthTitle');
+  const status = el('frtAuthStatus');
+  const form = el('frtAuthForm');
+  const email = el('frtAuthEmail');
+  const password = el('frtAuthPassword');
+  const confirm = el('frtAuthConfirm');
+  const handleInput = el('frtHandleInput');
+  const closeButton = el('frtAuthClose');
+  const logout = el('frtAuthLogout');
+  const entry = el('frtAccountOpen');
+  const profileName = el('frtProfileName');
+
+  const panels = {
+    login: form,
+    account: el('frtAuthAccount'),
+    welcome: el('frtAuthWelcome'),
+    handle: el('frtHandleForm'),
+    ready: el('frtAuthReady')
+  };
+
+  let user = null;
+  let username = null;
+  let profileLoaded = false;
+  let signupMode = false;
+  let editingHandle = false;
+  let busy = false;
+  let initialized = false;
+  let revision = 0;
+  let view = 'login';
+  let retryAction = null;
+  let returnPending = Boolean(
+    window.freeRunTripAuthReturn?.kind
+  );
+
+  function message(text, error = false) {
+    status.textContent = text;
+    status.dataset.error = String(error);
+    status.hidden = !text;
+  }
+
+  function showDialog() {
+    if (!dialog.open) dialog.showModal();
+    title.focus();
+  }
+
+  function setBusy(value) {
+    busy = value;
+    dialog.setAttribute('aria-busy', String(value));
+
+    dialog.querySelectorAll('button').forEach((button) => {
+      button.disabled = value;
+    });
+
+    dialog.querySelectorAll('input').forEach((input) => {
+      input.readOnly = value;
+    });
+  }
+
+  function mandatory() {
+    return (
+      view === 'welcome' ||
+      view === 'ready' ||
+      view === 'loading' ||
+      (view === 'handle' && !editingHandle)
+    );
+  }
+
+  function showView(
+    next,
+    heading,
+    text = '',
+    error = false,
+    open = true
+  ) {
+    view = next;
+
+    Object.entries(panels).forEach(([key, panel]) => {
+      panel.hidden = key !== next;
+    });
+
+    title.textContent = heading;
+    message(text, error);
+    closeButton.hidden = mandatory();
+
+    el('frtAuthRetry').hidden =
+      next !== 'error' || !retryAction;
+
+    el('frtAuthErrorContinue').hidden =
+      next !== 'return-error';
+
+    logout.hidden = !user || next === 'loading';
+
+    if (open) showDialog();
+  }
+
+  function renderIdentity() {
+    entry.textContent = user
+      ? '계정 설정'
+      : '로그인 / 회원가입';
+
+    el('frtAuthAccountEmail').textContent =
+      user?.email || '';
+
+    el('frtAccountHandle').textContent =
+      username ? '@' + username : '';
+
+    profileName.textContent = user
+      ? (username ? '@' + username : '회원')
+      : '게스트';
+  }
+
+  function updateMode() {
+    el('frtAuthSubmit').textContent =
+      signupMode ? '회원가입' : '로그인';
+
+    el('frtAuthSwitch').textContent = signupMode
+      ? '이미 계정이 있다면 로그인'
+      : '처음이라면 회원가입';
+
+    password.autocomplete = signupMode
+      ? 'new-password'
+      : 'current-password';
+
+    password.minLength = signupMode ? 8 : 1;
+    el('frtAuthConfirmWrap').hidden = !signupMode;
+    confirm.disabled = !signupMode;
+    confirm.required = signupMode;
+
+    password.value = '';
+    confirm.value = '';
+    confirm.setCustomValidity('');
+  }
+
+  function showLogin(
+    text = '이메일과 비밀번호로 로그인해 주세요.',
+    open = true
+  ) {
+    signupMode = false;
+    updateMode();
+    showView('login', '로그인', text, false, open);
+  }
+
+  function showAccount(text = '') {
+    renderIdentity();
+    showView('account', '계정 설정', text);
+  }
+
+  function showHandle(edit = false) {
+    editingHandle = edit;
+    handleInput.value = username || '';
+    handleInput.setCustomValidity('');
+
+    el('frtHandleCancel').hidden = !edit;
+    el('frtHandleSave').textContent =
+      edit ? '변경 저장' : '아이디 저장';
+
+    showView(
+      'handle',
+      edit ? '아이디 변경' : '아이디 만들기'
+    );
+
+    handleInput.focus();
+  }
+
+  function errorMessage(error) {
+    const messages = {
+      invalid_credentials:
+        '이메일 또는 비밀번호를 확인해 주세요.',
+      email_not_confirmed:
+        '이메일의 인증 링크를 먼저 눌러 주세요.',
+      user_already_exists:
+        '이미 가입된 이메일입니다. 로그인해 주세요.',
+      weak_password:
+        '비밀번호는 8자 이상으로 설정해 주세요.',
+      over_email_send_rate_limit:
+        '이메일 발송 한도에 도달했어요. 잠시 후 다시 시도해 주세요.',
+      over_request_rate_limit:
+        '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.',
+      email_address_not_authorized:
+        '현재 이메일 발송 설정에서 허용되지 않은 주소입니다.',
+      signup_disabled:
+        '현재 회원가입을 사용할 수 없어요.',
+      '23505':
+        '이미 사용 중인 아이디예요. 다른 아이디를 입력해 주세요.',
+      '23514':
+        '아이디는 영문 소문자·숫자·밑줄(_)로 3~20자여야 해요.',
+      '42501':
+        '아이디를 저장할 권한을 확인하지 못했어요. 다시 로그인해 주세요.'
+    };
+
+    return messages[error?.code] ||
+      '요청을 완료하지 못했어요. 연결 상태를 확인하고 다시 시도해 주세요.';
+  }
+
+  async function syncSession(session, openAccount = false) {
+    const request = ++revision;
+    const nextUser = session?.user || null;
+
+    if (user?.id !== nextUser?.id) {
+      username = null;
+      profileLoaded = false;
+    }
+
+    user = nextUser;
+    renderIdentity();
+
+    if (!user) {
+      username = null;
+      profileLoaded = false;
+      editingHandle = false;
+      renderIdentity();
+      showLogin(undefined, dialog.open || openAccount);
+      return null;
+    }
+
+    if (profileLoaded) {
+      if (!username) showHandle();
+      else if (openAccount) showAccount();
+      return username;
+    }
+
+    const userId = user.id;
+
+    showView(
+      'loading',
+      '계정 확인 중',
+      '아이디를 확인하고 있어요.'
+    );
+
+    try {
+      const { data, error } = await client
+        .from('frt_profiles')
+        .select('username')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (request !== revision) return null;
+      if (error) throw error;
+
+      username = data?.username || null;
+      profileLoaded = true;
+      renderIdentity();
+
+      if (!username) showHandle();
+      else if (openAccount) showAccount();
+      else dialog.close();
+
+      return username;
+    } catch (error) {
+      if (request !== revision) return null;
+
+      retryAction = () => syncSession({ user }, openAccount);
+
+      showView(
+        'error',
+        '아이디를 불러오지 못했어요',
+        errorMessage(error),
+        true
+      );
+
+      return null;
+    }
+  }
+
+  function cleanAuthUrl() {
+    const url = new URL(window.location.href);
+
+    const names = [
+      'access_token',
+      'refresh_token',
+      'expires_at',
+      'expires_in',
+      'token_type',
+      'type',
+      'error',
+      'error_code',
+      'error_description'
+    ];
+
+    const hash = new URLSearchParams(url.hash.slice(1));
+
+    names.forEach((name) => {
+      hash.delete(name);
+      url.searchParams.delete(name);
+    });
+
+    // 일반 앱 내부 앵커는 유지한다.
+    if (
+      /access_token=|refresh_token=|error=|error_code=|type=signup/
+        .test(url.hash)
+    ) {
+      url.hash = hash.toString();
+    }
+
+    window.history.replaceState(
+      window.history.state,
+      '',
+      url.pathname + url.search + url.hash
+    );
+  }
+
+  async function bootstrap() {
+    if (!client) {
+      retryAction = () => window.location.reload();
+
+      showView(
+        'error',
+        '로그인을 불러오지 못했어요',
+        '페이지를 새로고침해 주세요.',
+        true
+      );
+
+      return;
+    }
+
+    setBusy(true);
+
+    try {
+      const { data, error } = await client.auth.getSession();
+
+      if (error) throw error;
+
+      const session = data.session;
+      const authReturn = window.freeRunTripAuthReturn;
+
+      if (returnPending) {
+        let verified = false;
+
+        if (
+          authReturn?.kind === 'signup' &&
+          authReturn.accessToken &&
+          session?.access_token === authReturn.accessToken
+        ) {
+          const result = await client.auth.getUser(
+            authReturn.accessToken
+          );
+
+          verified =
+            !result.error &&
+            Boolean(result.data.user?.email_confirmed_at) &&
+            result.data.user.id === session.user.id;
+        }
+
+        user = session?.user || null;
+        username = null;
+        profileLoaded = false;
+        renderIdentity();
+
+        if (verified) {
+          showView(
+            'welcome',
+            '이메일 인증이 완료되었어요.'
+          );
+        } else {
+          showView(
+            'return-error',
+            '이메일 인증을 확인하지 못했어요',
+            '인증 링크가 만료되었거나 이미 사용됐을 수 있어요. 인증을 마쳤다면 계정 화면에서 로그인해 주세요.',
+            true
+          );
+        }
+
+        cleanAuthUrl();
+        window.freeRunTripAuthReturn = null;
+        returnPending = false;
+      } else {
+        await syncSession(session);
+      }
+
+      initialized = true;
+    } catch (error) {
+      retryAction = bootstrap;
+
+      showView(
+        'error',
+        '계정을 확인하지 못했어요',
+        errorMessage(error),
+        true
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  entry.addEventListener('click', async () => {
+    if (busy) return;
+
+    if (!initialized) {
+      await bootstrap();
+      return;
+    }
+
+    if (!user) {
+      showLogin();
+      return;
+    }
+
+    setBusy(true);
+
+    try {
+      await syncSession({ user }, true);
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  closeButton.addEventListener('click', () => {
+    if (!busy && !mandatory()) dialog.close();
+  });
+
+  dialog.addEventListener('cancel', (event) => {
+    if (busy || mandatory()) event.preventDefault();
+  });
+
+  dialog.addEventListener('close', () => {
+    password.value = '';
+    confirm.value = '';
+  });
+
+  el('frtAuthSwitch').addEventListener('click', () => {
+    if (busy) return;
+
+    signupMode = !signupMode;
+    updateMode();
+
+    title.textContent = signupMode ? '회원가입' : '로그인';
+
+    message(
+      signupMode
+        ? '이메일과 8자 이상의 비밀번호를 입력해 주세요.'
+        : '이메일과 비밀번호를 입력해 주세요.'
+    );
+  });
+
+  [password, confirm].forEach((input) => {
+    input.addEventListener('input', () => {
+      confirm.setCustomValidity('');
+    });
+  });
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    if (busy || !client) return;
+
+    email.value = email.value.trim();
+
+    if (!form.reportValidity()) return;
+
+    if (signupMode && password.value !== confirm.value) {
+      confirm.setCustomValidity('비밀번호가 일치하지 않습니다.');
+      confirm.reportValidity();
+      return;
+    }
+
+    const isSignup = signupMode;
+
+    const credentials = {
+      email: email.value,
+      password: password.value
+    };
+
+    const request = revision;
+
+    setBusy(true);
+    message(isSignup ? '가입 요청 중이에요.' : '로그인 중이에요.');
+
+    try {
+            const redirectUrl = 'https://freeruntrip.vercel.app/';
+
+      const result = isSignup
+        ? await client.auth.signUp({
+            ...credentials,
+            options: {
+              emailRedirectTo: redirectUrl
+            }
+          })
+        : await client.auth.signInWithPassword(credentials);
+
+      if (request !== revision) return;
+      if (result.error) throw result.error;
+
+      password.value = '';
+      confirm.value = '';
+
+      if (result.data.session) {
+        const saved = await syncSession(result.data.session);
+
+        if (saved && typeof openAppPage === 'function') {
+          openAppPage('home');
+        }
+      } else if (isSignup) {
+        showLogin();
+
+        message(
+          '가입 요청을 처리했어요. 새로 가입한 이메일의 인증 링크를 확인해 주세요. 이미 가입했다면 로그인해 주세요.'
+        );
+      }
+    } catch (error) {
+      message(errorMessage(error), true);
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  async function continueToProfile() {
+    if (busy) return;
+
+    setBusy(true);
+
+    try {
+      const saved = await syncSession({ user });
+
+      if (saved) {
+        el('frtReadyHandle').textContent = '@' + saved;
+        showView('ready', '준비가 끝났어요.');
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  el('frtWelcomeNext').addEventListener(
+    'click',
+    continueToProfile
+  );
+
+  el('frtAuthErrorContinue').addEventListener(
+    'click',
+    async () => {
+      if (busy) return;
+
+      setBusy(true);
+
+      try {
+        await syncSession({ user }, true);
+      } finally {
+        setBusy(false);
+      }
+    }
+  );
+
+  el('frtHandleEdit').addEventListener('click', () => {
+    if (!busy) showHandle(true);
+  });
+
+  el('frtHandleCancel').addEventListener('click', () => {
+    if (!busy) showAccount();
+  });
+
+  handleInput.addEventListener('input', () => {
+    handleInput.setCustomValidity('');
+  });
+
+  panels.handle.addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    if (busy || !user) return;
+
+    handleInput.value = handleInput.value.trim().toLowerCase();
+
+    handleInput.setCustomValidity(
+      /^[a-z0-9_]{3,20}$/.test(handleInput.value)
+        ? ''
+        : '영문 소문자·숫자·밑줄(_)로 3~20자를 입력해 주세요.'
+    );
+
+    if (!panels.handle.reportValidity()) return;
+
+    const requestedName = handleInput.value;
+    const request = revision;
+    const userId = user.id;
+
+    setBusy(true);
+    message('아이디를 저장하고 있어요.');
+
+    try {
+      // DB의 UNIQUE 제약으로 동시 요청의 중복도 막는다.
+      const operation = username
+        ? client
+            .from('frt_profiles')
+            .update({ username: requestedName })
+            .eq('id', userId)
+        : client
+            .from('frt_profiles')
+            .insert({
+              id: userId,
+              username: requestedName
+            });
+
+      let { data, error } = await operation
+        .select('username')
+        .single();
+
+      if (request !== revision || user?.id !== userId) return;
+
+      // 저장은 성공했지만 응답을 받지 못했던 경우를 복구한다.
+      if (error?.code === '23505' && !username) {
+        const existing = await client
+          .from('frt_profiles')
+          .select('username')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (request !== revision || user?.id !== userId) return;
+
+        if (
+          !existing.error &&
+          existing.data?.username === requestedName
+        ) {
+          data = existing.data;
+          error = null;
+        } else if (
+          !existing.error &&
+          existing.data?.username
+        ) {
+          username = existing.data.username;
+          profileLoaded = true;
+          renderIdentity();
+          showHandle(true);
+
+          message(
+            '이미 저장된 아이디를 불러왔어요. 변경할 아이디를 입력해 주세요.'
+          );
+
+          return;
+        }
+      }
+
+      if (error) throw error;
+
+      username = data.username;
+      profileLoaded = true;
+      renderIdentity();
+
+      if (editingHandle) {
+        showAccount('아이디를 변경했어요.');
+      } else {
+        el('frtReadyHandle').textContent = '@' + username;
+        showView('ready', '회원가입이 완료되었어요.');
+      }
+    } catch (error) {
+      if (request === revision) {
+        message(errorMessage(error), true);
+      }
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  el('frtStart').addEventListener('click', () => {
+    if (busy || !username) return;
+
+    dialog.close();
+
+    if (typeof openAppPage === 'function') {
+      openAppPage('home');
+    }
+  });
+
+  el('frtAuthRetry').addEventListener('click', async () => {
+    if (busy || !retryAction) return;
+
+    setBusy(true);
+
+    try {
+      await retryAction();
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  logout.addEventListener('click', async () => {
+    if (busy || !client) return;
+
+    setBusy(true);
+    message('로그아웃 중이에요.');
+
+    try {
+      const { error } = await client.auth.signOut({
+        scope: 'local'
+      });
+
+      if (error) throw error;
+
+      await syncSession(null, true);
+      message('로그아웃됐어요.');
+    } catch (error) {
+      message(errorMessage(error), true);
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  updateMode();
+  renderIdentity();
+
+  if (client) {
+    client.auth.onAuthStateChange((event, session) => {
+      // SDK 인증 처리가 끝난 뒤 DB에 접근한다.
+      setTimeout(() => {
+        if (!initialized || event === 'INITIAL_SESSION') return;
+
+        if (event === 'SIGNED_OUT') {
+          void syncSession(null);
+        } else if (
+          !busy &&
+          (event === 'SIGNED_IN' || event === 'USER_UPDATED') &&
+          session?.user.id !== user?.id
+        ) {
+          void syncSession(session);
+        }
+      }, 0);
+    });
+  }
+
+  void bootstrap();
+})();

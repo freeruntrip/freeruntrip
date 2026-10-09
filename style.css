@@ -8760,3 +8760,227 @@ body {
     min-height: 140px;
   }
 }
+/* FreeRunTrip 회원가입·로그인 */
+.frt-auth-card {
+  margin: 0 0 20px;
+  padding: 22px;
+  border: 1px solid #dce5ed;
+  border-radius: 20px;
+  background: #fff;
+  color: #0f172a;
+}
+
+.frt-auth-card,
+.frt-auth-card * {
+  box-sizing: border-box;
+}
+
+.frt-auth-card [hidden] {
+  display: none !important;
+}
+
+.frt-auth-card h2 {
+  margin: 0 0 12px;
+  font-size: 22px;
+}
+
+.frt-auth-card label {
+  display: block;
+  margin: 14px 0 7px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.frt-auth-card input {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px;
+  border: 1px solid #94a3b8;
+  border-radius: 12px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+  font-size: 16px;
+}
+
+.frt-auth-card button {
+  display: block;
+  width: 100%;
+  min-height: 46px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: #0369a1;
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.frt-auth-card .frt-auth-secondary {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.frt-auth-card button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.frt-auth-card input:focus-visible,
+.frt-auth-card button:focus-visible {
+  outline: 3px solid #0284c7;
+  outline-offset: 3px;
+}
+
+.frt-auth-status,
+.frt-auth-email {
+  margin: 12px 0;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.frt-auth-status[data-error="true"] {
+  color: #b91c1c;
+}
+
+.frt-auth-note {
+  margin: 16px 0 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.6;
+}
+/* FreeRunTrip 가입 완료·공개 아이디·계정 설정 */
+.frt-account-dialog {
+  width: min(440px, calc(100% - 32px));
+  max-height: calc(100dvh - 48px);
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 24px 80px #0f172a40;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.frt-account-dialog::backdrop {
+  background: #0f172a99;
+}
+
+.frt-account-dialog:not([open]),
+.frt-account-dialog [hidden] {
+  display: none !important;
+}
+
+.frt-account-dialog .frt-auth-card {
+  margin: 0;
+  border: 0;
+  padding: 26px 24px;
+}
+
+.frt-auth-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.frt-auth-heading h2 {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.frt-auth-card .frt-auth-small {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: auto;
+  min-height: 44px;
+  margin: -8px -8px 0 0;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.frt-auth-card .frt-auth-logout {
+  margin: 18px 0 0;
+  padding-left: 0;
+}
+
+.frt-account-label {
+  margin: 22px 0 4px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.frt-account-handle {
+  margin: 8px 0;
+  font-size: 22px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.frt-auth-description {
+  line-height: 1.7;
+  color: #475569;
+}
+
+.frt-handle-field {
+  position: relative;
+}
+
+.frt-handle-field span {
+  position: absolute;
+  left: 13px;
+  top: 14px;
+  color: #64748b;
+}
+
+.frt-auth-card .frt-handle-field input {
+  padding-left: 34px;
+}
+
+.frt-profile-account-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin: -8px 0 16px;
+}
+
+.frt-profile-account-bar button {
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  color: #334155;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.frt-profile-account-bar button:focus-visible {
+  outline: 3px solid #0284c7;
+  outline-offset: 3px;
+}
+
+#frtProfileName {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 380px) {
+  .frt-account-dialog .frt-auth-card {
+    padding: 22px 18px;
+  }
+
+  .frt-account-dialog .frt-auth-card h2 {
+    font-size: 20px;
+  }
+}
