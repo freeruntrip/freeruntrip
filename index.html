@@ -1369,17 +1369,6 @@
     required
   />
 
-  <label for="frtDeleteConfirm">
-    탈퇴하려면 아래에 ‘탈퇴’를 입력해 주세요.
-  </label>
-  <input
-    id="frtDeleteConfirm"
-    type="text"
-    autocomplete="off"
-    spellcheck="false"
-    required
-  />
-
   <button
     class="frt-auth-danger"
     type="submit"
@@ -1395,6 +1384,20 @@
     취소
   </button>
 </form>
+    <div id="frtDeleteDone" hidden>
+  <p class="frt-auth-description">
+    로그인 계정과 공개 아이디가 삭제되었습니다.
+    이용해 주셔서 감사합니다.
+  </p>
+
+  <p class="frt-auth-note">
+    이 브라우저에 저장된 러닝 기록과 사진은 그대로 유지됩니다.
+  </p>
+
+  <button id="frtDeleteDoneConfirm" type="button">
+    확인
+  </button>
+</div>
     <div id="frtAuthWelcome" hidden>
       <p class="frt-auth-description">
         FreeRunTrip에 오신 것을 환영해요!<br>

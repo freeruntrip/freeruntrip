@@ -23209,7 +23209,8 @@ initializeAppWithRunTripRecovery();
     welcome: el('frtAuthWelcome'),
     handle: el('frtHandleForm'),
     ready: el('frtAuthReady'),
-    delete: el('frtDeleteForm')
+    delete: el('frtDeleteForm'),
+    deleted: el('frtDeleteDone')
   };
 
   let user = null;
@@ -23403,7 +23404,11 @@ initializeAppWithRunTripRecovery();
       profileLoaded = false;
       editingHandle = false;
       renderIdentity();
-      showLogin(undefined, dialog.open || openAccount);
+
+      if (view !== 'deleted') {
+        showLogin(undefined, dialog.open || openAccount);
+      }
+
       return null;
     }
 
@@ -23606,11 +23611,14 @@ initializeAppWithRunTripRecovery();
     if (busy || mandatory()) event.preventDefault();
   });
 
-  dialog.addEventListener('close', () => {
+    dialog.addEventListener('close', () => {
     password.value = '';
     confirm.value = '';
     el('frtDeletePassword').value = '';
-    el('frtDeleteConfirm').value = '';
+
+    if (view === 'deleted') {
+      view = 'login';
+    }
   });
 
   el('frtAuthSwitch').addEventListener('click', () => {
@@ -23870,7 +23878,6 @@ initializeAppWithRunTripRecovery();
     if (busy || !user) return;
 
     panels.delete.reset();
-    el('frtDeleteConfirm').setCustomValidity('');
 
     showView(
       'delete',
@@ -23888,23 +23895,13 @@ initializeAppWithRunTripRecovery();
     showAccount();
   });
 
-  el('frtDeleteConfirm').addEventListener('input', () => {
-    el('frtDeleteConfirm').setCustomValidity('');
-  });
-
   panels.delete.addEventListener('submit', async (event) => {
     event.preventDefault();
 
     if (busy || !client || !user) return;
 
     const deletePassword = el('frtDeletePassword');
-    const deleteConfirm = el('frtDeleteConfirm');
 
-    deleteConfirm.setCustomValidity(
-      deleteConfirm.value.trim() === '탈퇴'
-        ? ''
-        : '탈퇴를 정확히 입력해 주세요.'
-    );
 
     if (!panels.delete.reportValidity()) return;
 
@@ -23967,9 +23964,12 @@ initializeAppWithRunTripRecovery();
 
       await syncSession(null, true);
 
-      message(
-        '회원 탈퇴가 완료되었어요. 같은 이메일로 다시 가입할 수 있어요.'
+      showView(
+        'deleted',
+        '회원 탈퇴가 완료되었어요.'
       );
+
+      dialog.scrollTop = 0;
     } catch (error) {
       message(
         error?.message ||
@@ -23980,6 +23980,10 @@ initializeAppWithRunTripRecovery();
       deletePassword.value = '';
       setBusy(false);
     }
+  });
+  el('frtDeleteDoneConfirm').addEventListener('click', () => {
+    if (busy) return;
+    dialog.close();
   });
   logout.addEventListener('click', async () => {
     if (busy || !client) return;
