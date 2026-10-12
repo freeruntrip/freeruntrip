@@ -23210,7 +23210,10 @@ initializeAppWithRunTripRecovery();
     handle: el('frtHandleForm'),
     ready: el('frtAuthReady'),
     delete: el('frtDeleteForm'),
-    deleted: el('frtDeleteDone')
+    deleted: el('frtDeleteDone'),
+    forgot: el('frtForgotForm'),
+    reset: el('frtResetForm'),
+    resetDone: el('frtResetDone')
   };
 
   let user = null;
@@ -23223,6 +23226,7 @@ initializeAppWithRunTripRecovery();
   let revision = 0;
   let view = 'login';
   let retryAction = null;
+  let recoveryUserId = null;
   let returnPending = Boolean(
     window.freeRunTripAuthReturn?.kind
   );
@@ -23320,6 +23324,7 @@ initializeAppWithRunTripRecovery();
     el('frtAuthConfirmWrap').hidden = !signupMode;
     confirm.disabled = !signupMode;
     confirm.required = signupMode;
+    el('frtForgotOpen').hidden = signupMode;
 
     password.value = '';
     confirm.value = '';
@@ -23405,7 +23410,9 @@ initializeAppWithRunTripRecovery();
       editingHandle = false;
       renderIdentity();
 
-      if (view !== 'deleted') {
+      recoveryUserId = null;
+
+      if (view !== 'deleted' && view !== 'resetDone') {
         showLogin(undefined, dialog.open || openAccount);
       }
 
@@ -23478,16 +23485,19 @@ initializeAppWithRunTripRecovery();
 
     const hash = new URLSearchParams(url.hash.slice(1));
 
+    const hasAuthHash = names.some((name) => hash.has(name));
+
     names.forEach((name) => {
       hash.delete(name);
       url.searchParams.delete(name);
     });
 
+    if (url.searchParams.get('auth') === 'recovery') {
+      url.searchParams.delete('auth');
+    }
+
     // 일반 앱 내부 앵커는 유지한다.
-    if (
-      /access_token=|refresh_token=|error=|error_code=|type=signup/
-        .test(url.hash)
-    ) {
+    if (hasAuthHash) {
       url.hash = hash.toString();
     }
 
@@ -23522,6 +23532,61 @@ initializeAppWithRunTripRecovery();
       const session = data.session;
       const authReturn = window.freeRunTripAuthReturn;
 
+            if (
+        returnPending &&
+        (
+          authReturn?.kind === 'recovery' ||
+          authReturn?.kind === 'recovery-error'
+        )
+      ) {
+        let verifiedUser = null;
+
+        if (
+          authReturn.kind === 'recovery' &&
+          authReturn.accessToken &&
+          session?.access_token === authReturn.accessToken
+        ) {
+          const result = await client.auth.getUser(
+            authReturn.accessToken
+          );
+
+          if (
+            !result.error &&
+            result.data.user?.id === session.user.id
+          ) {
+            verifiedUser = result.data.user;
+          }
+        }
+
+        user = session?.user || null;
+        username = null;
+        profileLoaded = false;
+        recoveryUserId = verifiedUser?.id || null;
+        renderIdentity();
+
+        cleanAuthUrl();
+        window.freeRunTripAuthReturn = null;
+        returnPending = false;
+        initialized = true;
+
+        if (verifiedUser) {
+          panels.reset.reset();
+          el('frtResetConfirm').setCustomValidity('');
+
+          showView(
+            'reset',
+            '새 비밀번호 설정',
+            '8자 이상의 새 비밀번호를 입력해 주세요.'
+          );
+        } else {
+          showForgot(
+            '재설정 링크가 만료되었거나 이미 사용됐어요. 이메일을 입력해 새 링크를 받아 주세요.',
+            true
+          );
+        }
+
+        return;
+      }
       if (returnPending) {
         let verified = false;
 
@@ -23615,6 +23680,9 @@ initializeAppWithRunTripRecovery();
     password.value = '';
     confirm.value = '';
     el('frtDeletePassword').value = '';
+    el('frtResetPassword').value = '';
+    el('frtResetConfirm').value = '';
+    el('frtResetConfirm').setCustomValidity('');
 
     if (view === 'deleted') {
       view = 'login';
@@ -23874,7 +23942,188 @@ initializeAppWithRunTripRecovery();
     }
   });
 
-    el('frtDeleteOpen').addEventListener('click', () => {
+      function showForgot(text = '', error = false) {
+    recoveryUserId = null;
+
+    panels.forgot.reset();
+    el('frtForgotEmail').value = email.value.trim();
+
+    showView(
+      'forgot',
+      '비밀번호 찾기',
+      text || '가입한 이메일로 비밀번호 재설정 링크를 보내드려요.',
+      error
+    );
+  }
+
+  el('frtForgotOpen').addEventListener('click', () => {
+    if (busy) return;
+
+    password.value = '';
+    confirm.value = '';
+
+    showForgot();
+  });
+
+  el('frtForgotCancel').addEventListener('click', () => {
+    if (busy) return;
+    showLogin();
+  });
+
+  panels.forgot.addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    if (busy || !client) return;
+
+    const recoveryEmail = el('frtForgotEmail');
+    recoveryEmail.value = recoveryEmail.value.trim();
+
+    if (!panels.forgot.reportValidity()) return;
+
+    setBusy(true);
+    message('재설정 메일을 요청하고 있어요.');
+
+    try {
+      const { error } = await client.auth.resetPasswordForEmail(
+        recoveryEmail.value,
+        {
+          redirectTo:
+            'https://freeruntrip.vercel.app/?auth=recovery'
+        }
+      );
+
+      if (error) throw error;
+
+      message(
+        '입력한 이메일로 가입된 계정이 있다면 재설정 메일을 보내드려요. 받은편지함과 스팸함을 확인해 주세요.'
+      );
+    } catch (error) {
+      message(errorMessage(error), true);
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  [
+    el('frtResetPassword'),
+    el('frtResetConfirm')
+  ].forEach((input) => {
+    input.addEventListener('input', () => {
+      el('frtResetConfirm').setCustomValidity('');
+    });
+  });
+
+  panels.reset.addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    if (busy || !client) return;
+
+    if (!recoveryUserId) {
+      showForgot(
+        '재설정 인증을 확인하지 못했어요. 새 링크를 받아 주세요.',
+        true
+      );
+      return;
+    }
+
+    const newPassword = el('frtResetPassword');
+    const newConfirm = el('frtResetConfirm');
+
+    newConfirm.setCustomValidity('');
+
+    if (!panels.reset.reportValidity()) return;
+
+    if (newPassword.value !== newConfirm.value) {
+      newConfirm.setCustomValidity(
+        '비밀번호가 일치하지 않습니다.'
+      );
+      newConfirm.reportValidity();
+      return;
+    }
+
+    setBusy(true);
+    message('비밀번호를 변경하고 있어요.');
+
+    try {
+      // 링크로 인증한 계정과 현재 계정이 같은지 다시 확인한다.
+      const { data, error } = await client.auth.getUser();
+
+      if (error || data.user?.id !== recoveryUserId) {
+        recoveryUserId = null;
+
+        showForgot(
+          '재설정 인증이 만료되었거나 로그인 계정이 변경됐어요. 새 링크를 받아 주세요.',
+          true
+        );
+        return;
+      }
+
+      const result = await client.auth.updateUser({
+        password: newPassword.value
+      });
+
+      if (result.error) throw result.error;
+
+      recoveryUserId = null;
+      panels.reset.reset();
+
+      showView(
+        'resetDone',
+        '비밀번호가 변경되었어요.'
+      );
+
+      dialog.scrollTop = 0;
+    } catch (error) {
+      const resetErrors = {
+        same_password:
+          '현재 비밀번호와 다른 새 비밀번호를 입력해 주세요.',
+        weak_password:
+          '비밀번호가 보안 조건을 충족하지 못했어요. 8자 이상으로 더 강한 비밀번호를 입력해 주세요.',
+        session_not_found:
+          '인증이 만료됐어요. 창을 닫고 비밀번호 찾기에서 새 링크를 받아 주세요.',
+        reauthentication_needed:
+          '다시 인증해야 해요. 창을 닫고 비밀번호 찾기에서 새 링크를 받아 주세요.'
+      };
+
+      message(
+        resetErrors[error?.code] || errorMessage(error),
+        true
+      );
+    } finally {
+      newPassword.value = '';
+      newConfirm.value = '';
+      setBusy(false);
+    }
+  });
+
+  el('frtResetDoneLogin').addEventListener('click', async () => {
+    if (busy || !client) return;
+
+    setBusy(true);
+
+    try {
+      // 재설정 링크로 만들어진 현재 브라우저의 세션을 정리한다.
+      const { error } = await client.auth.signOut({
+        scope: 'local'
+      });
+
+      if (error) throw error;
+
+      await syncSession(null, true);
+
+      showLogin(
+        '변경한 비밀번호로 로그인해 주세요.'
+      );
+    } catch {
+      message(
+        '비밀번호는 변경됐지만 로그인 화면으로 이동하지 못했어요. 버튼을 다시 눌러 주세요.',
+        true
+      );
+    } finally {
+      setBusy(false);
+    }
+  });
+  el('frtDeleteOpen').addEventListener('click', () => {
     if (busy || !user) return;
 
     panels.delete.reset();

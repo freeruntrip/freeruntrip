@@ -9,7 +9,7 @@
     'sb_publishable_r9SZcg8082FZ5TPxuN1pRw__iu7EIh1';
 
   // Supabase가 인증 URL을 정리하기 전에
-  // 이번 접속이 회원가입 인증 결과인지 확인한다.
+  // 회원가입 인증 또는 비밀번호 재설정 접속인지 확인한다.
   const url = new URL(window.location.href);
   const hash = new URLSearchParams(url.hash.slice(1));
 
@@ -20,18 +20,35 @@
     value('error') || value('error_code')
   );
 
-  const isSignup = value('type') === 'signup';
+  const authType = value('type');
+  const isSignup = authType === 'signup';
+  const isRecovery = authType === 'recovery';
+
+  // 만료된 재설정 링크로 돌아온 경우에도
+  // 비밀번호 재설정 요청이었다는 것을 구분한다.
+  const recoveryRequested =
+    isRecovery ||
+    url.searchParams.get('auth') === 'recovery';
+
+  let returnKind = null;
+
+  if (hasError) {
+    returnKind = recoveryRequested
+      ? 'recovery-error'
+      : 'error';
+  } else if (recoveryRequested) {
+    returnKind = 'recovery';
+  } else if (isSignup) {
+    returnKind = 'signup';
+  }
 
   // 인증 토큰은 검증하는 동안 메모리에서만 사용한다.
+  // 재설정 화면은 이후 app.js에서 세션을 검증한 뒤 연다.
   window.freeRunTripAuthReturn = {
-    kind: hasError
-      ? 'error'
-      : isSignup
-        ? 'signup'
-        : null,
+    kind: returnKind,
 
     accessToken:
-      isSignup && !hasError
+      !hasError && (isSignup || isRecovery)
         ? hash.get('access_token')
         : null
   };

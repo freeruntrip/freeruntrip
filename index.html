@@ -1308,6 +1308,14 @@
       </button>
 
       <button
+        id="frtForgotOpen"
+        class="frt-auth-secondary"
+        type="button"
+      >
+        비밀번호 찾기
+      </button>
+      
+      <button
         id="frtAuthSwitch"
         class="frt-auth-secondary"
         type="button"
@@ -1315,6 +1323,71 @@
         처음이라면 회원가입
       </button>
     </form>
+
+          <!-- 비밀번호 재설정 메일 요청 -->
+    <form id="frtForgotForm" hidden>
+      <label for="frtForgotEmail">가입 이메일</label>
+      <input
+        id="frtForgotEmail"
+        name="recoveryEmail"
+        type="email"
+        autocomplete="email"
+        autocapitalize="none"
+        spellcheck="false"
+        required
+      />
+
+      <button type="submit">
+        재설정 메일 보내기
+      </button>
+
+      <button
+        id="frtForgotCancel"
+        class="frt-auth-secondary"
+        type="button"
+      >
+        로그인으로 돌아가기
+      </button>
+    </form>
+
+    <!-- 이메일 인증 후 새 비밀번호 설정 -->
+    <form id="frtResetForm" hidden>
+      <label for="frtResetPassword">새 비밀번호</label>
+      <input
+        id="frtResetPassword"
+        name="newPassword"
+        type="password"
+        autocomplete="new-password"
+        minlength="8"
+        required
+      />
+
+      <label for="frtResetConfirm">새 비밀번호 확인</label>
+      <input
+        id="frtResetConfirm"
+        name="newPasswordConfirm"
+        type="password"
+        autocomplete="new-password"
+        minlength="8"
+        required
+      />
+
+      <button type="submit">
+        비밀번호 변경
+      </button>
+    </form>
+
+    <!-- 비밀번호 변경 완료 -->
+    <div id="frtResetDone" hidden>
+      <p class="frt-auth-description">
+        새 비밀번호가 저장되었습니다.
+        아래 버튼을 눌러 변경한 비밀번호로 다시 로그인해 주세요.
+      </p>
+
+      <button id="frtResetDoneLogin" type="button">
+        로그인하기
+      </button>
+    </div>
 
     <div id="frtAuthAccount" hidden>
       <p class="frt-account-label">
