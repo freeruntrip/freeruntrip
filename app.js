@@ -23208,7 +23208,8 @@ initializeAppWithRunTripRecovery();
     account: el('frtAuthAccount'),
     welcome: el('frtAuthWelcome'),
     handle: el('frtHandleForm'),
-    ready: el('frtAuthReady')
+    ready: el('frtAuthReady'),
+    delete: el('frtDeleteForm')
   };
 
   let user = null;
@@ -23608,6 +23609,8 @@ initializeAppWithRunTripRecovery();
   dialog.addEventListener('close', () => {
     password.value = '';
     confirm.value = '';
+    el('frtDeletePassword').value = '';
+    el('frtDeleteConfirm').value = '';
   });
 
   el('frtAuthSwitch').addEventListener('click', () => {
@@ -23863,6 +23866,121 @@ initializeAppWithRunTripRecovery();
     }
   });
 
+    el('frtDeleteOpen').addEventListener('click', () => {
+    if (busy || !user) return;
+
+    panels.delete.reset();
+    el('frtDeleteConfirm').setCustomValidity('');
+
+    showView(
+      'delete',
+      '회원 탈퇴',
+      '삭제할 계정: ' + user.email
+    );
+
+    el('frtDeletePassword').focus();
+  });
+
+  el('frtDeleteCancel').addEventListener('click', () => {
+    if (busy) return;
+
+    panels.delete.reset();
+    showAccount();
+  });
+
+  el('frtDeleteConfirm').addEventListener('input', () => {
+    el('frtDeleteConfirm').setCustomValidity('');
+  });
+
+  panels.delete.addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    if (busy || !client || !user) return;
+
+    const deletePassword = el('frtDeletePassword');
+    const deleteConfirm = el('frtDeleteConfirm');
+
+    deleteConfirm.setCustomValidity(
+      deleteConfirm.value.trim() === '탈퇴'
+        ? ''
+        : '탈퇴를 정확히 입력해 주세요.'
+    );
+
+    if (!panels.delete.reportValidity()) return;
+
+    // 탈퇴 API는 Vercel 배포 주소에서 실행한다.
+    if (window.location.hostname !== 'freeruntrip.vercel.app') {
+      message(
+        '회원 탈퇴는 freeruntrip.vercel.app에서 진행해 주세요.',
+        true
+      );
+      return;
+    }
+
+    const targetUserId = user.id;
+
+    setBusy(true);
+    message('본인 확인 후 계정을 삭제하고 있어요.');
+
+    try {
+      const { data, error } = await client.auth.getSession();
+
+      if (error) throw error;
+
+      if (
+        !data.session?.access_token ||
+        data.session.user.id !== targetUserId
+      ) {
+        throw new Error('다시 로그인한 후 시도해 주세요.');
+      }
+
+      const response = await fetch('/api/delete-account', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${data.session.access_token}`
+        },
+        body: JSON.stringify({
+          password: deletePassword.value,
+          confirm: 'DELETE'
+        })
+      });
+
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok || result?.deleted !== true) {
+        throw new Error(
+          result?.error ||
+          '탈퇴 결과를 확인하지 못했어요. 다시 로그인하여 확인해 주세요.'
+        );
+      }
+
+      panels.delete.reset();
+
+      // 현재 브라우저의 인증 세션만 정리한다.
+      // 러닝 기록과 사진 저장소는 건드리지 않는다.
+      try {
+        await client.auth.signOut({ scope: 'local' });
+      } catch {
+        // 서버의 계정 삭제는 이미 완료됐다.
+      }
+
+      await syncSession(null, true);
+
+      message(
+        '회원 탈퇴가 완료되었어요. 같은 이메일로 다시 가입할 수 있어요.'
+      );
+    } catch (error) {
+      message(
+        error?.message ||
+        '요청을 완료하지 못했어요. 연결 상태를 확인해 주세요.',
+        true
+      );
+    } finally {
+      deletePassword.value = '';
+      setBusy(false);
+    }
+  });
   logout.addEventListener('click', async () => {
     if (busy || !client) return;
 

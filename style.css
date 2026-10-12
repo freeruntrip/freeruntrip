@@ -8984,3 +8984,7 @@ body {
     font-size: 20px;
   }
 }
+.frt-auth-card .frt-auth-danger {
+  background: #b91c1c;
+  color: #fff;
+}
