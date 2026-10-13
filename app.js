@@ -23994,9 +23994,12 @@ initializeAppWithRunTripRecovery();
 
       if (error) throw error;
 
-      message(
-        '입력한 이메일로 가입된 계정이 있다면 재설정 메일을 보내드려요. 받은편지함과 스팸함을 확인해 주세요.'
-      );
+      const recoveryNotice =
+        '입력한 이메일로 가입된 계정이 있다면 비밀번호 재설정 이메일을 보내드려요.\n\n' +
+        '받은편지함과 스팸함을 확인해 주세요.';
+
+      message(recoveryNotice);
+      window.alert(recoveryNotice);
     } catch (error) {
       message(errorMessage(error), true);
     } finally {
