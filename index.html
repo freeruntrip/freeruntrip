@@ -1322,6 +1322,13 @@
       >
         처음이라면 회원가입
       </button>
+      <button
+  type="button"
+  id="frtGoogleSignup"
+  class="frt-google-signup"
+>
+  Google계정으로 가입하기
+</button>
     </form>
 
           <!-- 비밀번호 재설정 메일 요청 -->
@@ -1434,15 +1441,38 @@
     이 브라우저에 저장된 러닝 기록과 사진은 삭제되지 않습니다.
   </p>
 
-  <label for="frtDeletePassword">현재 비밀번호</label>
-  <input
-    id="frtDeletePassword"
-    type="password"
-    autocomplete="current-password"
-    required
-  />
+    <div id="frtDeletePasswordWrap">
+    <label for="frtDeletePassword">현재 비밀번호</label>
+
+    <input
+      id="frtDeletePassword"
+      type="password"
+      autocomplete="current-password"
+      required
+    />
+  </div>
+
+  <p
+    id="frtDeleteGoogleNote"
+    class="frt-auth-note"
+    hidden
+  >
+    Google에서 같은 계정으로 본인 확인 후 돌아오면
+    최종 삭제 버튼이 표시됩니다.
+    Google 계정 자체는 삭제되지 않습니다.
+  </p>
 
   <button
+    id="frtDeleteGoogleVerify"
+    class="frt-auth-secondary"
+    type="button"
+    hidden
+  >
+    Google로 본인 확인
+  </button>
+
+  <button
+    id="frtDeleteSubmit"
     class="frt-auth-danger"
     type="submit"
   >

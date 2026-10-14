@@ -30,9 +30,20 @@
     isRecovery ||
     url.searchParams.get('auth') === 'recovery';
 
+  const googleRequested =
+    url.searchParams.get('auth') === 'google';
+  const googleDeleteRequested =
+    url.searchParams.get('auth') === 'google-delete';  
+
   let returnKind = null;
 
-  if (hasError) {
+  if (googleDeleteRequested) {
+    returnKind = hasError
+      ? 'google-delete-error'
+      : 'google-delete';
+  } else if (googleRequested) {
+    returnKind = hasError ? 'google-error' : 'google';
+  } else if (hasError) {
     returnKind = recoveryRequested
       ? 'recovery-error'
       : 'error';
@@ -44,11 +55,17 @@
 
   // 인증 토큰은 검증하는 동안 메모리에서만 사용한다.
   // 재설정 화면은 이후 app.js에서 세션을 검증한 뒤 연다.
-  window.freeRunTripAuthReturn = {
+    window.freeRunTripAuthReturn = {
     kind: returnKind,
 
     accessToken:
-      !hasError && (isSignup || isRecovery)
+      !hasError &&
+      (
+        isSignup ||
+        isRecovery ||
+        googleRequested ||
+        googleDeleteRequested
+      )
         ? hash.get('access_token')
         : null
   };

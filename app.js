@@ -23227,6 +23227,8 @@ initializeAppWithRunTripRecovery();
   let view = 'login';
   let retryAction = null;
   let recoveryUserId = null;
+  let googleDeleteVerifiedUserId = null;
+  const googleDeleteStorageKey = 'frt-google-delete-pending-v1';
   let returnPending = Boolean(
     window.freeRunTripAuthReturn?.kind
   );
@@ -23292,6 +23294,103 @@ initializeAppWithRunTripRecovery();
     if (open) showDialog();
   }
 
+    function hasGoogleIdentity(account) {
+    return (
+      Array.isArray(account?.identities) &&
+      account.identities.some(
+        (identity) => identity.provider === 'google'
+      )
+    );
+  }
+
+  function clearGoogleDeleteState() {
+    googleDeleteVerifiedUserId = null;
+
+    try {
+      sessionStorage.removeItem(googleDeleteStorageKey);
+    } catch {
+      // 저장소 접근 실패 시에도 메모리의 인증 상태는 초기화한다.
+    }
+  }
+
+  function showDelete(verified = false) {
+    const google = hasGoogleIdentity(user);
+
+    const ready =
+      google &&
+      verified &&
+      googleDeleteVerifiedUserId === user?.id;
+
+    const input = el('frtDeletePassword');
+
+    panels.delete.reset();
+
+    input.required = !google;
+    input.disabled = google;
+
+    el('frtDeletePasswordWrap').hidden = google;
+    el('frtDeleteGoogleNote').hidden = !google;
+    el('frtDeleteGoogleVerify').hidden = !google || ready;
+    el('frtDeleteSubmit').hidden = google && !ready;
+
+    showView(
+      'delete',
+      '회원 탈퇴',
+      '삭제할 계정: ' + user.email +
+        (
+          ready
+            ? '\n본인 확인이 완료됐어요. 계정 영구 삭제 버튼을 누르면 탈퇴가 완료됩니다.'
+            : ''
+        )
+    );
+
+    if (google && !ready) {
+      el('frtDeleteGoogleVerify').focus();
+    } else if (ready) {
+      el('frtDeleteSubmit').focus();
+    } else {
+      input.focus();
+    }
+  }
+
+  async function deleteApi(payload, session) {
+    if (
+      window.location.origin !==
+      'https://freeruntrip.vercel.app'
+    ) {
+      throw new Error(
+        '회원 탈퇴는 freeruntrip.vercel.app에서 진행해 주세요.'
+      );
+    }
+
+    const response = await fetch('/api/delete-account', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(
+          session?.access_token
+            ? {
+                Authorization:
+                  `Bearer ${session.access_token}`
+              }
+            : {}
+        )
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok || !result) {
+      throw new Error(
+        result?.error ||
+        '처리 결과를 확인하지 못했어요. 다시 로그인하여 계정 상태를 확인해 주세요.'
+      );
+    }
+
+    return result;
+  }
   function renderIdentity() {
     entry.textContent = user
       ? '계정 설정'
@@ -23480,7 +23579,9 @@ initializeAppWithRunTripRecovery();
       'type',
       'error',
       'error_code',
-      'error_description'
+      'error_description',
+      'provider_token',
+      'provider_refresh_token',
     ];
 
     const hash = new URLSearchParams(url.hash.slice(1));
@@ -23492,7 +23593,11 @@ initializeAppWithRunTripRecovery();
       url.searchParams.delete(name);
     });
 
-    if (url.searchParams.get('auth') === 'recovery') {
+        if (
+            ['recovery', 'google', 'google-delete'].includes(
+        url.searchParams.get('auth')
+      )
+    ) {
       url.searchParams.delete('auth');
     }
 
@@ -23531,6 +23636,132 @@ initializeAppWithRunTripRecovery();
 
       const session = data.session;
       const authReturn = window.freeRunTripAuthReturn;
+            if (
+        returnPending &&
+        ['google-delete', 'google-delete-error'].includes(
+          authReturn?.kind
+        )
+      ) {
+        let pending = null;
+
+        try {
+          pending = JSON.parse(
+            sessionStorage.getItem(
+              googleDeleteStorageKey
+            ) || 'null'
+          );
+        } catch {
+          // 확인 정보를 읽지 못하면 탈퇴를 진행하지 않는다.
+        }
+
+        cleanAuthUrl();
+        window.freeRunTripAuthReturn = null;
+        returnPending = false;
+        clearGoogleDeleteState();
+
+        user = session?.user || null;
+        username = null;
+        profileLoaded = false;
+        renderIdentity();
+
+        try {
+          if (
+            authReturn.kind !== 'google-delete' ||
+            !authReturn.accessToken ||
+            authReturn.accessToken !== session?.access_token ||
+            !pending?.userId ||
+            pending.userId !== user?.id
+          ) {
+            throw new Error(
+              'Google 본인 확인이 취소되었거나 계정이 달라요. 탈퇴할 원래 계정으로 다시 로그인해 주세요.'
+            );
+          }
+
+          const result = await deleteApi(
+            { action: 'verify-google' },
+            session
+          );
+
+          if (
+            result.verified !== true ||
+            result.userId !== pending.userId
+          ) {
+            throw new Error(
+              '본인 확인에 실패했어요. 처음 선택한 계정으로 다시 진행해 주세요.'
+            );
+          }
+
+          googleDeleteVerifiedUserId = result.userId;
+
+          // 인증 후 자동 삭제하지 않고 최종 확인 화면을 연다.
+          showDelete(true);
+        } catch (error) {
+          if (user) {
+            showAccount();
+          } else {
+            showLogin();
+          }
+
+          message(
+            error.message ||
+            'Google 본인 확인을 완료하지 못했어요.',
+            true
+          );
+        }
+
+        initialized = true;
+        return;
+      }
+            if (
+        returnPending &&
+        (
+          authReturn?.kind === 'google' ||
+          authReturn?.kind === 'google-error'
+        )
+      ) {
+        let verified = false;
+
+        if (
+          authReturn.kind === 'google' &&
+          authReturn.accessToken &&
+          session?.access_token === authReturn.accessToken
+        ) {
+          const result = await client.auth.getUser(
+            authReturn.accessToken
+          );
+
+          verified =
+            !result.error &&
+            Boolean(result.data.user) &&
+            result.data.user.id === session.user.id;
+        }
+
+        cleanAuthUrl();
+        window.freeRunTripAuthReturn = null;
+        returnPending = false;
+
+        if (verified) {
+          const saved = await syncSession(session);
+
+          if (saved && typeof openAppPage === 'function') {
+            openAppPage('home');
+          }
+        } else {
+          await syncSession(session);
+
+          if (!session) {
+            showLogin();
+          }
+
+          message(
+            'Google 인증이 취소되었거나 완료되지 않았어요. 다시 시도해 주세요.',
+            true
+          );
+        }
+
+        initialized = true;
+        return;
+      }
 
             if (
         returnPending &&
@@ -23677,6 +23908,7 @@ initializeAppWithRunTripRecovery();
   });
 
     dialog.addEventListener('close', () => {
+    clearGoogleDeleteState();
     password.value = '';
     confirm.value = '';
     el('frtDeletePassword').value = '';
@@ -23710,6 +23942,47 @@ initializeAppWithRunTripRecovery();
     });
   });
 
+    el('frtGoogleSignup')?.addEventListener('click', async () => {
+    if (busy) return;
+
+    if (!client) {
+      message(
+        '로그인을 불러오지 못했어요. 페이지를 새로고침해 주세요.',
+        true
+      );
+      return;
+    }
+
+    setBusy(true);
+    message('Google 계정 선택 화면으로 이동하고 있어요.');
+
+    try {
+      const { data, error } = await client.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: 'https://freeruntrip.vercel.app/?auth=google',
+          queryParams: {
+            prompt: 'select_account'
+          },
+          skipBrowserRedirect: true
+        }
+      });
+
+      if (error) throw error;
+
+      if (!data?.url) {
+        throw new Error('Google 인증 주소를 받지 못했어요.');
+      }
+
+      window.location.assign(data.url);
+    } catch (error) {
+      setBusy(false);
+      message(
+        'Google 가입·로그인을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.',
+        true
+      );
+    }
+  });
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
 
@@ -24126,26 +24399,124 @@ initializeAppWithRunTripRecovery();
       setBusy(false);
     }
   });
-  el('frtDeleteOpen').addEventListener('click', () => {
+    el('frtDeleteOpen').addEventListener('click', () => {
     if (busy || !user) return;
 
-    panels.delete.reset();
-
-    showView(
-      'delete',
-      '회원 탈퇴',
-      '삭제할 계정: ' + user.email
-    );
-
-    el('frtDeletePassword').focus();
+    clearGoogleDeleteState();
+    showDelete();
   });
 
-  el('frtDeleteCancel').addEventListener('click', () => {
+  el('frtDeleteCancel').addEventListener('click', async () => {
     if (busy) return;
 
-    panels.delete.reset();
-    showAccount();
+    setBusy(true);
+
+    try {
+      clearGoogleDeleteState();
+      panels.delete.reset();
+
+      await deleteApi({
+        action: 'cancel-google'
+      }).catch(() => {});
+
+      await syncSession({ user }, true);
+    } finally {
+      setBusy(false);
+    }
   });
+
+  el('frtDeleteGoogleVerify').addEventListener(
+    'click',
+    async () => {
+      if (
+        busy ||
+        !client ||
+        !user ||
+        !hasGoogleIdentity(user)
+      ) {
+        return;
+      }
+
+      const targetUserId = user.id;
+
+      clearGoogleDeleteState();
+      setBusy(true);
+      message('Google 본인 확인을 준비하고 있어요.');
+
+      let leaving = false;
+
+      try {
+        const { data, error } =
+          await client.auth.getSession();
+
+        if (
+          error ||
+          !data.session?.access_token ||
+          data.session.user.id !== targetUserId
+        ) {
+          throw new Error(
+            '로그인 계정이 변경됐어요. 다시 로그인해 주세요.'
+          );
+        }
+
+        const started = await deleteApi(
+          { action: 'start-google' },
+          data.session
+        );
+
+        if (
+          !started.started ||
+          started.userId !== targetUserId
+        ) {
+          throw new Error(
+            '본인 확인을 시작하지 못했어요.'
+          );
+        }
+
+        // 화면 복귀 확인용 ID만 저장한다.
+        // 실제 탈퇴 권한은 서버에서 별도로 검증한다.
+        sessionStorage.setItem(
+          googleDeleteStorageKey,
+          JSON.stringify({
+            userId: targetUserId
+          })
+        );
+
+        const result = await client.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo:
+              'https://freeruntrip.vercel.app/?auth=google-delete',
+            queryParams: {
+              prompt: 'select_account'
+            },
+            skipBrowserRedirect: true
+          }
+        });
+
+        if (result.error || !result.data?.url) {
+          throw new Error(
+            'Google 인증 화면을 열지 못했어요.'
+          );
+        }
+
+        window.location.assign(result.data.url);
+        leaving = true;
+      } catch (error) {
+        clearGoogleDeleteState();
+
+        message(
+          error.message ||
+          'Google 본인 확인을 시작하지 못했어요.',
+          true
+        );
+      } finally {
+        if (!leaving) {
+          setBusy(false);
+        }
+      }
+    }
+  );
 
   panels.delete.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -24153,12 +24524,25 @@ initializeAppWithRunTripRecovery();
     if (busy || !client || !user) return;
 
     const deletePassword = el('frtDeletePassword');
+    const googleDelete = hasGoogleIdentity(user);
 
+    if (
+      googleDelete &&
+      googleDeleteVerifiedUserId !== user.id
+    ) {
+      message(
+        '먼저 Google로 본인 확인을 진행해 주세요.',
+        true
+      );
+      return;
+    }
 
     if (!panels.delete.reportValidity()) return;
 
-    // 탈퇴 API는 Vercel 배포 주소에서 실행한다.
-    if (window.location.hostname !== 'freeruntrip.vercel.app') {
+    if (
+      window.location.hostname !==
+      'freeruntrip.vercel.app'
+    ) {
       message(
         '회원 탈퇴는 freeruntrip.vercel.app에서 진행해 주세요.',
         true
@@ -24180,36 +24564,39 @@ initializeAppWithRunTripRecovery();
         !data.session?.access_token ||
         data.session.user.id !== targetUserId
       ) {
-        throw new Error('다시 로그인한 후 시도해 주세요.');
+        throw new Error(
+          '다시 로그인한 후 시도해 주세요.'
+        );
       }
 
-      const response = await fetch('/api/delete-account', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${data.session.access_token}`
-        },
-        body: JSON.stringify({
-          password: deletePassword.value,
+      const result = await deleteApi(
+        {
+          action: 'delete',
+          ...(
+            googleDelete
+              ? { method: 'google' }
+              : { password: deletePassword.value }
+          ),
           confirm: 'DELETE'
-        })
-      });
+        },
+        data.session
+      );
 
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok || result?.deleted !== true) {
+      if (result.deleted !== true) {
         throw new Error(
-          result?.error ||
           '탈퇴 결과를 확인하지 못했어요. 다시 로그인하여 확인해 주세요.'
         );
       }
 
+      clearGoogleDeleteState();
       panels.delete.reset();
 
       // 현재 브라우저의 인증 세션만 정리한다.
       // 러닝 기록과 사진 저장소는 건드리지 않는다.
       try {
-        await client.auth.signOut({ scope: 'local' });
+        await client.auth.signOut({
+          scope: 'local'
+        });
       } catch {
         // 서버의 계정 삭제는 이미 완료됐다.
       }
@@ -24223,6 +24610,11 @@ initializeAppWithRunTripRecovery();
 
       dialog.scrollTop = 0;
     } catch (error) {
+      if (googleDelete) {
+        clearGoogleDeleteState();
+        showDelete();
+      }
+
       message(
         error?.message ||
         '요청을 완료하지 못했어요. 연결 상태를 확인해 주세요.',
@@ -24233,6 +24625,7 @@ initializeAppWithRunTripRecovery();
       setBusy(false);
     }
   });
+
   el('frtDeleteDoneConfirm').addEventListener('click', () => {
     if (busy) return;
     dialog.close();
@@ -24269,6 +24662,7 @@ initializeAppWithRunTripRecovery();
         if (!initialized || event === 'INITIAL_SESSION') return;
 
         if (event === 'SIGNED_OUT') {
+          clearGoogleDeleteState();
           void syncSession(null);
         } else if (
           !busy &&
