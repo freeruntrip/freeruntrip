@@ -995,14 +995,19 @@ const RUNTRIP_PHOTO_STORE_NAME = 'photos';
 let pendingRunTripPhotoContext = null;
 let activeRunTripPhotoIds = [];
 
-function openRunTripPhotoDatabase() {
+function openRunTripPhotoDatabase(
+  owner = frtRecordsState.owner
+) {
   return new Promise(function (resolve, reject) {
     if (!window.indexedDB) {
       reject(new Error('이 브라우저에서는 사진 저장소를 사용할 수 없습니다.'));
       return;
     }
 
-    const request = indexedDB.open(RUNTRIP_PHOTO_DB_NAME, 1);
+    const request = indexedDB.open(
+      RUNTRIP_PHOTO_DB_NAME + ':' + owner,
+      1
+    );
 
     request.onupgradeneeded = function () {
       const database = request.result;
@@ -1101,12 +1106,17 @@ async function updateRunTripPhotoRecordIds(photoIds, recordId) {
   database.close();
 }
 
-async function getRunTripPhotosByIds(photoIds) {
+async function getRunTripPhotosByIds(
+  photoIds,
+  owner = frtRecordsState.owner
+) {
   if (!Array.isArray(photoIds) || photoIds.length === 0) {
     return [];
   }
 
-  const database = await openRunTripPhotoDatabase();
+  const database = await openRunTripPhotoDatabase(
+  owner
+  );
 
   const photos = await Promise.all(
     photoIds.map(function (photoId) {
@@ -1284,7 +1294,627 @@ const ELEVATION_SMOOTHING_COUNT = 5;
 const ELEVATION_CHANGE_THRESHOLD_METERS = 2.5;
 let runningGpsDiagnosticLog = [];
 let runTripGpsDiagnosticLog = [];
-let runRecords = JSON.parse(localStorage.getItem('runRecords')) || [];
+/*
+  계정별 기록 저장 상태.
+  기존 공통 runRecords 데이터는 그대로 보존한다.
+*/
+const frtRecordsState = {
+  owner: null,
+  ready: false,
+  epoch: 0,
+  flight: null,
+  timer: null,
+  status: '계정을 확인하고 있어요.',
+  failed: false
+};
+
+function frtRecordsKey(
+  owner = frtRecordsState.owner
+) {
+  return 'frtAccountRecordsV1:' + owner;
+}
+
+function frtReadRecordsCache(
+  owner = frtRecordsState.owner
+) {
+  const raw = localStorage.getItem(
+    frtRecordsKey(owner)
+  );
+
+  if (!raw) {
+    return {
+      records: [],
+      pending: {}
+    };
+  }
+
+  const cache = JSON.parse(raw);
+
+  if (
+    !Array.isArray(cache.records) ||
+    !cache.pending ||
+    typeof cache.pending !== 'object'
+  ) {
+    throw new Error(
+      '기록 저장 데이터를 읽지 못했습니다.'
+    );
+  }
+
+  return cache;
+}
+
+/*
+  로그인 계정을 확인하기 전에는
+  이전 공통 기록을 화면에 표시하지 않는다.
+*/
+let runRecords = [];
+function persistRunRecordsSafely(records) {
+  const result =
+    persistLocalRunRecordsSafely(records);
+
+  if (result.success) {
+    frtScheduleRecordsSync();
+  }
+
+  return result;
+}
+
+function frtScheduleRecordsSync(delay = 400) {
+  clearTimeout(frtRecordsState.timer);
+
+  if (!frtRecordsState.ready) return;
+
+  if (frtRecordsState.owner === 'guest') {
+    frtSetRecordsStatus(
+      '게스트 기록은 이 브라우저에만 저장돼요.'
+    );
+    return;
+  }
+
+  frtRecordsState.timer = setTimeout(
+    function () {
+      void frtSyncAccountRecords();
+    },
+    delay
+  );
+}
+
+async function frtStoreRemotePhotos(
+  entries,
+  owner
+) {
+  if (!entries.length) return;
+
+  const database =
+    await openRunTripPhotoDatabase(owner);
+
+  try {
+    await new Promise(function (
+      resolve,
+      reject
+    ) {
+      const transaction =
+        database.transaction(
+          RUNTRIP_PHOTO_STORE_NAME,
+          'readwrite'
+        );
+
+      const store =
+        transaction.objectStore(
+          RUNTRIP_PHOTO_STORE_NAME
+        );
+
+      for (const entry of entries) {
+        store.put(entry);
+      }
+
+      transaction.oncomplete = resolve;
+
+      transaction.onerror = function () {
+        reject(transaction.error);
+      };
+
+      transaction.onabort = function () {
+        reject(
+          transaction.error ||
+          new Error(
+            '사진 저장이 중단됐어요.'
+          )
+        );
+      };
+    });
+  } finally {
+    database.close();
+  }
+}
+
+async function frtSyncAccountRecords() {
+  const state = frtRecordsState;
+
+  if (
+    !state.ready ||
+    state.owner === 'guest'
+  ) {
+    return;
+  }
+
+  if (state.flight) {
+    frtScheduleRecordsSync(1000);
+    return;
+  }
+
+  const owner = state.owner;
+  const epoch = state.epoch;
+
+  const isCurrentAccount = function () {
+    return (
+      state.owner === owner &&
+      state.epoch === epoch
+    );
+  };
+
+  const client =
+    window.freeRunTripSupabase;
+
+  const flight = {};
+  state.flight = flight;
+
+  frtSetRecordsStatus(
+    '기록을 동기화하고 있어요.'
+  );
+
+  try {
+    const {
+      data: auth,
+      error: authError
+    } = await client.auth.getSession();
+
+    if (authError) throw authError;
+
+    if (
+      !isCurrentAccount() ||
+      auth.session?.user?.id !== owner
+    ) {
+      return;
+    }
+
+    const snapshot =
+      frtReadRecordsCache(owner);
+
+    /*
+      이 기기에서 변경한 기록부터 전송한다.
+      성공한 항목만 동기화 대기 목록에서 제거한다.
+    */
+    for (
+      const [id, change] of
+      Object.entries(snapshot.pending)
+    ) {
+      if (!isCurrentAccount()) return;
+
+      let response;
+
+      if (change.action === 'delete') {
+        response = await client
+          .from('frt_activity_records')
+          .delete()
+          .eq('user_id', owner)
+          .eq('record_id', id);
+      } else {
+        const record =
+          snapshot.records.find(
+            function (item) {
+              return String(item.id) === id;
+            }
+          );
+
+        if (!record) {
+          throw new Error(
+            '업로드할 기록을 찾지 못했어요.'
+          );
+        }
+
+        const photos =
+          await getRunTripPhotosByIds(
+            record.photoIds || [],
+            owner
+          );
+
+        if (
+          photos.length !==
+          (record.photoIds || []).length
+        ) {
+          throw new Error(
+            '기록 사진을 읽지 못했어요.'
+          );
+        }
+
+        if (!isCurrentAccount()) return;
+
+        response = await client
+          .from('frt_activity_records')
+          .upsert(
+            {
+              user_id: owner,
+              record_id: id,
+
+              data: {
+                ...record,
+                _frtPhotoEntries: photos
+              },
+
+              updated_at:
+                new Date().toISOString()
+            },
+            {
+              onConflict:
+                'user_id,record_id'
+            }
+          );
+      }
+
+      if (response.error) {
+        throw response.error;
+      }
+
+      if (!isCurrentAccount()) return;
+
+      const latest =
+        frtReadRecordsCache(owner);
+
+      /*
+        전송 중 다시 수정된 기록의
+        새 대기 정보는 유지한다.
+      */
+      if (
+        latest.pending[id]?.token ===
+        change.token
+      ) {
+        delete latest.pending[id];
+
+        localStorage.setItem(
+          frtRecordsKey(owner),
+          JSON.stringify(latest)
+        );
+      }
+    }
+
+    /*
+      현재 계정의 서버 기록을
+      100개씩 나누어 불러온다.
+    */
+    const remote = [];
+
+    for (
+      let offset = 0;
+      ;
+      offset += 100
+    ) {
+      const { data, error } =
+        await client
+          .from('frt_activity_records')
+          .select('record_id,data')
+          .eq('user_id', owner)
+          .order(
+            'record_id',
+            { ascending: true }
+          )
+          .range(
+            offset,
+            offset + 99
+          );
+
+      if (error) throw error;
+      if (!isCurrentAccount()) return;
+
+      for (const row of data) {
+        if (
+          !row.data ||
+          String(row.data.id) !==
+            row.record_id
+        ) {
+          throw new Error(
+            '서버 기록 형식을 확인하지 못했어요.'
+          );
+        }
+
+        const {
+          _frtPhotoEntries = [],
+          ...record
+        } = row.data;
+
+        await frtStoreRemotePhotos(
+          _frtPhotoEntries,
+          owner
+        );
+
+        if (!isCurrentAccount()) return;
+
+        remote.push(record);
+      }
+
+      if (data.length < 100) break;
+    }
+
+    const latest =
+      frtReadRecordsCache(owner);
+
+    const merged = new Map(
+      remote.map(function (record) {
+        return [
+          String(record.id),
+          record
+        ];
+      })
+    );
+
+    /*
+      다운로드 중 이 기기에서 수정한
+      기록은 서버 응답으로 덮어쓰지 않는다.
+    */
+    for (
+      const [id, change] of
+      Object.entries(latest.pending)
+    ) {
+      if (change.action === 'delete') {
+        merged.delete(id);
+      } else {
+        const record =
+          latest.records.find(
+            function (item) {
+              return String(item.id) === id;
+            }
+          );
+
+        if (record) {
+          merged.set(id, record);
+        }
+      }
+    }
+
+    latest.records =
+      [...merged.values()].sort(
+        function (a, b) {
+          return (
+            Number(b.id) -
+            Number(a.id)
+          );
+        }
+      );
+
+    localStorage.setItem(
+      frtRecordsKey(owner),
+      JSON.stringify(latest)
+    );
+
+    runRecords = latest.records;
+
+    const hasPending =
+      Object.keys(
+        latest.pending
+      ).length > 0;
+
+    frtSetRecordsStatus(
+      hasPending
+        ? '저장한 기록을 전송하고 있어요.'
+        : '계정에 기록이 동기화됐어요.'
+    );
+
+    frtRenderAccountRecords();
+
+    if (hasPending) {
+      frtScheduleRecordsSync();
+    }
+  } catch (error) {
+    console.error(
+      'FreeRunTrip 계정 기록 동기화 실패:',
+      error
+    );
+
+    if (isCurrentAccount()) {
+      frtSetRecordsStatus(
+        '동기화하지 못했어요. 이 브라우저의 기록은 유지되며 연결 후 다시 시도해요.',
+        true
+      );
+    }
+  } finally {
+    if (state.flight === flight) {
+      state.flight = null;
+    }
+  }
+}
+function frtSetRecordsStatus(
+  text,
+  failed = false
+) {
+  frtRecordsState.status = text;
+  frtRecordsState.failed = failed;
+
+  const parents = [
+    document.getElementById('records'),
+    document.getElementById(
+      'profileRecentRuns'
+    )?.parentElement
+  ];
+
+  for (const parent of parents) {
+    if (!parent) continue;
+
+    let box = parent.querySelector(
+      '[data-frt-record-sync]'
+    );
+
+    if (!box) {
+      box = document.createElement('div');
+      box.dataset.frtRecordSync = 'true';
+      box.setAttribute('role', 'status');
+
+      box.style.cssText =
+        'padding:10px 16px;' +
+        'font-size:13px;' +
+        'line-height:1.5;';
+
+      parent.prepend(box);
+    }
+
+    box.textContent = text;
+  }
+}
+
+function frtRenderAccountRecords() {
+  renderRunRecords();
+  renderRecordProfileFeed();
+  renderMonthlyReport();
+
+  frtSetRecordsStatus(
+    frtRecordsState.status,
+    frtRecordsState.failed
+  );
+}
+
+function frtSwitchRecordAccount(user) {
+  const owner = user?.id || 'guest';
+  const state = frtRecordsState;
+
+  if (state.owner === owner) {
+    return;
+  }
+
+  const initial = state.owner === null;
+
+  /*
+    다른 탭에서 계정이 변경된 경우에도
+    진행 중인 기록이 새 계정으로 넘어가지 않도록 처리한다.
+  */
+  if (
+    !initial &&
+    (
+      isRunning ||
+      (paused && seconds > 0) ||
+      isRunTripFollowing ||
+      isRunTripPaused
+    )
+  ) {
+    if (
+      isRunTripFollowing ||
+      isRunTripPaused
+    ) {
+      saveActiveRunTripState();
+    } else {
+      saveRunRecord();
+    }
+
+    state.ready = false;
+    runRecords = [];
+    selectedDetailRecord = null;
+
+    document.body.style.visibility =
+      'hidden';
+
+    window.location.reload();
+    return;
+  }
+
+  clearTimeout(state.timer);
+
+  state.epoch++;
+  state.owner = owner;
+  state.flight = null;
+  state.ready = false;
+
+  runRecords = [];
+  selectedDetailRecord = null;
+  pendingRunTripPhotoContext = null;
+  activeRunTripPhotoIds = [];
+  completedRunTripRecordId = null;
+
+  try {
+    runRecords =
+      frtReadRecordsCache(owner).records;
+
+    state.ready = true;
+
+    frtSetRecordsStatus(
+      owner === 'guest'
+        ? '게스트 기록은 이 브라우저에만 저장돼요.'
+        : '이 계정의 기기 저장 기록을 불러왔어요.'
+    );
+  } catch (error) {
+    console.error(
+      '계정 기록 읽기 실패:',
+      error
+    );
+
+    frtSetRecordsStatus(
+      '저장된 기록을 읽지 못했어요. 페이지를 새로고침해 주세요.',
+      true
+    );
+  }
+
+  frtRenderAccountRecords();
+
+  if (initial) {
+    initializeAppWithRunTripRecovery();
+  } else {
+    openAppPage('home');
+  }
+
+  frtScheduleRecordsSync(0);
+}
+function frtWriteRecordsSnapshot(serialized) {
+  if (!frtRecordsState.ready) {
+    throw new Error(
+      '계정 확인 후 다시 저장해 주세요.'
+    );
+  }
+
+  const records = JSON.parse(serialized);
+  const cache = frtReadRecordsCache();
+
+  const previous = new Map(
+    cache.records.map(function (record) {
+      return [String(record.id), record];
+    })
+  );
+
+  const current = new Map(
+    records.map(function (record) {
+      return [String(record.id), record];
+    })
+  );
+
+  for (const [id, record] of current) {
+    if (record.id == null) {
+      throw new Error('기록 ID가 없습니다.');
+    }
+
+    if (
+      JSON.stringify(record) !==
+      JSON.stringify(previous.get(id))
+    ) {
+      cache.pending[id] = {
+        action: 'upsert',
+        token: crypto.randomUUID()
+      };
+    }
+  }
+
+  for (const id of previous.keys()) {
+    if (!current.has(id)) {
+      cache.pending[id] = {
+        action: 'delete',
+        token: crypto.randomUUID()
+      };
+    }
+  }
+
+  cache.records = records;
+
+  // 기록과 서버 동기화 대기 정보를 함께 저장한다.
+  localStorage.setItem(
+    frtRecordsKey(),
+    JSON.stringify(cache)
+  );
+}
 
 /*
   기록 저장 안정화:
@@ -1308,7 +1938,7 @@ function getGpsDiagnosticsForRecord(sourceLog) {
     });
 }
 
-function persistRunRecordsSafely(nextRecords) {
+function persistLocalRunRecordsSafely(nextRecords) {
   const serializedRecords =
     JSON.stringify(nextRecords);
 
@@ -1340,8 +1970,7 @@ function persistRunRecordsSafely(nextRecords) {
   );
 
   try {
-    localStorage.setItem(
-      'runRecords',
+    frtWriteRecordsSnapshot(
       serializedRecords
     );
 
@@ -1413,10 +2042,9 @@ console.log(
   }
 );
   try {
-    localStorage.setItem(
-  'runRecords',
-  compactedSerializedRecords
-);
+    frtWriteRecordsSnapshot(
+     compactedSerializedRecords
+    );
 
     return {
       success: true,
@@ -1523,9 +2151,8 @@ console.log(
 );
 
 try {
-  localStorage.setItem(
-    'runRecords',
-    routeCompactedSerializedRecords
+  frtWriteRecordsSnapshot(
+   routeCompactedSerializedRecords
   );
 
   return {
@@ -5430,9 +6057,67 @@ function renderRecordProfileFeed() {
   const profileFollowers = document.getElementById('profileFollowers');
   const profileRecentRuns = document.getElementById('profileRecentRuns');
   const publishedRecords =
-  runRecords.filter(function (record) {
-    return record.isPublished === true;
-  });
+      runRecords.slice();
+   const featured =
+  document.getElementById(
+    'profileFeedScreen'
+  )?.querySelector(
+    '.featured-runtrip'
+  );
+
+if (featured) {
+  const latestTrip =
+    runRecords
+      .filter(function (record) {
+        return (
+          getRecordActivityType(record) ===
+          'runtrip'
+        );
+      })
+      .sort(function (a, b) {
+        return (
+          Number(b.id) -
+          Number(a.id)
+        );
+      })[0];
+
+  featured.hidden = !latestTrip;
+
+  featured.style.display =
+    latestTrip ? '' : 'none';
+
+  if (latestTrip) {
+    const title =
+      featured.querySelector('h3');
+
+    const description =
+      featured.querySelector(
+        'p:not(.card-label)'
+      );
+
+    if (title) {
+      title.textContent =
+        getRecordCardTitle(
+          normalizeActivityRecord(
+            latestTrip
+          )
+        );
+    }
+
+    if (description) {
+      description.textContent = [
+        latestTrip.originName,
+        ...(
+          latestTrip.waypointNames ||
+          []
+        ),
+        latestTrip.destinationName
+      ]
+        .filter(Boolean)
+        .join(' → ');
+    }
+  }
+}   
   const runCount = runRecords.length;
 
   const totalDistanceKm = runRecords.reduce(function (sum, record) {
@@ -6307,9 +6992,30 @@ if (detailTakePhotoBtn && detailCameraInput) {
 
       isPhotoProcessing = true;
 
-      try {
-        const dataUrl =
-          await compressRunPhoto(capturedFile);
+const photoOwner =
+  frtRecordsState.owner;
+
+const photoEpoch =
+  frtRecordsState.epoch;
+
+const isPhotoOwnerCurrent =
+  function () {
+    return (
+      frtRecordsState.ready &&
+      frtRecordsState.owner ===
+        photoOwner &&
+      frtRecordsState.epoch ===
+        photoEpoch
+    );
+  };
+
+try {
+  const dataUrl =
+    await compressRunPhoto(capturedFile);
+
+  if (!isPhotoOwnerCurrent()) {
+    return;
+  }
 
         const capturedAt =
           new Date().toISOString();
@@ -6347,6 +7053,10 @@ if (detailTakePhotoBtn && detailCameraInput) {
             dataUrl: dataUrl
           });
 
+          if (!isPhotoOwnerCurrent()) {
+             return;
+          }
+          
           activeRunTripPhotoIds.push(photoId);
           saveActiveRunTripState();
 
@@ -6393,6 +7103,10 @@ if (detailTakePhotoBtn && detailCameraInput) {
             dataUrl: dataUrl
           });
 
+          if (!isPhotoOwnerCurrent()) {
+            return;
+          }
+          
           const completedRecord =
             runRecords.find(function (item) {
               return (
@@ -6457,6 +7171,10 @@ if (detailTakePhotoBtn && detailCameraInput) {
           dataUrl: dataUrl
         });
 
+        if (!isPhotoOwnerCurrent()) {
+         return;
+        }
+        
         const sourceRecord = runRecords.find(function (item) {
           return Number(item.id) === Number(selectedDetailRecord.id);
         });
@@ -11623,8 +12341,12 @@ let runTripActualRouteSegments = [];
 let runTripActiveRouteSegment = null;
 let runTripActualRouteLine = null;
 let runTripActualRouteLines = [];
-const RUNTRIP_ACTIVE_STATE_KEY =
-  'freeRunTripActiveRunTripV1';
+function frtActiveRunTripStateKey() {
+  return (
+    'freeRunTripActiveRunTripV1:' +
+    frtRecordsState.owner
+  );
+}
 function normalizeRunTripHeadingDegrees(
   degrees
 ) {
@@ -15942,7 +16664,7 @@ function saveActiveRunTripState() {
 
   try {
     localStorage.setItem(
-      RUNTRIP_ACTIVE_STATE_KEY,
+      frtActiveRunTripStateKey(),
       JSON.stringify(
         recoveryState
       )
@@ -15963,7 +16685,7 @@ function saveActiveRunTripState() {
 function loadActiveRunTripState() {
   const savedState =
     localStorage.getItem(
-      RUNTRIP_ACTIVE_STATE_KEY
+      frtActiveRunTripStateKey()
     );
 
   if (!savedState) {
@@ -15995,7 +16717,7 @@ function loadActiveRunTripState() {
     );
 
     localStorage.removeItem(
-      RUNTRIP_ACTIVE_STATE_KEY
+      frtActiveRunTripStateKey()
     );
 
     return null;
@@ -16004,7 +16726,7 @@ function loadActiveRunTripState() {
 
 function clearActiveRunTripState() {
   localStorage.removeItem(
-    RUNTRIP_ACTIVE_STATE_KEY
+    frtActiveRunTripStateKey()
   );
 
   console.log(
@@ -18593,14 +19315,14 @@ function completeRunTrip(
   try {
     activeRunTripRecoveryBackup =
       localStorage.getItem(
-        RUNTRIP_ACTIVE_STATE_KEY
+        frtActiveRunTripStateKey()
       );
 
     if (
       activeRunTripRecoveryBackup !== null
     ) {
       localStorage.removeItem(
-        RUNTRIP_ACTIVE_STATE_KEY
+        frtActiveRunTripStateKey()
       );
     }
   } catch (error) {
@@ -18619,7 +19341,7 @@ function completeRunTrip(
     ) {
       try {
         localStorage.setItem(
-          RUNTRIP_ACTIVE_STATE_KEY,
+           frtActiveRunTripStateKey(),
           activeRunTripRecoveryBackup
         );
       } catch (restoreError) {
@@ -23180,7 +23902,7 @@ function initializeAppWithRunTripRecovery() {
   openAppPage('home');
 }
 
-initializeAppWithRunTripRecovery();
+openAppPage('home');
 /* FreeRunTrip 이메일 회원가입·로그인 */
 (function initializeFreeRunTripAuth() {
   'use strict';
@@ -23495,6 +24217,8 @@ initializeAppWithRunTripRecovery();
     const request = ++revision;
     const nextUser = session?.user || null;
 
+    frtSwitchRecordAccount(nextUser);
+
     if (user?.id !== nextUser?.id) {
       username = null;
       profileLoaded = false;
@@ -23635,7 +24359,10 @@ initializeAppWithRunTripRecovery();
       if (error) throw error;
 
       const session = data.session;
-      const authReturn = window.freeRunTripAuthReturn;
+
+      frtSwitchRecordAccount(session?.user);
+
+      const authReturn = window.freeRunTripAuthReturn; 
             if (
         returnPending &&
         ['google-delete', 'google-delete-error'].includes(
@@ -24661,7 +25388,9 @@ initializeAppWithRunTripRecovery();
       setTimeout(() => {
         if (!initialized || event === 'INITIAL_SESSION') return;
 
-        if (event === 'SIGNED_OUT') {
+        frtSwitchRecordAccount(session?.user);
+
+       if (event === 'SIGNED_OUT') {
           clearGoogleDeleteState();
           void syncSession(null);
         } else if (
@@ -24677,3 +25406,105 @@ initializeAppWithRunTripRecovery();
 
   void bootstrap();
 })();
+window.addEventListener(
+  'online',
+  function () {
+    frtScheduleRecordsSync(0);
+  }
+);
+
+window.addEventListener(
+  'focus',
+  function () {
+    frtScheduleRecordsSync(0);
+  }
+);
+
+document.addEventListener(
+  'visibilitychange',
+  function () {
+    if (
+      document.visibilityState ===
+      'visible'
+    ) {
+      frtScheduleRecordsSync(0);
+    }
+  }
+);
+
+window.addEventListener(
+  'storage',
+  function (event) {
+    if (
+      frtRecordsState.ready &&
+      event.key === frtRecordsKey()
+    ) {
+      try {
+        runRecords =
+          frtReadRecordsCache().records;
+
+        frtRenderAccountRecords();
+      } catch (error) {
+        console.error(
+          '계정 기록 갱신 실패:',
+          error
+        );
+      }
+
+      frtScheduleRecordsSync();
+    }
+  }
+);
+document.addEventListener(
+  'click',
+  function (event) {
+    const target =
+      event.target.closest(
+        'button, input, a'
+      );
+
+    if (!target) return;
+
+    const authAction =
+      target.id === 'frtAccountOpen' ||
+      (
+        target.id !== 'frtAuthClose' &&
+        target.closest(
+          '#frtAccountDialog'
+        )
+      );
+
+    const startAction =
+      target === startBtn ||
+      target === startRunTripFollowBtn ||
+      target === createRunTripBtn;
+
+    const hasUnfinishedActivity =
+      isRunning ||
+      (paused && seconds > 0) ||
+      isRunTripFollowing ||
+      isRunTripPaused ||
+      isPhotoProcessing;
+
+    if (
+      (
+        startAction &&
+        !frtRecordsState.ready
+      ) ||
+      (
+        authAction &&
+        hasUnfinishedActivity
+      )
+    ) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+
+      alert(
+        frtRecordsState.ready
+          ? '진행 중인 기록과 사진을 저장한 뒤 계정을 변경해 주세요.'
+          : '계정을 확인한 뒤 다시 시도해 주세요.'
+      );
+    }
+  },
+  true
+);
