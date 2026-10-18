@@ -9012,3 +9012,49 @@ body {
   outline: 3px solid #0b57d0;
   outline-offset: 3px;
 }
+/* 일반 러닝 종료 후 사진 추가 */
+#frtRunningPhotoActions {
+  margin: 18px 0;
+}
+
+#frtRunningPhotoActions h3 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+
+#frtRunningPhotoActions p {
+  color: #94a3b8;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.frt-running-photo-buttons {
+  display: grid;
+  grid-template-columns: repeat(
+    2,
+    minmax(0, 1fr)
+  );
+  gap: 10px;
+}
+
+.frt-running-photo-buttons button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+#frtRunningPhotoList {
+  display: grid;
+  grid-template-columns: repeat(
+    2,
+    minmax(0, 1fr)
+  );
+  gap: 10px;
+}
+
+#frtRunningPhotoList img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 14px;
+}

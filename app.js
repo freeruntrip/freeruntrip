@@ -5922,6 +5922,8 @@ if (isRunTrip) {
     selectedDetailRecord =
       record;
 
+    frtShowRunningPhotos(record);
+    
     const detailRouteData =
       getDetailRouteData(record);
 
@@ -25508,3 +25510,418 @@ document.addEventListener(
   },
   true
 );
+/* 일반 러닝 기록 사진 */
+let frtRunningPhotoTarget = null;
+let frtRunningPhotoBusy = false;
+let frtRunningPhotoRenderVersion = 0;
+
+function frtRunningPhotoAccountMatches(target) {
+  return Boolean(
+    target &&
+    frtRecordsState.ready &&
+    frtRecordsState.owner === target.owner &&
+    frtRecordsState.epoch === target.epoch
+  );
+}
+
+async function frtShowRunningPhotos(record) {
+  const version =
+    ++frtRunningPhotoRenderVersion;
+
+  const section = document.getElementById(
+    'frtRunningPhotoActions'
+  );
+
+  if (!section) {
+    return;
+  }
+
+  const running =
+    getRecordActivityType(record) === 'running';
+
+  section.classList.toggle(
+    'hidden',
+    !running
+  );
+
+  const oldActions =
+    detailTakePhotoBtn?.closest(
+      '.detail-photo-actions'
+    );
+
+  if (oldActions) {
+    oldActions.classList.toggle(
+      'hidden',
+      running
+    );
+  }
+
+  const list = document.getElementById(
+    'frtRunningPhotoList'
+  );
+
+  const status = document.getElementById(
+    'frtRunningPhotoStatus'
+  );
+
+  if (!list || !status) {
+    return;
+  }
+
+  list.replaceChildren();
+  status.textContent = '';
+
+  if (!running) {
+    return;
+  }
+
+  const target = {
+    id: String(record.id),
+    owner: frtRecordsState.owner,
+    epoch: frtRecordsState.epoch
+  };
+
+  const isCurrentView = function () {
+    return (
+      frtRunningPhotoAccountMatches(target) &&
+      version === frtRunningPhotoRenderVersion &&
+      String(selectedDetailRecord?.id) ===
+        target.id
+    );
+  };
+
+  try {
+    const photoIds =
+      Array.isArray(record.photoIds)
+        ? record.photoIds
+        : [];
+
+    const photos =
+      await getRunTripPhotosByIds(
+        photoIds,
+        target.owner
+      );
+
+    if (!isCurrentView()) {
+      return;
+    }
+
+    photos.forEach(function (photo) {
+      const image =
+        document.createElement('img');
+
+      image.src = photo.dataUrl;
+      image.alt = '러닝 기록 사진';
+      image.loading = 'lazy';
+
+      list.appendChild(image);
+    });
+  } catch (error) {
+    console.error(
+      '일반 러닝 사진 조회 실패:',
+      error
+    );
+
+    if (isCurrentView()) {
+      status.textContent =
+        '사진을 불러오지 못했어요. 기록을 다시 열어주세요.';
+    }
+  }
+}
+function frtChooseRunningPhoto(inputId) {
+  if (
+    frtRunningPhotoBusy ||
+    !frtRecordsState.ready ||
+    !selectedDetailRecord ||
+    getRecordActivityType(selectedDetailRecord) !== 'running'
+  ) {
+    return;
+  }
+
+  const input = document.getElementById(inputId);
+
+  if (!input) {
+    return;
+  }
+
+  // 사진 선택을 시작한 계정과 기록을 기억한다.
+  frtRunningPhotoTarget = {
+    id: String(selectedDetailRecord.id),
+    owner: frtRecordsState.owner,
+    epoch: frtRecordsState.epoch
+  };
+
+  input.value = '';
+  input.click();
+}
+
+async function frtSaveRunningPhoto(event) {
+  const input = event.target;
+  const file = input.files?.[0];
+  const target = frtRunningPhotoTarget;
+
+  if (
+    !file ||
+    frtRunningPhotoBusy ||
+    !frtRunningPhotoAccountMatches(target)
+  ) {
+    return;
+  }
+
+  const status = document.getElementById(
+    'frtRunningPhotoStatus'
+  );
+
+  const buttons = [
+    document.getElementById('frtRunningCameraBtn'),
+    document.getElementById('frtRunningAlbumBtn')
+  ].filter(Boolean);
+
+  const isCurrentView = function () {
+    return (
+      frtRunningPhotoAccountMatches(target) &&
+      String(selectedDetailRecord?.id) === target.id
+    );
+  };
+
+  frtRunningPhotoBusy = true;
+
+  buttons.forEach(function (button) {
+    button.disabled = true;
+  });
+
+  let database = null;
+  let photoId = null;
+  let linked = false;
+
+  try {
+    if (status && isCurrentView()) {
+      status.textContent = '사진을 저장하고 있어요.';
+    }
+
+    const dataUrl = await compressRunPhoto(file);
+
+    if (!frtRunningPhotoAccountMatches(target)) {
+      return;
+    }
+
+    const record = runRecords.find(function (item) {
+      return String(item.id) === target.id;
+    });
+
+    if (!record) {
+      throw new Error('사진을 추가할 기록이 없습니다.');
+    }
+
+    database = await openRunTripPhotoDatabase(
+      target.owner
+    );
+
+    if (!frtRunningPhotoAccountMatches(target)) {
+      return;
+    }
+
+    photoId =
+      `running-photo-${Date.now()}-` +
+      Math.random().toString(36).slice(2, 10);
+
+    // 이미지 본문은 계정별 IndexedDB에 저장한다.
+    await new Promise(function (resolve, reject) {
+      const transaction = database.transaction(
+        RUNTRIP_PHOTO_STORE_NAME,
+        'readwrite'
+      );
+
+      const store = transaction.objectStore(
+        RUNTRIP_PHOTO_STORE_NAME
+      );
+
+      store.put({
+        id: photoId,
+        recordId: Number(record.id),
+        sessionId: null,
+        activityType: 'running',
+        source: 'activity',
+        checkpointNumber: null,
+        placeName: '',
+        elapsedSeconds: durationToSeconds(
+          record.duration
+        ),
+        distanceMeters:
+          (Number(record.distance) || 0) * 1000,
+        latitude: null,
+        longitude: null,
+        accuracy: null,
+        capturedAt: new Date().toISOString(),
+        fileName: file.name || '',
+        mimeType: 'image/jpeg',
+        dataUrl: dataUrl
+      });
+
+      transaction.oncomplete = function () {
+        resolve();
+      };
+
+      transaction.onerror = function () {
+        reject(
+          transaction.error ||
+          new Error('사진 저장 실패')
+        );
+      };
+
+      transaction.onabort = function () {
+        reject(
+          transaction.error ||
+          new Error('사진 저장 취소')
+        );
+      };
+    });
+
+    if (!frtRunningPhotoAccountMatches(target)) {
+      return;
+    }
+
+    const recordStillExists = runRecords.some(
+      function (item) {
+        return String(item.id) === target.id;
+      }
+    );
+
+    if (!recordStillExists) {
+      throw new Error('기록이 삭제되었습니다.');
+    }
+
+    // 비동기 처리 이후의 최신 기록에 사진 ID를 연결한다.
+    const nextRecords = runRecords.map(function (item) {
+      if (String(item.id) !== target.id) {
+        return item;
+      }
+
+      const photoIds = Array.isArray(item.photoIds)
+        ? item.photoIds
+        : [];
+
+      return {
+        ...item,
+        photoIds: [...photoIds, photoId]
+      };
+    });
+
+    const result = persistRunRecordsSafely(
+      nextRecords
+    );
+
+    if (!result.success) {
+      throw (
+        result.error ||
+        new Error('사진 연결 저장 실패')
+      );
+    }
+
+    linked = true;
+    runRecords = result.records;
+
+    renderRunRecords();
+    renderRecordProfileFeed();
+
+    if (isCurrentView()) {
+      selectedDetailRecord = runRecords.find(
+        function (item) {
+          return String(item.id) === target.id;
+        }
+      );
+
+      await frtShowRunningPhotos(
+        selectedDetailRecord
+      );
+
+      if (status && isCurrentView()) {
+        status.textContent =
+          target.owner === 'guest'
+            ? '사진을 저장했어요. 게스트 기록은 이 브라우저에만 저장돼요.'
+            : '사진을 이 기기에 저장했어요. 서버 동기화 상태는 기록 화면에서 확인해 주세요.';
+      }
+    }
+  } catch (error) {
+    console.error(
+      '일반 러닝 사진 저장 실패:',
+      error
+    );
+
+    if (status && isCurrentView()) {
+      status.textContent =
+        '사진을 저장하지 못했어요. 다시 시도해 주세요.';
+    }
+  } finally {
+    // 기록 연결에 실패한 사진은 남겨두지 않는다.
+    if (database && photoId && !linked) {
+      try {
+        await new Promise(function (resolve) {
+          const transaction = database.transaction(
+            RUNTRIP_PHOTO_STORE_NAME,
+            'readwrite'
+          );
+
+          transaction
+            .objectStore(RUNTRIP_PHOTO_STORE_NAME)
+            .delete(photoId);
+
+          const finish = function () {
+            resolve();
+          };
+
+          transaction.oncomplete = finish;
+          transaction.onerror = finish;
+          transaction.onabort = finish;
+        });
+      } catch (error) {
+        console.warn(
+          '연결되지 않은 사진 정리 실패:',
+          error
+        );
+      }
+    }
+
+    if (database) {
+      database.close();
+    }
+
+    frtRunningPhotoBusy = false;
+
+    buttons.forEach(function (button) {
+      button.disabled = false;
+    });
+
+    input.value = '';
+  }
+}
+
+document
+  .getElementById('frtRunningCameraBtn')
+  ?.addEventListener('click', function () {
+    frtChooseRunningPhoto(
+      'frtRunningCameraInput'
+    );
+  });
+
+document
+  .getElementById('frtRunningAlbumBtn')
+  ?.addEventListener('click', function () {
+    frtChooseRunningPhoto(
+      'frtRunningAlbumInput'
+    );
+  });
+
+document
+  .getElementById('frtRunningCameraInput')
+  ?.addEventListener(
+    'change',
+    frtSaveRunningPhoto
+  );
+
+document
+  .getElementById('frtRunningAlbumInput')
+  ?.addEventListener(
+    'change',
+    frtSaveRunningPhoto
+  );
