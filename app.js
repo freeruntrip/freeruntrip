@@ -1513,16 +1513,22 @@ async function frtSyncAccountRecords() {
           );
         }
 
+        const photoIds = [
+          ...new Set([
+            ...(record.photoIds || []),
+            ...(record.publishedContentPhotoId
+              ? [record.publishedContentPhotoId]
+              : [])
+          ])
+        ];
+
         const photos =
           await getRunTripPhotosByIds(
-            record.photoIds || [],
+            photoIds,
             owner
           );
 
-        if (
-          photos.length !==
-          (record.photoIds || []).length
-        ) {
+        if (photos.length !== photoIds.length) {
           throw new Error(
             '기록 사진을 읽지 못했어요.'
           );
@@ -6172,6 +6178,23 @@ profileRecentRuns.innerHTML =
     const mood = record.emotionalPace || '마음 환기 Pace';
     const memo = record.memo || '';
 
+    if (record.publishedContentPhotoId) {
+      const photoId = encodeURIComponent(
+        String(record.publishedContentPhotoId)
+      );
+
+      return `
+        <div class="feed-card recent-run-card">
+          <img
+            class="recent-run-photo"
+            data-frt-content-photo="${photoId}"
+            alt="게시한 콘텐츠를 불러오고 있어요."
+            style="display:block;width:100%;height:auto;object-fit:contain;"
+          />
+        </div>
+      `;
+    }
+
     if (record.photo) {
       return `
         <div class="feed-card recent-run-card">
@@ -6205,6 +6228,8 @@ profileRecentRuns.innerHTML =
     `;
   })
   .join('');
+
+  frtLoadPublishedContentImages(profileRecentRuns);
 }
 
 renderRunRecords();
@@ -25945,6 +25970,7 @@ const frtContentState = {
   session: 0,
   imageRequest: 0,
   saving: false,
+  publishing: false,
   open: false,
   owner: null,
   epoch: 0,
@@ -26121,6 +26147,7 @@ async function frtOpenContentEditor() {
 
   frtContentState.open = true;
   frtContentState.saving = false;
+  frtContentState.publishing = false;
   frtContentState.owner = frtRecordsState.owner;
   frtContentState.epoch = frtRecordsState.epoch;
   frtContentState.record = normalizeActivityRecord(record);
@@ -26712,10 +26739,22 @@ function frtSelectedContentBounds() {
 function frtEnableStatsEditing() {
   frtContentUI.controls.disabled = false;
 
-  frtContentUI.save.disabled =
+  const busy =
     frtContentState.saving ||
-    !frtContentState.image ||
-    !frtContentState.logoImage;
+    frtContentState.publishing;
+
+  const imageReady =
+    Boolean(frtContentState.image) &&
+    Boolean(frtContentState.logoImage);
+
+  frtContentUI.save.disabled =
+    busy || !imageReady;
+
+  frtContentUI.publish.disabled =
+    busy ||
+    !imageReady ||
+    !frtRecordsState.owner ||
+    frtRecordsState.owner === 'guest';
 
   const selected = frtContentState.selectedElement;
 
@@ -27052,3 +27091,229 @@ frtContentUI.save?.addEventListener(
   'click',
   frtSaveContentImage
 ); 
+/* 프로필 피드의 편집 이미지 불러오기 */
+function frtLoadPublishedContentImages(container) {
+  const owner = frtRecordsState.owner;
+  const epoch = frtRecordsState.epoch;
+
+  container
+    .querySelectorAll('img[data-frt-content-photo]')
+    .forEach(function (image) {
+      void loadImage();
+
+      async function loadImage() {
+        const isCurrent = function () {
+          return (
+            image.isConnected &&
+            frtRecordsState.owner === owner &&
+            frtRecordsState.epoch === epoch
+          );
+        };
+
+        try {
+          const photoId = decodeURIComponent(
+            image.dataset.frtContentPhoto
+          );
+
+          const photos = await getRunTripPhotosByIds(
+            [photoId],
+            owner
+          );
+
+          if (!isCurrent()) {
+            return;
+          }
+
+          const source = photos[0]?.dataUrl;
+
+          if (
+            typeof source !== 'string' ||
+            !source.startsWith('data:image/png;base64,')
+          ) {
+            throw new Error('게시 이미지를 찾지 못했습니다.');
+          }
+
+          image.alt = '편집한 러닝 콘텐츠';
+          image.src = source;
+        } catch (error) {
+          console.error('게시 이미지 조회 실패:', error);
+
+          if (isCurrent()) {
+            image.alt =
+              '게시 이미지를 불러오지 못했어요. 잠시 후 다시 확인해 주세요.';
+          }
+        }
+      }
+    });
+}
+
+/* 연결되지 못한 게시 이미지 정리 */
+async function frtRemoveUnusedContentPhoto(photoId, owner) {
+  let database = null;
+
+  try {
+    database = await openRunTripPhotoDatabase(owner);
+
+    await new Promise(function (resolve, reject) {
+      const transaction = database.transaction(
+        RUNTRIP_PHOTO_STORE_NAME,
+        'readwrite'
+      );
+
+      transaction
+        .objectStore(RUNTRIP_PHOTO_STORE_NAME)
+        .delete(photoId);
+
+      transaction.oncomplete = function () {
+        resolve();
+      };
+
+      transaction.onerror = function () {
+        reject(transaction.error);
+      };
+
+      transaction.onabort = function () {
+        reject(
+          transaction.error ||
+          new Error('게시 이미지 정리가 중단됐습니다.')
+        );
+      };
+    });
+  } catch (error) {
+    console.warn('미연결 게시 이미지 정리 실패:', error);
+  } finally {
+    database?.close();
+  }
+}
+
+/* 편집한 이미지를 내 기록 프로필 피드에 게시 */
+async function frtPublishContentImage() {
+  if (
+    !frtStatsEditingIsReady() ||
+    frtContentState.saving ||
+    frtContentState.publishing ||
+    !frtContentState.logoImage ||
+    !frtRecordsState.owner ||
+    frtRecordsState.owner === 'guest'
+  ) {
+    return;
+  }
+
+  const session = frtContentState.session;
+  const owner = frtRecordsState.owner;
+  const imageRequest = frtContentState.imageRequest;
+  const recordId = String(frtContentState.record.id);
+
+  const isCurrent = function () {
+    return (
+      frtContentIsCurrent(session) &&
+      frtContentState.imageRequest === imageRequest
+    );
+  };
+
+  let photoId = null;
+  let linked = false;
+
+  frtContentState.publishing = true;
+  frtEnableStatsEditing();
+
+  frtContentUI.status.textContent =
+    '편집한 이미지를 게시하고 있어요.';
+
+  try {
+    frtStopContentDrag();
+    frtDrawContentPreview();
+
+    // 현재 편집 결과를 한 장의 이미지로 고정한다.
+    const dataUrl =
+      frtContentUI.canvas.toDataURL('image/png');
+
+    photoId = `content-${crypto.randomUUID()}`;
+
+    // 원본 사진과 별도로 계정별 사진 저장소에 보관한다.
+    await frtStoreRemotePhotos(
+      [{
+        id: photoId,
+        recordId: recordId,
+        source: 'published-content',
+        capturedAt: new Date().toISOString(),
+        mimeType: 'image/png',
+        dataUrl: dataUrl
+      }],
+      owner
+    );
+
+    if (!isCurrent()) {
+      return;
+    }
+
+    const latestRecord = runRecords.find(function (item) {
+      return String(item.id) === recordId;
+    });
+
+    if (!latestRecord) {
+      throw new Error('게시할 기록이 삭제되었습니다.');
+    }
+
+    // 비동기 저장 이후의 최신 기록에 게시 이미지를 연결한다.
+    const nextRecords = runRecords.map(function (item) {
+      if (String(item.id) !== recordId) {
+        return item;
+      }
+
+      return {
+        ...item,
+        publishedContentPhotoId: photoId,
+        publishedAt: Date.now()
+      };
+    });
+
+    const result = persistRunRecordsSafely(nextRecords);
+
+    if (!result.success) {
+      throw (
+        result.error ||
+        new Error('게시 정보 저장 실패')
+      );
+    }
+
+    linked = true;
+    runRecords = result.records;
+
+    if (String(selectedDetailRecord?.id) === recordId) {
+      selectedDetailRecord = runRecords.find(function (item) {
+        return String(item.id) === recordId;
+      });
+    }
+
+    renderRunRecords();
+    renderRecordProfileFeed();
+
+    frtContentUI.status.textContent =
+      '내 프로필 피드에 반영했어요. 다른 기기에서도 보려면 기록 화면의 동기화 완료를 확인해 주세요.';
+  } catch (error) {
+    console.error('콘텐츠 게시 실패:', error);
+
+    if (isCurrent()) {
+      frtContentUI.status.textContent =
+        '게시하지 못했어요. 잠시 후 다시 시도해 주세요.';
+    }
+  } finally {
+    if (frtContentState.session === session) {
+      frtContentState.publishing = false;
+
+      if (frtContentIsCurrent(session)) {
+        frtEnableStatsEditing();
+      }
+    }
+
+    if (photoId && !linked) {
+      await frtRemoveUnusedContentPhoto(photoId, owner);
+    }
+  }
+}
+
+frtContentUI.publish?.addEventListener(
+  'click',
+  frtPublishContentImage
+);
