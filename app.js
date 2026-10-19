@@ -25925,3 +25925,1130 @@ document
     'change',
     frtSaveRunningPhoto
   );
+  /* 콘텐츠 편집 화면: 사진 선택 */
+const frtContentUI = {
+  editor: document.getElementById('frtContentEditor'),
+  open: document.getElementById('frtOpenContentEditorBtn'),
+  close: document.getElementById('frtCloseContentEditorBtn'),
+  photos: document.getElementById('frtContentSavedPhotos'),
+  album: document.getElementById('frtContentAlbumBtn'),
+  input: document.getElementById('frtContentAlbumInput'),
+  canvas: document.getElementById('frtContentCanvas'),
+  hint: document.getElementById('frtContentEmptyHint'),
+  status: document.getElementById('frtContentEditorStatus'),
+  controls: document.getElementById('frtContentEditControls'),
+  save: document.getElementById('frtContentSaveToPhoneBtn'),
+  publish: document.getElementById('frtContentPublishBtn')
+};
+
+const frtContentState = {
+  session: 0,
+  imageRequest: 0,
+  saving: false,
+  open: false,
+  owner: null,
+  epoch: 0,
+  record: null,
+  image: null,
+  statsLayout: { x: 0.5, y: 0.3, scale: 1 },
+  statsBounds: null,
+  statsDrag: null,
+  selectedElement: 'stats',
+  logoImage: null,
+  logoLayout: { x: 0.5, y: 0.49, scale: 1 },
+  logoBounds: null,
+  routeLayout: { x: 0.5, y: 0.68, scale: 1 },
+  routeBounds: null,
+  previousFocus: null,
+  previousOverflow: ''
+};
+
+function frtContentIsCurrent(session) {
+  return (
+    frtContentState.open &&
+    frtContentState.session === session &&
+    frtRecordsState.ready &&
+    frtContentState.owner === frtRecordsState.owner &&
+    frtContentState.epoch === frtRecordsState.epoch
+  );
+}
+
+function frtCloseContentEditor() {
+  if (!frtContentState.open) {
+    return;
+  }
+
+  frtContentState.open = false;
+  frtContentState.session += 1;
+  frtContentState.imageRequest += 1;
+  frtContentState.image = null;
+  frtContentState.record = null;
+
+  frtContentUI.editor.classList.add('hidden');
+  frtContentUI.photos.replaceChildren();
+  frtContentUI.input.value = '';
+
+  const context = frtContentUI.canvas.getContext('2d');
+
+  if (context) {
+    context.clearRect(
+      0,
+      0,
+      frtContentUI.canvas.width,
+      frtContentUI.canvas.height
+    );
+  }
+
+  document.body.style.overflow =
+    frtContentState.previousOverflow;
+
+  frtContentState.previousFocus?.focus({
+    preventScroll: true
+  });
+}
+
+async function frtSelectContentPhoto(
+  source,
+  selectedButton = null
+) {
+  const session = frtContentState.session;
+  const request = ++frtContentState.imageRequest;
+
+  if (!frtContentIsCurrent(session)) {
+    return;
+  }
+
+  frtContentUI.status.textContent =
+    '사진을 불러오고 있어요.';
+
+  try {
+    const image = await new Promise(function (resolve, reject) {
+      const nextImage = new Image();
+
+      nextImage.onload = function () {
+        resolve(nextImage);
+      };
+
+      nextImage.onerror = function () {
+        reject(new Error('이미지를 읽지 못했습니다.'));
+      };
+
+      nextImage.src = source;
+    });
+
+    if (
+      !frtContentIsCurrent(session) ||
+      request !== frtContentState.imageRequest
+    ) {
+      return;
+    }
+
+    const canvas = frtContentUI.canvas;
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+      throw new Error('합성 화면을 준비하지 못했습니다.');
+    }
+
+    // 사진 전체가 보이도록 원래 비율을 유지한다.
+    // 긴 변은 최대 1600픽셀로 제한한다.
+    const ratio = Math.min(
+      1,
+      1600 / Math.max(image.naturalWidth, image.naturalHeight)
+    );
+
+    canvas.width = Math.max(
+      1,
+      Math.round(image.naturalWidth * ratio)
+    );
+
+    canvas.height = Math.max(
+      1,
+      Math.round(image.naturalHeight * ratio)
+    );
+
+    frtContentState.image = image;
+    frtContentState.statsDrag = null;
+
+    frtDrawContentPreview();
+    frtEnableStatsEditing();
+    frtLoadContentLogo();
+
+    frtContentUI.hint.classList.add('hidden');
+    canvas.classList.remove('hidden');
+
+    frtContentUI.photos
+      .querySelectorAll('button')
+      .forEach(function (button) {
+        button.setAttribute(
+          'aria-pressed',
+          String(button === selectedButton)
+        );
+      });
+
+    frtContentUI.status.textContent = '';
+  } catch (error) {
+    console.error('콘텐츠 사진 불러오기 실패:', error);
+
+    if (
+      frtContentIsCurrent(session) &&
+      request === frtContentState.imageRequest
+    ) {
+      frtContentUI.status.textContent =
+        '사진을 불러오지 못했어요. 다른 사진을 선택해 주세요.';
+    }
+  }
+}
+
+async function frtOpenContentEditor() {
+  if (
+    frtContentState.open ||
+    !selectedDetailRecord ||
+    !frtRecordsState.ready
+  ) {
+    return;
+  }
+
+  const record = runRecords.find(function (item) {
+    return String(item.id) === String(selectedDetailRecord.id);
+  });
+
+  if (!record) {
+    return;
+  }
+
+  const session = ++frtContentState.session;
+
+  frtContentState.open = true;
+  frtContentState.saving = false;
+  frtContentState.owner = frtRecordsState.owner;
+  frtContentState.epoch = frtRecordsState.epoch;
+  frtContentState.record = normalizeActivityRecord(record);
+  frtContentState.image = null;
+    frtContentState.statsLayout = {
+    x: 0.5,
+    y: 0.3,
+    scale: 1
+  };
+  frtContentState.statsBounds = null;
+  frtContentState.statsDrag = null;
+  frtContentState.selectedElement = 'stats';
+  frtContentState.logoLayout = {
+    x: 0.5,
+    y: 0.49,
+    scale: 1
+  };
+  frtContentState.logoBounds = null;
+  frtContentState.routeLayout = {
+    x: 0.5,
+    y: 0.68,
+    scale: 1
+  };
+  frtContentState.routeBounds = null;
+  frtContentState.previousFocus = document.activeElement;
+  frtContentState.previousOverflow = document.body.style.overflow;
+
+  document.body.style.overflow = 'hidden';
+
+  frtContentUI.photos.replaceChildren();
+  frtContentUI.canvas.classList.add('hidden');
+  frtContentUI.hint.classList.remove('hidden');
+  frtContentUI.input.value = '';
+
+  // 합성·저장 처리는 다음 단계에서 연결한다.
+  frtContentUI.controls.disabled = true;
+  frtContentUI.save.disabled = true;
+  frtContentUI.publish.disabled = true;
+
+  frtContentUI.status.textContent =
+   '기록의 사진을 불러오고 있어요.';
+
+  frtContentUI.editor.classList.remove('hidden');
+  frtContentUI.editor.scrollTop = 0;
+  frtContentUI.close.focus({ preventScroll: true });
+
+  try {
+    const photoIds = Array.isArray(record.photoIds)
+      ? record.photoIds
+      : [];
+
+    const photos = await getRunTripPhotosByIds(
+      photoIds,
+      frtContentState.owner
+    );
+
+    if (!frtContentIsCurrent(session)) {
+      return;
+    }
+
+    const sources = [];
+
+    // 예전 방식으로 저장한 사진도 지원한다.
+    if (record.photo) {
+      sources.push(record.photo);
+    }
+
+    photos.forEach(function (photo) {
+      if (photo.dataUrl && !sources.includes(photo.dataUrl)) {
+        sources.push(photo.dataUrl);
+      }
+    });
+
+    sources.forEach(function (source, index) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('aria-pressed', 'false');
+      button.setAttribute(
+        'aria-label',
+        `저장된 사진 ${index + 1} 선택`
+      );
+
+      const image = document.createElement('img');
+      image.src = source;
+      image.alt = '';
+      image.loading = 'lazy';
+
+      button.appendChild(image);
+
+      button.addEventListener('click', function () {
+        void frtSelectContentPhoto(source, button);
+      });
+
+      frtContentUI.photos.appendChild(button);
+    });
+
+    // 사용자가 이미 앨범 사진을 선택했다면 안내를 덮어쓰지 않는다.
+    if (!frtContentState.image) {
+      frtContentUI.status.textContent = sources.length
+        ? '합성할 사진을 선택해 주세요.'
+        : '저장된 사진이 없어요. 앨범에서 사진을 선택해 주세요.';
+    }
+  } catch (error) {
+    console.error('기록 사진 조회 실패:', error);
+
+    if (frtContentIsCurrent(session)) {
+      frtContentUI.status.textContent =
+        '저장된 사진을 불러오지 못했어요. 앨범에서 선택할 수 있어요.';
+    }
+  }
+}
+
+frtContentUI.open?.addEventListener(
+  'click',
+  frtOpenContentEditor
+);
+
+frtContentUI.close?.addEventListener(
+  'click',
+  frtCloseContentEditor
+);
+
+frtContentUI.album?.addEventListener('click', function () {
+  if (!frtContentIsCurrent(frtContentState.session)) {
+    return;
+  }
+
+  frtContentUI.input.value = '';
+  frtContentUI.input.click();
+});
+
+frtContentUI.input?.addEventListener('change', async function () {
+  const file = frtContentUI.input.files?.[0];
+
+  if (
+    !file ||
+    !frtContentIsCurrent(frtContentState.session)
+  ) {
+    return;
+  }
+
+  const url = URL.createObjectURL(file);
+
+  try {
+    await frtSelectContentPhoto(url);
+  } finally {
+    URL.revokeObjectURL(url);
+    frtContentUI.input.value = '';
+  }
+});
+
+frtContentUI.editor?.addEventListener('keydown', function (event) {
+  if (!frtContentState.open) {
+    return;
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    frtCloseContentEditor();
+    return;
+  }
+
+  if (event.key !== 'Tab') {
+    return;
+  }
+
+  const focusable = Array.from(
+    frtContentUI.editor.querySelectorAll(
+      'button, input, [tabindex]'
+    )
+  ).filter(function (element) {
+    return (
+      !element.matches(':disabled') &&
+      element.tabIndex >= 0 &&
+      element.getClientRects().length > 0
+    );
+  });
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last?.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first?.focus();
+  }
+});
+/* 콘텐츠 배경과 기록 세트 그리기 */
+function frtDrawContentPreview() {
+  const image = frtContentState.image;
+  const record = frtContentState.record;
+
+  if (
+    !image ||
+    !record ||
+    !frtContentIsCurrent(frtContentState.session)
+  ) {
+    return;
+  }
+
+  const canvas = frtContentUI.canvas;
+  const context = canvas.getContext('2d');
+
+  if (!context) {
+    return;
+  }
+
+  const width = canvas.width;
+  const height = canvas.height;
+
+  context.clearRect(0, 0, width, height);
+
+    context.drawImage(
+    image,
+    0,
+    0,
+    width,
+    height
+  );
+
+  frtDrawContentRoute(
+    context,
+    record,
+    width,
+    height
+  );
+
+  // 사진 비율에 맞춰 기본 글자 크기를 정한다.
+  const layout = frtContentState.statsLayout;
+  const baseSize = Math.min(width, height) * layout.scale;
+  const centerX = width * layout.x;
+  const centerY = height * layout.y;
+  const lineGap = baseSize * 0.085;
+  const maxTextWidth = width * 0.86;
+
+  const distance = Number(record.distance);
+
+  const distanceText = Number.isFinite(distance)
+    ? `${distance.toFixed(2)} km`
+    : '거리 정보 없음';
+
+  const moodText =
+    String(record.emotionalPace || '').trim() ||
+    '감성 페이스 미선택';
+
+  const durationText =
+    String(record.duration || '').trim() ||
+    '시간 정보 없음';
+
+  const lines = [
+    {
+      text: distanceText,
+      size: baseSize * 0.07,
+      y: centerY - lineGap
+    },
+    {
+      text: moodText,
+      size: baseSize * 0.044,
+      y: centerY
+    },
+    {
+      text: durationText,
+      size: baseSize * 0.06,
+      y: centerY + lineGap
+    }
+  ];
+
+  context.save();
+
+  context.fillStyle = '#ffffff';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+
+  // 밝은 사진에서도 글자가 보이도록 그림자를 넣는다.
+  context.shadowColor = 'rgba(0, 0, 0, 0.65)';
+  context.shadowBlur = baseSize * 0.012;
+  context.shadowOffsetY = baseSize * 0.003;
+
+  let textLeft = Infinity;
+  let textRight = -Infinity;
+  let textTop = Infinity;
+  let textBottom = -Infinity;
+  lines.forEach(function (line) {
+    let fontSize = line.size;
+
+    context.font =
+      `700 ${fontSize}px system-ui, sans-serif`;
+
+    const measuredWidth =
+      context.measureText(line.text).width;
+
+    if (measuredWidth > maxTextWidth) {
+      fontSize *= maxTextWidth / measuredWidth;
+
+      context.font =
+        `700 ${fontSize}px system-ui, sans-serif`;
+    }
+
+    context.fillText(
+      line.text,
+      centerX,
+      line.y
+    );
+    const textWidth = context.measureText(line.text).width;
+
+    textLeft = Math.min(textLeft, centerX - textWidth / 2);
+    textRight = Math.max(textRight, centerX + textWidth / 2);
+    textTop = Math.min(textTop, line.y - fontSize * 0.65);
+    textBottom = Math.max(textBottom, line.y + fontSize * 0.65);
+  });
+
+    context.restore();
+
+  const padding = Math.min(width, height) * 0.025;
+
+    frtContentState.statsBounds = {
+    left: textLeft - padding,
+    right: textRight + padding,
+    top: textTop - padding,
+    bottom: textBottom + padding
+  };
+
+  frtDrawContentLogo(context, width, height);
+}
+/* 콘텐츠 사진 위에 실제 이동 경로 그리기 */
+function frtDrawContentRoute(context, record, width, height) {
+  frtContentState.routeBounds = null;
+
+  const layout = frtContentState.routeLayout;
+  const routeData = getDetailRouteData(record);
+  const segments = [];
+
+  // 저장된 좌표는 [위도, 경도] 순서다.
+  // 잘못된 좌표가 있으면 해당 지점에서 선을 끊는다.
+  routeData.actualSegments.forEach(function (segment) {
+    let current = [];
+
+    function finishSegment() {
+      if (current.length >= 2) {
+        segments.push(current);
+      }
+
+      current = [];
+    }
+
+    segment.forEach(function (point) {
+      if (
+        !Array.isArray(point) ||
+        point.length < 2 ||
+        point[0] == null ||
+        point[1] == null ||
+        point[0] === '' ||
+        point[1] === ''
+      ) {
+        finishSegment();
+        return;
+      }
+
+      const latitude = Number(point[0]);
+      const longitude = Number(point[1]);
+
+      if (
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude) ||
+        Math.abs(latitude) > 90 ||
+        Math.abs(longitude) > 180
+      ) {
+        finishSegment();
+        return;
+      }
+
+      current.push([latitude, longitude]);
+    });
+
+    finishSegment();
+  });
+
+  if (segments.length === 0) {
+    return;
+  }
+
+  const firstPoint = segments[0][0];
+  const radians = Math.PI / 180;
+  const longitudeScale = Math.cos(firstPoint[0] * radians);
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+
+  const projectedSegments = segments.map(function (segment) {
+    return segment.map(function (point) {
+      // 날짜 변경선을 지나는 경우에도 경도가 크게 튀지 않게 한다.
+      const longitudeDifference =
+        ((point[1] - firstPoint[1] + 540) % 360) - 180;
+
+      const x = longitudeDifference * longitudeScale;
+      const y = -(point[0] - firstPoint[0]);
+
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y);
+      maxY = Math.max(maxY, y);
+
+      return [x, y];
+    });
+  });
+
+  const spanX = maxX - minX;
+  const spanY = maxY - minY;
+
+  // 좌표가 모두 같은 경우에는 경로를 그리지 않는다.
+  if (spanX === 0 && spanY === 0) {
+    return;
+  }
+
+  
+
+  const boxWidth = width * 0.66 * layout.scale;
+  const boxHeight = height * 0.28 * layout.scale;
+
+  const scale = Math.min(
+    spanX > 0 ? boxWidth / spanX : Infinity,
+    spanY > 0 ? boxHeight / spanY : Infinity
+  );
+
+  const routeCenterX = (minX + maxX) / 2;
+  const routeCenterY = (minY + maxY) / 2;
+
+  const centerX = width * layout.x;
+  const centerY = height * layout.y;
+  const baseSize = Math.min(width, height);
+
+  context.save();
+
+  context.strokeStyle = '#81dad8';
+  context.lineWidth = Math.max(2, baseSize * 0.008);
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+
+  context.shadowColor = 'rgba(0, 0, 0, 0.45)';
+  context.shadowBlur = baseSize * 0.008;
+  context.shadowOffsetY = baseSize * 0.002;
+
+  context.beginPath();
+
+  projectedSegments.forEach(function (segment) {
+    segment.forEach(function (point, index) {
+      const x = centerX + (point[0] - routeCenterX) * scale;
+      const y = centerY + (point[1] - routeCenterY) * scale;
+
+      if (index === 0) {
+        context.moveTo(x, y);
+      } else {
+        context.lineTo(x, y);
+      }
+    });
+  });
+
+    context.stroke();
+  context.restore();
+
+  const padding = baseSize * 0.025;
+  const halfWidth = spanX * scale / 2;
+  const halfHeight = spanY * scale / 2;
+
+  frtContentState.routeBounds = {
+    left: centerX - halfWidth - padding,
+    right: centerX + halfWidth + padding,
+    top: centerY - halfHeight - padding,
+    bottom: centerY + halfHeight + padding
+  };
+}
+/* 콘텐츠 로고 불러오기 */
+let frtContentLogoPromise = null;
+
+async function frtLoadContentLogo() {
+  const session = frtContentState.session;
+
+  try {
+    if (!frtContentState.logoImage) {
+      if (!frtContentLogoPromise) {
+        frtContentLogoPromise = new Promise(function (resolve, reject) {
+          const image = new Image();
+
+          image.onload = function () {
+            resolve(image);
+          };
+
+          image.onerror = function () {
+            reject(new Error('로고 파일을 불러오지 못했습니다.'));
+          };
+
+          image.src = './freeruntrip-logo.png';
+        });
+      }
+
+      const image = await frtContentLogoPromise;
+
+      if (!frtContentIsCurrent(session)) {
+        return;
+      }
+
+      frtContentState.logoImage = image;
+    }
+
+    if (!frtContentIsCurrent(session)) {
+      return;
+    }
+
+    frtDrawContentPreview();
+    frtEnableStatsEditing();
+  } catch (error) {
+    frtContentLogoPromise = null;
+
+    if (frtContentIsCurrent(session)) {
+      frtContentUI.status.textContent =
+        '로고를 불러오지 못했어요. 프로젝트 폴더의 freeruntrip-logo.png 파일을 확인해 주세요.';
+    }
+  }
+}
+
+/* 원본 비율을 유지하며 로고 그리기 */
+function frtDrawContentLogo(context, width, height) {
+  const image = frtContentState.logoImage;
+
+  frtContentState.logoBounds = null;
+
+  if (!image || !image.naturalWidth || !image.naturalHeight) {
+    return;
+  }
+
+  const layout = frtContentState.logoLayout;
+  const baseSize = Math.min(width, height);
+
+  const logoWidth = baseSize * 0.18 * layout.scale;
+  const logoHeight =
+    logoWidth * image.naturalHeight / image.naturalWidth;
+
+  const x = width * layout.x - logoWidth / 2;
+  const y = height * layout.y - logoHeight / 2;
+
+  context.save();
+  context.drawImage(image, x, y, logoWidth, logoHeight);
+  context.restore();
+
+  const padding = baseSize * 0.015;
+
+  frtContentState.logoBounds = {
+    left: x - padding,
+    right: x + logoWidth + padding,
+    top: y - padding,
+    bottom: y + logoHeight + padding
+  };
+}
+
+/* 선택한 요소의 위치·크기 상태 */
+function frtSelectedContentLayout() {
+  const selected = frtContentState.selectedElement;
+
+  if (selected === 'route') {
+    return frtContentState.routeLayout;
+  }
+
+  if (selected === 'logo') {
+    return frtContentState.logoLayout;
+  }
+
+  return frtContentState.statsLayout;
+}
+
+function frtSelectedContentBounds() {
+  const selected = frtContentState.selectedElement;
+
+  if (selected === 'route') {
+    return frtContentState.routeBounds;
+  }
+
+  if (selected === 'logo') {
+    return frtContentState.logoBounds;
+  }
+
+  return frtContentState.statsBounds;
+}
+
+/* 기록·로고 편집 버튼 및 슬라이더 갱신 */
+function frtEnableStatsEditing() {
+  frtContentUI.controls.disabled = false;
+
+  frtContentUI.save.disabled =
+    frtContentState.saving ||
+    !frtContentState.image ||
+    !frtContentState.logoImage;
+
+  const selected = frtContentState.selectedElement;
+
+  frtContentUI.controls
+    .querySelectorAll('[data-frt-content-element]')
+    .forEach(function (button) {
+      const element = button.dataset.frtContentElement;
+
+        const available =
+        element === 'stats' ||
+        (element === 'logo' && Boolean(frtContentState.logoImage)) ||
+        (element === 'route' && Boolean(frtContentState.routeBounds));
+
+      button.disabled = !available;
+      button.setAttribute(
+        'aria-pressed',
+        String(available && element === selected)
+      );
+    });
+
+  const percentage = Math.round(
+    frtSelectedContentLayout().scale * 100
+  );
+
+  document.getElementById('frtContentElementScale').value =
+    String(percentage);
+
+  document.getElementById('frtContentElementScaleValue').textContent =
+    `${percentage}%`;
+
+  const hints = {
+    stats:
+      '사진 위의 기록 세 줄을 끌어 이동하고, 슬라이더로 크기를 조절하세요.',
+    logo:
+      '사진 위의 로고를 끌어 이동하고, 슬라이더로 크기를 조절하세요.',
+    route:
+      '사진 위의 경로를 끌어 이동하고, 슬라이더로 크기를 조절하세요.'
+  };
+
+  document.getElementById('frtContentEditHint').textContent =
+    hints[selected] || hints.stats;
+}
+
+function frtStatsEditingIsReady() {
+  return (
+    frtContentIsCurrent(frtContentState.session) &&
+    Boolean(frtContentState.image) &&
+    !frtContentUI.controls.disabled
+  );
+}
+
+function frtContentPointerPosition(event) {
+  const canvas = frtContentUI.canvas;
+  const rect = canvas.getBoundingClientRect();
+
+  if (rect.width <= 0 || rect.height <= 0) {
+    return null;
+  }
+
+  return {
+    x: (event.clientX - rect.left) * canvas.width / rect.width,
+    y: (event.clientY - rect.top) * canvas.height / rect.height
+  };
+}
+
+/* 드래그 종료 및 포인터 해제 */
+function frtStopContentDrag() {
+  const drag = frtContentState.statsDrag;
+  frtContentState.statsDrag = null;
+
+  if (
+    drag &&
+    frtContentUI.canvas.hasPointerCapture(drag.pointerId)
+  ) {
+    frtContentUI.canvas.releasePointerCapture(drag.pointerId);
+  }
+}
+
+/* 기록·로고 선택 */
+frtContentUI.controls
+  ?.querySelectorAll('[data-frt-content-element]')
+  .forEach(function (button) {
+    button.addEventListener('click', function () {
+      if (!frtStatsEditingIsReady() || button.disabled) {
+        return;
+      }
+
+      const element = button.dataset.frtContentElement;
+
+      if (
+        element !== 'stats' &&
+        element !== 'logo' &&
+        element !== 'route'
+      ) {
+        return;
+      }
+
+      frtStopContentDrag();
+      frtContentState.selectedElement = element;
+      frtEnableStatsEditing();
+    });
+  });
+
+/* 선택한 요소만 크기 변경 */
+document
+  .getElementById('frtContentElementScale')
+  ?.addEventListener('input', function (event) {
+    if (!frtStatsEditingIsReady()) {
+      return;
+    }
+
+    const percentage = Number(event.target.value);
+
+    if (!Number.isFinite(percentage)) {
+      return;
+    }
+
+    const safePercentage = Math.max(30, Math.min(200, percentage));
+
+    frtStopContentDrag();
+    frtSelectedContentLayout().scale = safePercentage / 100;
+
+    document.getElementById(
+      'frtContentElementScaleValue'
+    ).textContent = `${safePercentage}%`;
+
+    frtDrawContentPreview();
+  });
+
+/* 선택한 요소를 잡으면 드래그 시작 */
+frtContentUI.canvas?.addEventListener(
+  'pointerdown',
+  function (event) {
+    if (
+      !frtStatsEditingIsReady() ||
+      !event.isPrimary ||
+      event.button !== 0
+    ) {
+      return;
+    }
+
+    const point = frtContentPointerPosition(event);
+    const bounds = frtSelectedContentBounds();
+
+    if (
+      !point ||
+      !bounds ||
+      point.x < bounds.left ||
+      point.x > bounds.right ||
+      point.y < bounds.top ||
+      point.y > bounds.bottom
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const canvas = frtContentUI.canvas;
+    const layout = frtSelectedContentLayout();
+
+    frtContentState.statsDrag = {
+      pointerId: event.pointerId,
+      session: frtContentState.session,
+      element: frtContentState.selectedElement,
+      offsetX: point.x - layout.x * canvas.width,
+      offsetY: point.y - layout.y * canvas.height
+    };
+
+    canvas.setPointerCapture(event.pointerId);
+  }
+);
+
+/* 기록과 로고의 위치를 각각 변경 */
+frtContentUI.canvas?.addEventListener(
+  'pointermove',
+  function (event) {
+    const drag = frtContentState.statsDrag;
+
+    if (
+      !drag ||
+      drag.pointerId !== event.pointerId ||
+      !frtStatsEditingIsReady() ||
+      drag.session !== frtContentState.session ||
+      drag.element !== frtContentState.selectedElement
+    ) {
+      return;
+    }
+
+    const point = frtContentPointerPosition(event);
+
+    if (!point) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const canvas = frtContentUI.canvas;
+    const layout = frtSelectedContentLayout();
+
+    layout.x = Math.max(
+      0,
+      Math.min(1, (point.x - drag.offsetX) / canvas.width)
+    );
+
+    layout.y = Math.max(
+      0,
+      Math.min(1, (point.y - drag.offsetY) / canvas.height)
+    );
+
+    frtDrawContentPreview();
+  }
+);
+
+function frtFinishStatsDrag(event) {
+  const drag = frtContentState.statsDrag;
+
+  if (drag && drag.pointerId === event.pointerId) {
+    frtStopContentDrag();
+  }
+}
+
+['pointerup', 'pointercancel', 'lostpointercapture']
+  .forEach(function (eventName) {
+    frtContentUI.canvas?.addEventListener(
+      eventName,
+      frtFinishStatsDrag
+    );
+  });
+ /* 편집한 콘텐츠를 PNG 이미지로 저장 */
+async function frtSaveContentImage() {
+  if (
+    !frtStatsEditingIsReady() ||
+    frtContentState.saving ||
+    !frtContentState.logoImage
+  ) {
+    return;
+  }
+
+  const session = frtContentState.session;
+  const imageRequest = frtContentState.imageRequest;
+
+  const isCurrent = function () {
+    return (
+      frtContentIsCurrent(session) &&
+      frtContentState.imageRequest === imageRequest
+    );
+  };
+
+  frtContentState.saving = true;
+  frtContentUI.save.disabled = true;
+  frtContentUI.status.textContent =
+    '저장할 이미지를 만들고 있어요.';
+
+  try {
+    frtStopContentDrag();
+
+    // 현재 위치와 크기를 최종 이미지에 반영한다.
+    frtDrawContentPreview();
+
+    const blob = await new Promise(function (resolve, reject) {
+      frtContentUI.canvas.toBlob(function (result) {
+        if (result) {
+          resolve(result);
+        } else {
+          reject(new Error('PNG 이미지를 만들지 못했습니다.'));
+        }
+      }, 'image/png');
+    });
+
+    // 이미지 생성 중 화면이나 계정, 사진이 바뀌면 중단한다.
+    if (!isCurrent()) {
+      return;
+    }
+
+    const now = new Date();
+
+    const pad = function (value) {
+      return String(value).padStart(2, '0');
+    };
+
+    const date =
+      `${now.getFullYear()}` +
+      `${pad(now.getMonth() + 1)}` +
+      `${pad(now.getDate())}`;
+
+    const time =
+      `${pad(now.getHours())}` +
+      `${pad(now.getMinutes())}` +
+      `${pad(now.getSeconds())}`;
+
+    const filename = `FreeRunTrip-${date}-${time}.png`;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+
+    document.body.appendChild(link);
+
+    try {
+      link.click();
+    } finally {
+      link.remove();
+
+      // 브라우저가 다운로드를 시작할 시간을 확보한다.
+      window.setTimeout(function () {
+        URL.revokeObjectURL(url);
+      }, 60000);
+    }
+
+    frtContentUI.status.textContent =
+      '이미지 다운로드를 요청했어요. 브라우저의 다운로드 목록을 확인해 주세요.';
+  } catch (error) {
+    console.error('콘텐츠 이미지 저장 실패:', error);
+
+    if (isCurrent()) {
+      frtContentUI.status.textContent =
+        '이미지를 저장하지 못했어요. 다시 시도해 주세요.';
+    }
+  } finally {
+    // 새로 연 편집 화면의 상태는 변경하지 않는다.
+    if (frtContentState.session === session) {
+      frtContentState.saving = false;
+
+      if (frtContentIsCurrent(session)) {
+        frtEnableStatsEditing();
+      }
+    }
+  }
+}
+
+frtContentUI.save?.addEventListener(
+  'click',
+  frtSaveContentImage
+); 

@@ -772,6 +772,19 @@
 
   <div id="frtRunningPhotoList"></div>
 </section>
+<div class="frt-content-entry">
+  <button
+    id="frtOpenContentEditorBtn"
+    class="detail-take-photo-btn"
+    type="button"
+  >
+    콘텐츠 만들기
+  </button>
+
+  <p>
+    사진 위에 나의 경로와 기록을 담아보세요.
+  </p>
+</div>
 <div id="detailMemory" class="hidden">
     <img id="detailRunPhoto" alt="러닝 기록 사진" />
 
@@ -1647,6 +1660,165 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-client.js"></script>
+<!-- 기록과 사진 합성 편집 화면 -->
+<section
+  id="frtContentEditor"
+  class="frt-content-editor hidden"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="frtContentEditorTitle"
+  tabindex="-1"
+>
+  <div class="frt-content-editor-panel">
+    <header class="frt-content-editor-header">
+      <h2 id="frtContentEditorTitle">
+        콘텐츠 만들기
+      </h2>
+
+      <button
+        id="frtCloseContentEditorBtn"
+        type="button"
+      >
+        닫기
+      </button>
+    </header>
+
+    <section
+      class="frt-content-photo-picker"
+      aria-labelledby="frtContentPhotoTitle"
+    >
+      <h3 id="frtContentPhotoTitle">
+        배경 사진
+      </h3>
+
+      <p>
+        기록에 저장된 사진이나 앨범 사진을 선택해 주세요.
+      </p>
+
+      <div
+        id="frtContentSavedPhotos"
+        class="frt-content-saved-photos"
+      ></div>
+
+      <button
+        id="frtContentAlbumBtn"
+        type="button"
+      >
+        앨범에서 선택
+      </button>
+
+      <input
+        id="frtContentAlbumInput"
+        type="file"
+        accept="image/*"
+        hidden
+      />
+    </section>
+
+    <div class="frt-content-preview-wrap">
+      <p id="frtContentEmptyHint">
+        사진을 선택하면 합성 화면이 표시돼요.
+      </p>
+
+      <canvas
+        id="frtContentCanvas"
+        width="1080"
+        height="1350"
+        class="hidden"
+        aria-label="사진과 러닝 기록 합성 미리보기"
+        aria-describedby="frtContentEditHint"
+      >
+        사진과 러닝 기록을 합성하는 미리보기입니다.
+      </canvas>
+    </div>
+
+    <fieldset
+      id="frtContentEditControls"
+      class="frt-content-edit-controls"
+      disabled
+    >
+      <legend>배치 편집</legend>
+
+      <div
+        class="frt-content-element-buttons"
+        role="group"
+        aria-label="편집할 요소 선택"
+      >
+        <button
+          type="button"
+          data-frt-content-element="route"
+          aria-pressed="true"
+        >
+          경로
+        </button>
+
+        <button
+          type="button"
+          data-frt-content-element="stats"
+          aria-pressed="false"
+        >
+          기록
+        </button>
+
+        <button
+          type="button"
+          data-frt-content-element="logo"
+          aria-pressed="false"
+        >
+          로고
+        </button>
+      </div>
+
+      <p id="frtContentEditHint">
+        요소를 선택한 뒤 사진 위에서 끌어 이동하세요.
+      </p>
+
+      <label for="frtContentElementScale">
+        선택한 요소 크기
+      </label>
+
+      <input
+        id="frtContentElementScale"
+        type="range"
+        min="30"
+        max="200"
+        step="1"
+        value="100"
+      />
+
+      <output
+        id="frtContentElementScaleValue"
+        for="frtContentElementScale"
+      >
+        100%
+      </output>
+    </fieldset>
+
+    <p
+      id="frtContentEditorStatus"
+      role="status"
+      aria-live="polite"
+    ></p>
+
+    <footer class="frt-content-editor-actions">
+      <button
+        id="frtContentSaveToPhoneBtn"
+        type="button"
+        disabled
+      >
+        내 폰에 저장하기
+      </button>
+
+      <button
+        id="frtContentPublishBtn"
+        type="button"
+        disabled
+      >
+        기록 프로필 피드에 게시하기
+      </button>
+    </footer>
+  </div>
+</section>
 <script src="app.js"></script>
 
 </body>
