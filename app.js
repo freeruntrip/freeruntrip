@@ -6191,6 +6191,9 @@ profileRecentRuns.innerHTML =
             alt="게시한 콘텐츠를 불러오고 있어요."
             style="display:block;width:100%;height:auto;object-fit:contain;"
           />
+          ${record.publishedCaption
+            ? `<p class="frt-published-caption">${escapePlaceSearchText(record.publishedCaption)}</p>`
+            : ''}
         </div>
       `;
     }
@@ -26151,6 +26154,8 @@ async function frtOpenContentEditor() {
   frtContentState.owner = frtRecordsState.owner;
   frtContentState.epoch = frtRecordsState.epoch;
   frtContentState.record = normalizeActivityRecord(record);
+   document.getElementById('frtContentCaption').value =
+    String(record.publishedCaption || '');
   frtContentState.image = null;
     frtContentState.statsLayout = {
     x: 0.5,
@@ -27228,7 +27233,11 @@ async function frtPublishContentImage() {
   const owner = frtRecordsState.owner;
   const imageRequest = frtContentState.imageRequest;
   const recordId = String(frtContentState.record.id);
-
+  const caption = document
+    .getElementById('frtContentCaption')
+    .value
+    .trim()
+    .slice(0, 2200);
   const isCurrent = function () {
     return (
       frtContentIsCurrent(session) &&
@@ -27289,6 +27298,7 @@ async function frtPublishContentImage() {
       return {
         ...item,
         publishedContentPhotoId: photoId,
+        publishedCaption: caption,
         publishedAt: Date.now()
       };
     });

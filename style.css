@@ -9305,3 +9305,49 @@ body {
   background: #81dad8;
   color: #0f172a;
 }
+.frt-content-caption-field {
+  margin: 20px 0;
+}
+
+.frt-content-caption-field label {
+  display: block;
+  margin-bottom: 10px;
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+#frtContentCaption {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 110px;
+  padding: 14px;
+  border: 1px solid #526879;
+  border-radius: 14px;
+  background: #1e293b;
+  color: #f8fafc;
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+#frtContentCaption::placeholder {
+  color: #94a3b8;
+}
+
+#frtContentCaption:focus-visible {
+  outline: 2px solid #80d6d4;
+  outline-offset: 2px;
+}
+
+.frt-published-caption {
+  margin: 0;
+  padding: 16px 18px;
+  color: #17212b;
+  background: #fff;
+  font-size: 15px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
