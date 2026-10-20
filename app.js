@@ -26735,7 +26735,7 @@ function frtSelectedContentBounds() {
   return frtContentState.statsBounds;
 }
 
-/* 기록·로고 편집 버튼 및 슬라이더 갱신 */
+/* 이미지 위에서 직접 이동·크기 조절 */
 function frtEnableStatsEditing() {
   frtContentUI.controls.disabled = false;
 
@@ -26747,55 +26747,13 @@ function frtEnableStatsEditing() {
     Boolean(frtContentState.image) &&
     Boolean(frtContentState.logoImage);
 
-  frtContentUI.save.disabled =
-    busy || !imageReady;
+  frtContentUI.save.disabled = busy || !imageReady;
 
   frtContentUI.publish.disabled =
     busy ||
     !imageReady ||
     !frtRecordsState.owner ||
     frtRecordsState.owner === 'guest';
-
-  const selected = frtContentState.selectedElement;
-
-  frtContentUI.controls
-    .querySelectorAll('[data-frt-content-element]')
-    .forEach(function (button) {
-      const element = button.dataset.frtContentElement;
-
-        const available =
-        element === 'stats' ||
-        (element === 'logo' && Boolean(frtContentState.logoImage)) ||
-        (element === 'route' && Boolean(frtContentState.routeBounds));
-
-      button.disabled = !available;
-      button.setAttribute(
-        'aria-pressed',
-        String(available && element === selected)
-      );
-    });
-
-  const percentage = Math.round(
-    frtSelectedContentLayout().scale * 100
-  );
-
-  document.getElementById('frtContentElementScale').value =
-    String(percentage);
-
-  document.getElementById('frtContentElementScaleValue').textContent =
-    `${percentage}%`;
-
-  const hints = {
-    stats:
-      '사진 위의 기록 세 줄을 끌어 이동하고, 슬라이더로 크기를 조절하세요.',
-    logo:
-      '사진 위의 로고를 끌어 이동하고, 슬라이더로 크기를 조절하세요.',
-    route:
-      '사진 위의 경로를 끌어 이동하고, 슬라이더로 크기를 조절하세요.'
-  };
-
-  document.getElementById('frtContentEditHint').textContent =
-    hints[selected] || hints.stats;
 }
 
 function frtStatsEditingIsReady() {
@@ -26820,125 +26778,82 @@ function frtContentPointerPosition(event) {
   };
 }
 
-/* 드래그 종료 및 포인터 해제 */
+/* 화면에 그린 순서의 위쪽부터 터치한 요소 확인 */
+function frtFindContentElement(point) {
+  const elements = [
+    ['logo', frtContentState.logoBounds],
+    ['stats', frtContentState.statsBounds],
+    ['route', frtContentState.routeBounds]
+  ];
+
+  const found = elements.find(function (entry) {
+    const bounds = entry[1];
+
+    return (
+      bounds &&
+      point.x >= bounds.left &&
+      point.x <= bounds.right &&
+      point.y >= bounds.top &&
+      point.y <= bounds.bottom
+    );
+  });
+
+  return found ? found[0] : null;
+}
+
+/* 포인터 수가 바뀌면 현재 위치에서 제스처를 다시 시작 */
+function frtResetContentGesture(drag) {
+  const points = Array.from(drag.points.values());
+  const layout = frtSelectedContentLayout();
+
+  drag.startLayout = { ...layout };
+
+  drag.startCenter = {
+    x: points.reduce((sum, point) => sum + point.x, 0) /
+      points.length,
+    y: points.reduce((sum, point) => sum + point.y, 0) /
+      points.length
+  };
+
+  drag.startDistance = points.length === 2
+    ? Math.hypot(
+        points[1].x - points[0].x,
+        points[1].y - points[0].y
+      )
+    : 0;
+}
+
 function frtStopContentDrag() {
   const drag = frtContentState.statsDrag;
   frtContentState.statsDrag = null;
 
-  if (
-    drag &&
-    frtContentUI.canvas.hasPointerCapture(drag.pointerId)
-  ) {
-    frtContentUI.canvas.releasePointerCapture(drag.pointerId);
+  if (!drag) {
+    return;
   }
+
+  const canvas = frtContentUI.canvas;
+
+  drag.points.forEach(function (_, pointerId) {
+    if (canvas.hasPointerCapture(pointerId)) {
+      canvas.releasePointerCapture(pointerId);
+    }
+  });
 }
 
-/* 기록·로고 선택 */
-frtContentUI.controls
-  ?.querySelectorAll('[data-frt-content-element]')
-  .forEach(function (button) {
-    button.addEventListener('click', function () {
-      if (!frtStatsEditingIsReady() || button.disabled) {
-        return;
-      }
+const frtGestureCanvas = frtContentUI.canvas;
 
-      const element = button.dataset.frtContentElement;
+if (frtGestureCanvas) {
+  // 이미지 안에서는 브라우저 확대 대신 요소를 편집한다.
+  frtGestureCanvas.style.touchAction = 'none';
+  frtGestureCanvas.style.userSelect = 'none';
+  frtGestureCanvas.style.webkitUserSelect = 'none';
 
-      if (
-        element !== 'stats' &&
-        element !== 'logo' &&
-        element !== 'route'
-      ) {
-        return;
-      }
-
-      frtStopContentDrag();
-      frtContentState.selectedElement = element;
-      frtEnableStatsEditing();
-    });
-  });
-
-/* 선택한 요소만 크기 변경 */
-document
-  .getElementById('frtContentElementScale')
-  ?.addEventListener('input', function (event) {
-    if (!frtStatsEditingIsReady()) {
-      return;
-    }
-
-    const percentage = Number(event.target.value);
-
-    if (!Number.isFinite(percentage)) {
-      return;
-    }
-
-    const safePercentage = Math.max(30, Math.min(200, percentage));
-
-    frtStopContentDrag();
-    frtSelectedContentLayout().scale = safePercentage / 100;
-
-    document.getElementById(
-      'frtContentElementScaleValue'
-    ).textContent = `${safePercentage}%`;
-
-    frtDrawContentPreview();
-  });
-
-/* 선택한 요소를 잡으면 드래그 시작 */
-frtContentUI.canvas?.addEventListener(
-  'pointerdown',
-  function (event) {
+  frtGestureCanvas.addEventListener('pointerdown', function (event) {
     if (
       !frtStatsEditingIsReady() ||
-      !event.isPrimary ||
+      frtContentState.saving ||
+      frtContentState.publishing ||
       event.button !== 0
-    ) {
-      return;
-    }
-
-    const point = frtContentPointerPosition(event);
-    const bounds = frtSelectedContentBounds();
-
-    if (
-      !point ||
-      !bounds ||
-      point.x < bounds.left ||
-      point.x > bounds.right ||
-      point.y < bounds.top ||
-      point.y > bounds.bottom
-    ) {
-      return;
-    }
-
-    event.preventDefault();
-
-    const canvas = frtContentUI.canvas;
-    const layout = frtSelectedContentLayout();
-
-    frtContentState.statsDrag = {
-      pointerId: event.pointerId,
-      session: frtContentState.session,
-      element: frtContentState.selectedElement,
-      offsetX: point.x - layout.x * canvas.width,
-      offsetY: point.y - layout.y * canvas.height
-    };
-
-    canvas.setPointerCapture(event.pointerId);
-  }
-);
-
-/* 기록과 로고의 위치를 각각 변경 */
-frtContentUI.canvas?.addEventListener(
-  'pointermove',
-  function (event) {
-    const drag = frtContentState.statsDrag;
-
-    if (
-      !drag ||
-      drag.pointerId !== event.pointerId ||
-      !frtStatsEditingIsReady() ||
-      drag.session !== frtContentState.session ||
-      drag.element !== frtContentState.selectedElement
     ) {
       return;
     }
@@ -26949,40 +26864,150 @@ frtContentUI.canvas?.addEventListener(
       return;
     }
 
+    let drag = frtContentState.statsDrag;
+
+    if (drag && drag.session !== frtContentState.session) {
+      frtStopContentDrag();
+      drag = null;
+    }
+
+    if (!drag) {
+      const element = frtFindContentElement(point);
+
+      if (!element) {
+        return;
+      }
+
+      frtContentState.selectedElement = element;
+
+      drag = {
+        session: frtContentState.session,
+        points: new Map()
+      };
+
+      frtContentState.statsDrag = drag;
+    }
+
+    if (drag.points.size >= 2) {
+      return;
+    }
+
     event.preventDefault();
+    drag.points.set(event.pointerId, point);
+    frtGestureCanvas.setPointerCapture(event.pointerId);
+    frtResetContentGesture(drag);
+  });
 
-    const canvas = frtContentUI.canvas;
+  frtGestureCanvas.addEventListener('pointermove', function (event) {
+    const drag = frtContentState.statsDrag;
+
+    if (!drag || !drag.points.has(event.pointerId)) {
+      return;
+    }
+
+    if (
+      !frtStatsEditingIsReady() ||
+      drag.session !== frtContentState.session ||
+      frtContentState.saving ||
+      frtContentState.publishing
+    ) {
+      frtStopContentDrag();
+      return;
+    }
+
+    const point = frtContentPointerPosition(event);
+
+    if (!point) {
+      return;
+    }
+
+    event.preventDefault();
+    drag.points.set(event.pointerId, point);
+
+    const points = Array.from(drag.points.values());
+    const center = {
+      x: points.reduce((sum, item) => sum + item.x, 0) /
+        points.length,
+      y: points.reduce((sum, item) => sum + item.y, 0) /
+        points.length
+    };
+
     const layout = frtSelectedContentLayout();
+    const start = drag.startLayout;
+    let ratio = 1;
 
-    layout.x = Math.max(
-      0,
-      Math.min(1, (point.x - drag.offsetX) / canvas.width)
-    );
+    if (points.length === 2) {
+      const distance = Math.hypot(
+        points[1].x - points[0].x,
+        points[1].y - points[0].y
+      );
 
-    layout.y = Math.max(
-      0,
-      Math.min(1, (point.y - drag.offsetY) / canvas.height)
-    );
+      if (drag.startDistance < 1) {
+        frtResetContentGesture(drag);
+        return;
+      }
+
+      layout.scale = Math.max(
+        0.3,
+        Math.min(2, start.scale * distance / drag.startDistance)
+      );
+
+      ratio = layout.scale / start.scale;
+    }
+
+    // 두 손가락의 중심을 기준으로 확대·축소하고 이동한다.
+    const canvas = frtGestureCanvas;
+
+    layout.x = Math.max(0, Math.min(1,
+      (
+        center.x +
+        (start.x * canvas.width - drag.startCenter.x) * ratio
+      ) / canvas.width
+    ));
+
+    layout.y = Math.max(0, Math.min(1,
+      (
+        center.y +
+        (start.y * canvas.height - drag.startCenter.y) * ratio
+      ) / canvas.height
+    ));
 
     frtDrawContentPreview();
-  }
-);
-
-function frtFinishStatsDrag(event) {
-  const drag = frtContentState.statsDrag;
-
-  if (drag && drag.pointerId === event.pointerId) {
-    frtStopContentDrag();
-  }
-}
-
-['pointerup', 'pointercancel', 'lostpointercapture']
-  .forEach(function (eventName) {
-    frtContentUI.canvas?.addEventListener(
-      eventName,
-      frtFinishStatsDrag
-    );
   });
+
+  function frtFinishContentPointer(event) {
+    const drag = frtContentState.statsDrag;
+
+    if (!drag || !drag.points.has(event.pointerId)) {
+      return;
+    }
+
+    if (event.type === 'pointercancel') {
+      frtStopContentDrag();
+      return;
+    }
+
+    drag.points.delete(event.pointerId);
+
+    if (frtGestureCanvas.hasPointerCapture(event.pointerId)) {
+      frtGestureCanvas.releasePointerCapture(event.pointerId);
+    }
+
+    if (drag.points.size === 0) {
+      frtContentState.statsDrag = null;
+    } else {
+      frtResetContentGesture(drag);
+    }
+  }
+
+  ['pointerup', 'pointercancel', 'lostpointercapture']
+    .forEach(function (eventName) {
+      frtGestureCanvas.addEventListener(
+        eventName,
+        frtFinishContentPointer
+      );
+    });
+}
  /* 편집한 콘텐츠를 PNG 이미지로 저장 */
 async function frtSaveContentImage() {
   if (

@@ -1732,66 +1732,17 @@
       </canvas>
     </div>
 
-    <fieldset
+        <fieldset
       id="frtContentEditControls"
       class="frt-content-edit-controls"
       disabled
     >
       <legend>배치 편집</legend>
 
-      <div
-        class="frt-content-element-buttons"
-        role="group"
-        aria-label="편집할 요소 선택"
-      >
-        <button
-          type="button"
-          data-frt-content-element="route"
-          aria-pressed="true"
-        >
-          경로
-        </button>
-
-        <button
-          type="button"
-          data-frt-content-element="stats"
-          aria-pressed="false"
-        >
-          기록
-        </button>
-
-        <button
-          type="button"
-          data-frt-content-element="logo"
-          aria-pressed="false"
-        >
-          로고
-        </button>
-      </div>
-
       <p id="frtContentEditHint">
-        요소를 선택한 뒤 사진 위에서 끌어 이동하세요.
+        사진 위의 경로·기록·로고를 직접 끌어 이동하세요.
+        두 손가락을 벌리거나 오므리면 크기를 조절할 수 있어요.
       </p>
-
-      <label for="frtContentElementScale">
-        선택한 요소 크기
-      </label>
-
-      <input
-        id="frtContentElementScale"
-        type="range"
-        min="30"
-        max="200"
-        step="1"
-        value="100"
-      />
-
-      <output
-        id="frtContentElementScaleValue"
-        for="frtContentElementScale"
-      >
-        100%
-      </output>
     </fieldset>
 
     <p
