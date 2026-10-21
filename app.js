@@ -27324,8 +27324,26 @@ async function frtPublishContentImage() {
     renderRunRecords();
     renderRecordProfileFeed();
 
+    try {
+  await window.frtSocialPublish({
+    recordId: recordId,
+    dataUrl: dataUrl,
+    caption: caption,
+    owner: owner
+  });
+
+  if (isCurrent()) {
     frtContentUI.status.textContent =
-      '내 프로필 피드에 반영했어요. 다른 기기에서도 보려면 기록 화면의 동기화 완료를 확인해 주세요.';
+      '게시했어요. 로그인한 다른 사용자도 좋아요와 댓글을 남길 수 있어요.';
+  }
+} catch (socialError) {
+  console.error('공유 게시 실패:', socialError);
+
+  if (isCurrent()) {
+    frtContentUI.status.textContent =
+      '내 기록에는 저장했지만 공유 게시에 실패했어요. 잠시 후 게시 버튼을 다시 눌러주세요.';
+  }
+}
   } catch (error) {
     console.error('콘텐츠 게시 실패:', error);
 
