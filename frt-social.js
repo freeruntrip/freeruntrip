@@ -5,7 +5,8 @@
   if (!client) { console.error('Supabase must load before frt-social.js'); return; }
   const bucket = client.storage.from('frt-social-images');
   let generation = 0;
-  let scope = 'mine';
+  let scope = 'recommended';
+  const shownCounts = new Map();
   let root;
   let busy = false;
   const el = (tag, text, cls) => {
@@ -75,7 +76,122 @@
 
   async function card(post, current, authors, token) {
     const article = el('article', undefined, 'frt-social-card');
-    article.append(el('strong', author(authors, post.user_id)), el('small', new Date(post.created_at).toLocaleString()));
+        const authorRow = el(
+      'div',
+      undefined,
+      'frt-social-author-row'
+    );
+
+    authorRow.append(
+      el('strong', author(authors, post.user_id))
+    );
+
+    const followStatus = el(
+      'p',
+      '',
+      'frt-social-status'
+    );
+    followStatus.setAttribute('role', 'status');
+
+    // 본인 게시물에는 팔로우 버튼을 표시하지 않는다.
+    if (post.user_id !== current.id) {
+      let following = false;
+
+      const followBtn = button('확인 중', async () => {
+        followBtn.disabled = true;
+        followStatus.textContent = '';
+
+        try {
+          const active = await user();
+
+          if (
+            active.id !== current.id ||
+            token !== generation
+          ) {
+            return;
+          }
+
+          if (following) {
+            checked(
+              await client
+                .from('frt_social_follows')
+                .delete()
+                .eq('follower_id', current.id)
+                .eq('following_id', post.user_id)
+            );
+          } else {
+            checked(
+              await client
+                .from('frt_social_follows')
+                .upsert(
+                  {
+                    follower_id: current.id,
+                    following_id: post.user_id
+                  },
+                  {
+                    onConflict: 'follower_id,following_id',
+                    ignoreDuplicates: true
+                  }
+                )
+            );
+          }
+
+          if (token !== generation) return;
+
+          // 같은 작성자의 다른 게시물 버튼도 함께 갱신한다.
+          await refresh();
+        } catch (error) {
+          if (token === generation) {
+            followStatus.textContent = message(error);
+          }
+        } finally {
+          followBtn.disabled = false;
+        }
+      });
+
+      followBtn.className = 'frt-social-follow-btn';
+      followBtn.disabled = true;
+      authorRow.append(followBtn);
+
+      try {
+        const rows = checked(
+          await client
+            .from('frt_social_follows')
+            .select('following_id')
+            .eq('follower_id', current.id)
+            .eq('following_id', post.user_id)
+        ) || [];
+
+        following = rows.length > 0;
+
+        followBtn.textContent = following
+          ? '팔로잉 · 취소'
+          : '팔로우';
+
+        followBtn.setAttribute(
+          'aria-pressed',
+          String(following)
+        );
+
+        followBtn.setAttribute(
+          'aria-label',
+          `${author(authors, post.user_id)} ${
+            following ? '팔로우 취소' : '팔로우'
+          }`
+        );
+
+        followBtn.disabled = false;
+      } catch (error) {
+        followBtn.textContent = '확인 실패';
+        followStatus.textContent = message(error);
+      }
+    }
+
+    article.append(
+      authorRow,
+      el('small', new Date(post.created_at).toLocaleString()),
+      followStatus
+    );
     const signed = await bucket.createSignedUrl(post.image_path, 3600);
     if (signed.error) article.append(el('p', '사진을 불러오지 못했어요.'));
     else {
@@ -142,43 +258,264 @@
     return article;
   }
 
-  async function refresh() {
+    async function refresh() {
     if (!root) return;
+
     const token = ++generation;
+    const selectedScope = scope;
     const list = root.querySelector('.frt-social-list');
-    list.replaceChildren(el('p', '공유 게시물을 불러오고 있어요.'));
+
+    list.replaceChildren(
+      el('p', '공유 게시물을 불러오고 있어요.')
+    );
+
     try {
-      const session = checked(await client.auth.getSession());
+      const session = checked(
+        await client.auth.getSession()
+      );
       const current = session.session?.user;
-      if (!current) { if (token === generation) list.replaceChildren(el('p', '로그인하면 공유 게시물을 볼 수 있어요.')); return; }
-      let query = client.from('frt_social_posts').select('id,user_id,image_path,caption,created_at').order('created_at', { ascending: false }).order('id').limit(20);
-      if (scope === 'mine') query = query.eq('user_id', current.id);
-      const posts = checked(await query);
-      const authors = await names(posts.map(post => post.user_id));
-      const cards = await Promise.all(posts.map(post => card(post, current, authors, token)));
+
       if (token !== generation) return;
+
+      if (!current) {
+        list.replaceChildren(
+          el('p', '로그인하면 공유 게시물을 볼 수 있어요.')
+        );
+        return;
+      }
+
+      let query = client
+        .from('frt_social_posts')
+        .select('id,user_id,image_path,caption,created_at')
+        .order('created_at', { ascending: false })
+        .order('id');
+
+      if (selectedScope === 'following') {
+        const follows = checked(
+          await client
+            .from('frt_social_follows')
+            .select('following_id')
+            .eq('follower_id', current.id)
+        ) || [];
+
+        if (token !== generation) return;
+
+        const ids = follows.map(row => row.following_id);
+
+        if (!ids.length) {
+          list.replaceChildren(
+            el(
+              'p',
+              '아직 팔로우한 사용자가 없어요. 추천 피드에서 관심 있는 사용자를 찾아보세요.'
+            )
+          );
+          return;
+        }
+
+        query = query.in('user_id', ids).limit(20);
+      } else {
+        query = query.limit(60);
+      }
+
+      let posts = checked(await query) || [];
+
+      if (token !== generation) return;
+
+      if (selectedScope === 'recommended') {
+        const now = Date.now();
+
+        const candidates = await Promise.all(
+          posts.map(async post => {
+            const [likes, commentsResult] = await Promise.all([
+              client
+                .from('frt_social_likes')
+                .select('*', { count: 'exact', head: true })
+                .eq('post_id', post.id),
+
+              client
+                .from('frt_social_comments')
+                .select('*', { count: 'exact', head: true })
+                .eq('post_id', post.id)
+            ]);
+
+            checked(likes);
+            checked(commentsResult);
+
+            const ageHours = Math.max(
+              0,
+              (now - new Date(post.created_at).getTime()) /
+                3600000
+            );
+
+            const freshness = 1 / (1 + ageHours / 24);
+            const reactions =
+              (likes.count || 0) +
+              (commentsResult.count || 0) * 2;
+
+            const reactionScore =
+              Math.min(Math.log1p(reactions), 3) * 0.2;
+
+            const shown = shownCounts.get(post.id) || 0;
+
+            return {
+              post,
+              score: freshness + reactionScore - shown * 0.15
+            };
+          })
+        );
+
+        if (token !== generation) return;
+
+        const authorCounts = new Map();
+        const selected = [];
+
+        while (candidates.length && selected.length < 20) {
+          let bestIndex = 0;
+          let bestScore = -Infinity;
+
+          candidates.forEach((candidate, index) => {
+            const authorCount =
+              authorCounts.get(candidate.post.user_id) || 0;
+
+            const score =
+              candidate.score - authorCount * 0.6;
+
+            if (score > bestScore) {
+              bestScore = score;
+              bestIndex = index;
+            }
+          });
+
+          const chosen =
+            candidates.splice(bestIndex, 1)[0].post;
+
+          selected.push(chosen);
+
+          authorCounts.set(
+            chosen.user_id,
+            (authorCounts.get(chosen.user_id) || 0) + 1
+          );
+        }
+
+        posts = selected;
+      }
+
+      const authors = await names(
+        posts.map(post => post.user_id)
+      );
+
+      if (token !== generation) return;
+
+      const cards = await Promise.all(
+        posts.map(post => card(post, current, authors, token))
+      );
+
+      if (token !== generation) return;
+
       list.replaceChildren(...cards);
-      if (!cards.length) list.append(el('p', scope === 'mine' ? '공유한 게시물이 없어요. 기록 편집에서 게시 버튼을 눌러주세요.' : '아직 공유한 게시물이 없어요.'));
-      if (cards.length === 20) list.append(el('p', '최근 게시물 20개를 표시해요.'));
-    } catch (error) { if (token === generation) list.replaceChildren(el('p', message(error))); }
+
+      if (!cards.length) {
+        list.append(
+          el(
+            'p',
+            selectedScope === 'following'
+              ? '팔로우한 사용자가 아직 공유한 게시물이 없어요.'
+              : '아직 공유한 게시물이 없어요. 첫 러닝 이야기를 공개해보세요.'
+          )
+        );
+      }
+
+      if (selectedScope === 'recommended') {
+        posts.forEach(post => {
+          shownCounts.set(
+            post.id,
+            (shownCounts.get(post.id) || 0) + 1
+          );
+        });
+      }
+
+      if (cards.length === 20) {
+        list.append(
+          el(
+            'p',
+            selectedScope === 'following'
+              ? '최근 게시물 20개를 표시해요.'
+              : '최근 공개 게시물 중 추천 게시물 20개를 표시해요.'
+          )
+        );
+      }
+    } catch (error) {
+      if (token === generation) {
+        list.replaceChildren(el('p', message(error)));
+      }
+    }
   }
   function mount() {
-    const anchor = document.getElementById('profileRecentRuns');
+    const anchor = document.getElementById('frtHomeFeedRoot');
     if (!anchor) return;
     const style = el('style');
     style.textContent = `.frt-social{margin-top:24px}.frt-social nav,.frt-social-actions{display:flex;gap:10px;margin:12px 0;flex-wrap:wrap}.frt-social button{padding:10px 14px;border:1px solid #d1d5db;border-radius:12px;background:#fff;color:#111;cursor:pointer}.frt-social button[aria-pressed=true]{color:#d62954;border-color:#d62954}.frt-social button:disabled{opacity:.5}.frt-social-card{padding:16px;margin:16px 0;border:1px solid #ddd;border-radius:16px;background:#fff;color:#111;overflow:hidden}.frt-social-card small{display:block;margin:6px 0 12px;color:#666}.frt-social-card img{display:block;width:100%;height:auto;border-radius:10px}.frt-social-card p{white-space:pre-wrap;overflow-wrap:anywhere}.frt-social-card textarea{box-sizing:border-box;width:100%;min-height:70px;font:inherit;padding:10px;border:1px solid #ccc;border-radius:10px}.frt-social-status{font-size:13px;color:#9b2534}`;
     document.head.append(style);
-    root = el('section', undefined, 'frt-social'); root.append(el('h3', '공유 게시물'));
-    const nav = el('nav'); nav.setAttribute('aria-label', '게시물 보기');
-    const mine = button('내 게시물', () => { scope = 'mine'; update(); });
-    const all = button('모두의 게시물', () => { scope = 'all'; update(); });
-    function update() { mine.setAttribute('aria-pressed', String(scope === 'mine')); all.setAttribute('aria-pressed', String(scope === 'all')); refresh(); }
-    nav.append(mine, all, button('새로고침', () => refresh()));
-    root.append(nav, el('div', undefined, 'frt-social-list')); anchor.after(root);
+        root = el('section', undefined, 'frt-social');
+    root.setAttribute('aria-label', '홈 게시물 피드');
+
+    const nav = el('nav');
+    nav.setAttribute('aria-label', '게시물 보기');
+
+    const recommended = button('추천', () => {
+      scope = 'recommended';
+      update();
+    });
+
+    const following = button('팔로잉', () => {
+      scope = 'following';
+      update();
+    });
+
+    function update() {
+      recommended.setAttribute(
+        'aria-pressed',
+        String(scope === 'recommended')
+      );
+
+      following.setAttribute(
+        'aria-pressed',
+        String(scope === 'following')
+      );
+
+      refresh();
+    }
+
+    nav.append(
+      recommended,
+      following
+    );
+
+    root.append(
+      nav,
+      el('div', undefined, 'frt-social-list')
+    );
+
+    anchor.replaceChildren(root);
     update();
     // Defer Supabase queries outside its auth callback.
-    client.auth.onAuthStateChange(() => { ++generation; root.querySelector('.frt-social-list').replaceChildren(); setTimeout(refresh, 0); });
-    const screen = document.getElementById('profileFeedScreen');
+        let feedAccountId;
+
+    client.auth.onAuthStateChange((event, session) => {
+      const nextAccountId = session?.user?.id || null;
+
+      if (nextAccountId !== feedAccountId) {
+        feedAccountId = nextAccountId;
+        shownCounts.clear();
+      }
+
+      ++generation;
+      root.querySelector('.frt-social-list').replaceChildren();
+
+      // 인증 콜백이 끝난 뒤 게시물을 조회한다.
+      setTimeout(refresh, 0);
+    });
+    const screen = document.getElementById('homeScreen');
     if (screen) new MutationObserver(() => {
       if (!screen.classList.contains('hidden') && !busy) {
         busy = true; refresh().finally(() => { busy = false; });

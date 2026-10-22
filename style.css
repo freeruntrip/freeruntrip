@@ -9351,3 +9351,90 @@ body {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* 실제 공유 게시물 홈피드 */
+#frtHomeFeedRoot {
+  width: 100%;
+  min-width: 0;
+}
+
+#frtHomeFeedRoot .frt-social {
+  margin-top: 0;
+}
+
+#frtHomeFeedRoot .frt-social nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+
+#frtHomeFeedRoot .frt-social nav button {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 22px;
+  background: transparent;
+  color: #6b7280;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#frtHomeFeedRoot .frt-social nav button[aria-pressed="true"] {
+  background: #e0f2fe;
+  color: #036986;
+}
+
+#frtHomeFeedRoot .frt-social-card {
+  margin: 0;
+  padding: 16px 0;
+  border: 0;
+  border-bottom: 1px solid #e5e7eb;
+  border-radius: 0;
+  background: #fff;
+}
+
+#frtHomeFeedRoot .frt-social-card > :not(img) {
+  margin-left: 16px;
+  margin-right: 16px;
+}
+
+#frtHomeFeedRoot .frt-social-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 0;
+}
+
+#frtHomeFeedRoot .frt-social-list > p {
+  padding: 24px 16px;
+  color: #6b7280;
+  line-height: 1.6;
+}
+
+#frtHomeFeedRoot .frt-social-author-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#frtHomeFeedRoot .frt-social-author-row strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#frtHomeFeedRoot .frt-social-follow-btn {
+  flex-shrink: 0;
+  min-height: 40px;
+  color: #036986;
+  border-color: #bae6fd;
+}
+
+#frtHomeFeedRoot .frt-social button:focus-visible {
+  outline: 2px solid #036986;
+  outline-offset: 3px;
+}
