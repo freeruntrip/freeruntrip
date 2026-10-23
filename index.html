@@ -672,49 +672,68 @@
   </button>
 </div>
 
-<div class="hero-card">
-
+<div class="hero-card frt-profile-card">
   <div class="hero-overlay">
+
+    <div class="frt-profile-top">
+      <div class="hero-avatar">
+        F
+      </div>
+
+      <div class="frt-profile-summary">
+        <h2 id="frtProfileName" class="hero-name">
+          게스트
+        </h2>
+
+        <div class="frt-profile-stats">
+          <div class="frt-profile-stat">
+            <strong id="profileRunTripCount">—</strong>
+            <span>런트립 횟수</span>
+          </div>
+
+          <div class="frt-profile-stat">
+            <strong id="profileTotalDistance">0.0km</strong>
+            <span>러닝 km</span>
+          </div>
+
+          <button
+            id="frtProfileFollowersBtn"
+            class="frt-profile-stat frt-profile-stat-button"
+            type="button"
+            aria-label="팔로워 목록 보기"
+          >
+            <strong id="profileFollowers">0</strong>
+            <span>팔로워</span>
+          </button>
+        </div>
+      </div>
+    </div>
 
     <div class="hero-badge">
       🌙 Night Runner
     </div>
 
-    <div class="hero-avatar">
-      F
-    </div>
-
-    <h2 id="frtProfileName" class="hero-name">
-      게스트
-    </h2>
-
-    <p class="hero-distance">
-  <span id="profileTotalDistanceHero">0.0</span>km · 
-  <span id="profileRunCountHero">0</span> Runs
-</p>
-
     <p class="hero-pace">
       "오늘도 잘 버틴 Pace"
     </p>
 
-  </div>
+    <div id="frtProfileOwnerActions" hidden>
+      <button
+        id="frtProfileFollowingBtn"
+        type="button"
+      >
+        팔로잉 목록
+      </button>
+    </div>
 
+  </div>
 </div>
 
-<div class="profile-info-bar">
-
-  <span>
-    <strong id="profileTotalDistance">0.0km</strong> Distance
-  </span>
-
-  <span>
-    <strong id="profileRunCount">0</strong> Runs
-  </span>
-
-  <span>
-    <strong id="profileFollowers">0</strong> Followers
-  </span>
-
+<!-- 기존 JavaScript 연결 유지용: 다음 단계에서 정리 -->
+<div hidden aria-hidden="true">
+  <span id="profileTotalDistanceHero">0.0</span>
+  <span id="profileRunCountHero">0</span>
+  <span id="profileRunCount">0</span>
 </div>
 
   <div class="feed-card featured-runtrip">
@@ -739,6 +758,36 @@
   </div>
 </aside>
 </section>
+<!-- 팔로워 / 본인 전용 팔로잉 목록 -->
+<dialog
+  id="frtFollowDialog"
+  aria-labelledby="frtFollowDialogTitle"
+>
+  <div class="frt-follow-dialog-header">
+    <h2 id="frtFollowDialogTitle">팔로워</h2>
+
+    <form method="dialog">
+      <button type="submit" aria-label="목록 닫기">
+        닫기
+      </button>
+    </form>
+  </div>
+
+  <p id="frtFollowDialogStatus" role="status"></p>
+
+  <ul
+    id="frtFollowDialogList"
+    aria-label="계정 목록"
+  ></ul>
+
+  <button
+    id="frtFollowDialogMore"
+    type="button"
+    hidden
+  >
+    더 보기
+  </button>
+</dialog>
 <section id="monthlyReportScreen" class="screen hidden">
   <div class="monthly-report-header">
     <button id="backFromMonthlyReportBtn">← Back</button>

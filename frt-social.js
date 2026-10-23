@@ -450,7 +450,296 @@
       }
     }
   }
+    function mountProfileFollows() {
+    const screen = document.getElementById('profileFeedScreen');
+    const count = document.getElementById('profileFollowers');
+    const followersBtn =
+      document.getElementById('frtProfileFollowersBtn');
+    const ownerActions =
+      document.getElementById('frtProfileOwnerActions');
+    const followingBtn =
+      document.getElementById('frtProfileFollowingBtn');
+
+    const dialog = document.getElementById('frtFollowDialog');
+    const title = document.getElementById('frtFollowDialogTitle');
+    const status = document.getElementById('frtFollowDialogStatus');
+    const list = document.getElementById('frtFollowDialogList');
+    const more = document.getElementById('frtFollowDialogMore');
+
+    if (
+      !screen || !count || !followersBtn || !ownerActions ||
+      !followingBtn || !dialog || !title || !status ||
+      !list || !more
+    ) return;
+
+    let accountId = null;
+    let accountVersion = 0;
+    let countVersion = 0;
+    let view = null;
+
+    function clearList() {
+      view = null;
+      list.replaceChildren();
+      status.textContent = '';
+      more.hidden = true;
+      more.disabled = false;
+    }
+
+    function setAccount(id) {
+      if (id === accountId) return;
+
+      accountId = id;
+      accountVersion++;
+      countVersion++;
+
+      clearList();
+      if (dialog.open) dialog.close();
+
+      ownerActions.hidden = !id;
+      followersBtn.disabled = !id;
+      count.textContent = id ? '—' : '0';
+    }
+
+    async function refreshCount() {
+      const id = accountId;
+      const version = ++countVersion;
+      if (!id) return;
+
+      try {
+        const value = checked(
+          await client.rpc('frt_social_follower_count', {
+            target_user_id: id
+          })
+        );
+
+        if (version !== countVersion || id !== accountId) return;
+        count.textContent = String(value ?? 0);
+        followersBtn.title = '팔로워 목록 보기';
+      } catch (error) {
+        if (version !== countVersion || id !== accountId) return;
+        count.textContent = '—';
+        followersBtn.title = '팔로워 수를 불러오지 못했어요.';
+        console.error('팔로워 수 조회 실패:', error);
+      }
+    }
+
+    function isCurrent(state) {
+      return (
+        view === state &&
+        dialog.open &&
+        accountId === state.owner &&
+        accountVersion === state.version
+      );
+    }
+
+    function setListBusy(state, value) {
+      state.busy = value;
+      more.disabled = value;
+      list.querySelectorAll('button').forEach(node => {
+        node.disabled = value;
+      });
+    }
+
+    async function loadPage(state) {
+      if (!isCurrent(state) || state.busy) return;
+      setListBusy(state, true);
+      status.textContent = '목록을 불러오고 있어요.';
+
+      try {
+        const active = await user();
+        if (!isCurrent(state)) return;
+
+        if (active.id !== state.owner) {
+          setAccount(active.id);
+          void refreshCount();
+          return;
+        }
+
+        let rows;
+
+        if (state.kind === 'followers') {
+          rows = checked(
+            await client.rpc('frt_social_follower_list', {
+              target_user_id: state.owner,
+              page_offset: state.offset
+            })
+          ) || [];
+        } else {
+          const result = checked(
+            await client
+              .from('frt_social_follows')
+              .select('following_id,created_at')
+              .eq('follower_id', state.owner)
+              .order('created_at', { ascending: false })
+              .order('following_id')
+              .range(state.offset, state.offset + 49)
+          ) || [];
+
+          rows = result.map(row => ({
+            user_id: row.following_id
+          }));
+        }
+
+        if (!isCurrent(state)) return;
+
+        const authors = await names(rows.map(row => row.user_id));
+        if (!isCurrent(state)) return;
+
+        for (const row of rows) {
+          if (state.seen.has(row.user_id)) continue;
+          state.seen.add(row.user_id);
+
+          const item = el('li');
+          item.append(el('strong', author(authors, row.user_id)));
+
+          if (state.kind === 'following') {
+            const cancel = button('팔로우 취소', async () => {
+              if (!isCurrent(state) || state.busy) return;
+
+              setListBusy(state, true);
+              status.textContent = '';
+
+              try {
+                const activeUser = await user();
+                if (!isCurrent(state)) return;
+
+                if (activeUser.id !== state.owner) {
+                  setAccount(activeUser.id);
+                  void refreshCount();
+                  return;
+                }
+
+                checked(
+                  await client
+                    .from('frt_social_follows')
+                    .delete()
+                    .eq('follower_id', state.owner)
+                    .eq('following_id', row.user_id)
+                );
+
+                if (!isCurrent(state)) return;
+
+                // 삭제 후 첫 페이지부터 다시 읽어 누락을 방지한다.
+                state.offset = 0;
+                state.seen.clear();
+                list.replaceChildren();
+                more.hidden = true;
+
+                setListBusy(state, false);
+                await loadPage(state);
+                void refresh();
+              } catch (error) {
+                if (isCurrent(state)) {
+                  status.textContent = message(error);
+                }
+              } finally {
+                if (isCurrent(state)) setListBusy(state, false);
+              }
+            });
+
+            cancel.setAttribute(
+              'aria-label',
+              `${author(authors, row.user_id)} 팔로우 취소`
+            );
+            item.append(cancel);
+          }
+
+          list.append(item);
+        }
+
+        state.offset += rows.length;
+        more.hidden = rows.length < 50;
+        more.textContent = '더 보기';
+
+        status.textContent = list.children.length
+          ? ''
+          : state.kind === 'followers'
+            ? '아직 팔로워가 없어요.'
+            : '아직 팔로우한 계정이 없어요.';
+      } catch (error) {
+        if (isCurrent(state)) {
+          status.textContent = message(error);
+          more.hidden = false;
+          more.textContent = '다시 시도';
+        }
+      } finally {
+        if (isCurrent(state)) setListBusy(state, false);
+      }
+    }
+
+    function openList(kind) {
+      if (!accountId) return;
+
+      clearList();
+      title.textContent =
+        kind === 'followers' ? '팔로워' : '팔로잉 목록';
+      list.setAttribute('aria-label', title.textContent);
+
+      const state = {
+        kind,
+        owner: accountId,
+        version: accountVersion,
+        offset: 0,
+        busy: false,
+        seen: new Set()
+      };
+
+      view = state;
+      if (!dialog.open) dialog.showModal();
+
+      void loadPage(state);
+      void refreshCount();
+    }
+
+    followersBtn.addEventListener('click', () => {
+      openList('followers');
+    });
+
+    followingBtn.addEventListener('click', () => {
+      openList('following');
+    });
+
+    more.addEventListener('click', () => {
+      if (view) void loadPage(view);
+    });
+
+    dialog.addEventListener('close', () => {
+      // 재열림 뒤 도착한 이전 close 이벤트는 무시한다.
+      if (!dialog.open) clearList();
+    });
+
+    new MutationObserver(() => {
+      if (!screen.classList.contains('hidden')) {
+        void refreshCount();
+      } else if (dialog.open) {
+        clearList();
+        dialog.close();
+      }
+    }).observe(screen, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    ownerActions.hidden = true;
+    followersBtn.disabled = true;
+    count.textContent = '—';
+
+    client.auth.onAuthStateChange((event, session) => {
+      setAccount(session?.user?.id || null);
+
+      // 인증 콜백 바깥에서 DB를 조회한다.
+      setTimeout(() => {
+        if (!accountId) {
+          count.textContent = '0';
+        } else {
+          void refreshCount();
+        }
+      }, 0);
+    });
+  }
   function mount() {
+    mountProfileFollows();
+
     const anchor = document.getElementById('frtHomeFeedRoot');
     if (!anchor) return;
     const style = el('style');

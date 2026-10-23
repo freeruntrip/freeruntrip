@@ -6062,7 +6062,8 @@ function renderRecordProfileFeed() {
   const profileRunCountHero = document.getElementById('profileRunCountHero');
   const profileTotalDistance = document.getElementById('profileTotalDistance');
   const profileRunCount = document.getElementById('profileRunCount');
-  const profileFollowers = document.getElementById('profileFollowers');
+  const profileRunTripCount =
+    document.getElementById('profileRunTripCount');
   const profileRecentRuns = document.getElementById('profileRecentRuns');
   const publishedRecords =
       runRecords.slice();
@@ -6127,6 +6128,9 @@ if (featured) {
   }
 }   
   const runCount = runRecords.length;
+  const runTripCount = runRecords.filter(function (record) {
+    return getRecordActivityType(record) === 'runtrip';
+  }).length;
 
   const totalDistanceKm = runRecords.reduce(function (sum, record) {
     return sum + (Number(record.distance) || 0);
@@ -6148,8 +6152,8 @@ if (featured) {
     profileRunCount.textContent = runCount;
   }
 
-  if (profileFollowers) {
-    profileFollowers.textContent = '0';
+  if (profileRunTripCount) {
+    profileRunTripCount.textContent = runTripCount;
   }
 
   if (!profileRecentRuns) {
