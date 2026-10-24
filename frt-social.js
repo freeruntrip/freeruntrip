@@ -737,8 +737,860 @@
       }, 0);
     });
   }
+    const avatarBucket = client.storage.from('frt-profile-images');
+  const avatarRequests = new WeakMap();
+
+  function paintAvatar(node, src) {
+  node.classList.add('frt-pin-avatar');
+
+  const pin = el('span', undefined, 'frt-avatar-pin');
+  node.replaceChildren(pin);
+
+  if (!src) {
+    pin.append(el('span', 'F', 'frt-avatar-letter'));
+    return;
+  }
+
+  const img = el('img');
+  img.alt = '프로필 사진';
+  img.crossOrigin = 'anonymous';
+
+  img.addEventListener('error', () => {
+    if (node.contains(img)) paintAvatar(node, null);
+  }, { once: true });
+
+  img.addEventListener('load', () => {
+    if (!node.contains(img)) return;
+
+    try {
+      const width = img.naturalWidth;
+      const height = img.naturalHeight;
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      ctx.drawImage(img, 0, 0);
+
+      const pixels = ctx.getImageData(
+        0, 0, width, height
+      ).data;
+
+      let transparent = 0;
+      let left = width;
+      let top = height;
+      let right = -1;
+      let bottom = -1;
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const alpha = pixels[(y * width + x) * 4 + 3];
+
+          if (alpha < 16) transparent++;
+
+          if (alpha > 16) {
+            left = Math.min(left, x);
+            top = Math.min(top, y);
+            right = Math.max(right, x);
+            bottom = Math.max(bottom, y);
+          }
+        }
+      }
+
+      // 일반 사진은 기존 마커 모양으로 표시한다.
+      if (
+        transparent < width * height * 0.01 ||
+        right < left ||
+        bottom < top
+      ) return;
+
+      // 투명 이미지의 바깥 여백만 잘라낸다.
+      const cropped = document.createElement('canvas');
+      cropped.width = right - left + 1;
+      cropped.height = bottom - top + 1;
+
+      const croppedCtx = cropped.getContext('2d');
+      if (!croppedCtx) return;
+
+      croppedCtx.drawImage(
+        canvas,
+        left, top,
+        cropped.width, cropped.height,
+        0, 0,
+        cropped.width, cropped.height
+      );
+
+      const croppedUrl = cropped.toDataURL('image/png');
+
+      pin.classList.add('frt-avatar-cutout');
+      img.src = croppedUrl;
+    } catch (error) {
+      console.error('프로필 사진 투명 영역 확인 실패:', error);
+    }
+  }, { once: true });
+
+  pin.append(img);
+  img.src = src;
+}
+
+  async function loadAvatar(node, owner) {
+  const request = {};
+  avatarRequests.set(node, request);
+  paintAvatar(node, null);
+
+  if (!owner) return;
+
+  try {
+    const files = checked(
+      await avatarBucket.list(owner, {
+        search: 'avatar.',
+        limit: 10
+      })
+    ) || [];
+
+    // 새 PNG 사진 우선, 없으면 기존 JPG 사진 사용
+    const filename = files.some(file => file.name === 'avatar.png')
+      ? 'avatar.png'
+      : files.some(file => file.name === 'avatar.jpg')
+        ? 'avatar.jpg'
+        : null;
+
+    if (!filename) return;
+
+    const data = checked(
+      await avatarBucket.createSignedUrl(
+        owner + '/' + filename,
+        3600
+      )
+    );
+
+    if (
+      avatarRequests.get(node) !== request ||
+      !node.isConnected
+    ) return;
+
+    const url = new URL(data.signedUrl);
+    url.searchParams.set('v', crypto.randomUUID());
+
+    paintAvatar(node, url.href);
+  } catch (error) {
+    console.error('프로필 사진 조회 실패:', error);
+  }
+}
+
+  async function prepareAvatar(file) {
+  if (file.size > 20 * 1024 * 1024) {
+    throw new Error('20MB 이하의 사진을 선택해 주세요.');
+  }
+
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+
+  try {
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+
+      img.onerror = () => reject(
+        new Error(
+          '사진을 읽지 못했어요. JPG 또는 PNG 사진을 선택해 주세요.'
+        )
+      );
+
+      img.src = url;
+    });
+
+    const width = img.naturalWidth;
+    const height = img.naturalHeight;
+
+    if (!width || !height) {
+      throw new Error('사진 크기를 확인하지 못했어요.');
+    }
+
+    // 원본 비율 유지. 작은 이미지는 강제로 확대하지 않는다.
+    const scale = Math.min(1, 1024 / Math.max(width, height));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(width * scale));
+    canvas.height = Math.max(1, Math.round(height * scale));
+
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) {
+      throw new Error('사진을 처리하지 못했어요.');
+    }
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    // 정사각형으로 자르지 않고 전체 이미지를 저장한다.
+    ctx.drawImage(
+      img,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    return await new Promise((resolve, reject) => {
+      canvas.toBlob(blob => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          reject(new Error('사진을 변환하지 못했어요.'));
+        }
+      }, 'image/png');
+    });
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+  function mountProfileAvatar() {
+    const screen =
+      document.getElementById('profileFeedScreen');
+
+    const original = screen?.querySelector(
+      '.frt-profile-card .hero-avatar'
+    );
+
+    if (!original) return;
+
+    const avatar = button('', () => {
+      if (!avatar.disabled) input.click();
+    });
+
+    avatar.className = 'hero-avatar frt-avatar-edit';
+    avatar.setAttribute(
+      'aria-label',
+      '프로필 사진 선택 또는 변경'
+    );
+    avatar.title = '눌러서 프로필 사진 변경';
+    avatar.disabled = true;
+
+    original.replaceWith(avatar);
+    paintAvatar(avatar, null);
+
+    const input = el('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.hidden = true;
+    document.body.append(input);
+
+    const status = el('p', '', 'frt-avatar-status');
+    status.setAttribute('role', 'status');
+
+    screen.querySelector('.frt-profile-card').after(status);
+
+    let owner = null;
+    let version = 0;
+    let uploading = false;
+
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0];
+      input.value = '';
+
+      if (!file || !owner || uploading) return;
+
+      const selectedOwner = owner;
+      const selectedVersion = version;
+
+      const isCurrent = () =>
+        owner === selectedOwner &&
+        version === selectedVersion;
+
+      uploading = true;
+      avatar.disabled = true;
+      status.textContent = '프로필 사진을 저장하고 있어요.';
+
+      try {
+        const blob = await prepareAvatar(file);
+        const active = await user();
+
+        if (
+          !isCurrent() ||
+          active.id !== selectedOwner
+        ) return;
+
+        checked(
+          await avatarBucket.upload(
+             selectedOwner + '/avatar.png',
+             blob,
+             {
+               contentType: 'image/png',
+               cacheControl: '0',
+               upsert: true
+             }
+           )
+        );
+
+        const confirmed = await user();
+
+        if (
+          !isCurrent() ||
+          confirmed.id !== selectedOwner
+        ) return;
+
+        // 이전 사진 조회가 늦게 끝나도 새 사진을 덮지 않는다.
+        avatarRequests.set(avatar, {});
+
+        const preview = URL.createObjectURL(blob);
+        paintAvatar(avatar, preview);
+
+        const img = avatar.querySelector('img');
+        const release = () => URL.revokeObjectURL(preview);
+
+        img.addEventListener('load', release, { once: true });
+        img.addEventListener('error', release, { once: true });
+
+        status.textContent = '프로필 사진을 저장했어요.';
+      } catch (error) {
+        if (isCurrent()) {
+          console.error('프로필 사진 저장 실패:', error);
+
+          status.textContent =
+            error.message || '사진을 저장하지 못했어요.';
+        }
+      } finally {
+        uploading = false;
+        avatar.disabled = !owner;
+      }
+    });
+
+    client.auth.onAuthStateChange((event, session) => {
+      const next = session?.user?.id || null;
+
+      if (next === owner) return;
+
+      owner = next;
+      version++;
+
+      avatarRequests.set(avatar, {});
+      paintAvatar(avatar, null);
+      status.textContent = '';
+      avatar.disabled = !owner || uploading;
+
+      const currentVersion = version;
+
+      // 인증 콜백 바깥에서 사진을 조회한다.
+      setTimeout(() => {
+        if (currentVersion === version) {
+          void loadAvatar(avatar, owner);
+        }
+      }, 0);
+    });
+
+    new MutationObserver(() => {
+      if (
+        !screen.classList.contains('hidden') &&
+        !screen.classList.contains('frt-viewing-public-profile') &&
+        !uploading
+      ) {
+        void loadAvatar(avatar, owner);
+      }
+    }).observe(screen, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+  }
+    let publicProfileRevision = 0;
+
+  function clearPublicProfile() {
+    publicProfileRevision++;
+
+    const screen =
+      document.getElementById('profileFeedScreen');
+
+    screen?.classList.remove('frt-viewing-public-profile');
+    document.getElementById('frtPublicProfile')?.remove();
+  }
+
+  async function openAccountProfile(account) {
+    const screen =
+      document.getElementById('profileFeedScreen');
+
+    if (
+      !screen ||
+      !account?.user_id ||
+      typeof window.openAppPage !== 'function'
+    ) return;
+
+    clearPublicProfile();
+    window.openAppPage('profile');
+
+    if (screen.classList.contains('hidden')) return;
+
+    const request = ++publicProfileRevision;
+    const panel = el('section');
+    panel.id = 'frtPublicProfile';
+
+    const back = button('← 검색으로 돌아가기', () => {
+      clearPublicProfile();
+      window.openAppPage('home');
+      document.getElementById('homeAccountSearchBtn')?.click();
+    });
+
+        const header = el('div', undefined, 'profile-feed-header');
+    header.append(back, el('h2', 'Record Profile Feed'));
+
+    const hero = el(
+      'div',
+      undefined,
+      'hero-card frt-profile-card'
+    );
+
+    hero.innerHTML = `
+      <div class="hero-overlay">
+        <div class="frt-profile-top">
+          <div class="hero-avatar">F</div>
+
+          <div class="frt-profile-summary">
+            <h2 class="hero-name" tabindex="-1"></h2>
+
+            <div class="frt-profile-stats">
+              <div class="frt-profile-stat">
+                <strong data-stat="trips">—</strong>
+                <span>런트립 횟수</span>
+              </div>
+
+              <div class="frt-profile-stat">
+                <strong data-stat="distance">—</strong>
+                <span>러닝 km</span>
+              </div>
+
+              <div class="frt-profile-stat">
+                <strong data-stat="followers">—</strong>
+                <span>팔로워</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-badge">🌙 Night Runner</div>
+        <p class="hero-pace">"오늘도 잘 버틴 Pace"</p>
+      </div>
+    `;
+
+    const heading = hero.querySelector('.hero-name');
+    heading.textContent = '@' + account.username;
+
+    const status = el('p', '프로필을 불러오고 있어요.');
+    status.setAttribute('role', 'status');
+
+    const list = el('div');
+    const recent = el('div', undefined, 'recent-feed');
+
+    recent.append(el('h3', 'Recent Runs'), list);
+
+    const ad = el(
+      'aside',
+      undefined,
+      'frt-ad-slot frt-ad-slot--banner'
+    );
+
+    ad.setAttribute('aria-label', '광고 공간 미리보기');
+
+    ad.append(
+      el('span', '광고 · 미리보기', 'frt-ad-slot-label'),
+      el('div', '배너 광고 공간', 'frt-ad-slot-body')
+    );
+
+    panel.append(header, hero, status, recent, ad);
+
+    screen.append(panel);
+    
+    void loadAvatar(
+      hero.querySelector('.hero-avatar'),
+      account.user_id
+    );
+
+    screen.classList.add('frt-viewing-public-profile');
+
+    heading.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: 'auto' });
+
+    const isCurrent = () =>
+      request === publicProfileRevision &&
+      panel.isConnected &&
+      !screen.classList.contains('hidden');
+
+    try {
+      const current = await user();
+      if (!isCurrent()) return;
+
+            try {
+        const profiles = checked(
+          await client.rpc('frt_social_public_profile', {
+            target_user_id: account.user_id
+          })
+        );
+
+        if (!isCurrent()) return;
+
+        const profile = profiles?.[0];
+
+        if (!profile) {
+          throw new Error('계정 정보를 찾을 수 없어요.');
+        }
+
+        heading.textContent = '@' + profile.username;
+
+        hero.querySelector('[data-stat="trips"]').textContent =
+          String(profile.runtrip_count ?? 0);
+
+        hero.querySelector('[data-stat="distance"]').textContent =
+          Number(profile.total_distance_km ?? 0).toFixed(1) + 'km';
+
+        hero.querySelector('[data-stat="followers"]').textContent =
+          String(profile.follower_count ?? 0);
+      } catch (error) {
+        if (!isCurrent()) return;
+
+        console.error('공개 프로필 통계 조회 실패:', error);
+        status.textContent = '프로필 통계를 불러오지 못했어요.';
+      }
+
+      const profileNotice =
+        status.textContent === '프로필 통계를 불러오지 못했어요.'
+          ? status.textContent
+          : '';
+      const rows = checked(
+        await client
+          .from('frt_social_posts')
+          .select('id,user_id,image_path,caption,created_at')
+          .eq('user_id', account.user_id)
+          .order('created_at', { ascending: false })
+          .order('id')
+          .limit(30)
+      ) || [];
+
+      if (!isCurrent()) return;
+
+      const cards = await Promise.all(
+        rows.map(async post => {
+          const article = el(
+            'article',
+            undefined,
+            'feed-card recent-run-card'
+          );
+
+          try {
+            const data = checked(
+              await bucket.createSignedUrl(
+                post.image_path,
+                3600
+              )
+            );
+
+            if (!data?.signedUrl) {
+              throw new Error('이미지 주소 없음');
+            }
+
+            const img = el('img');
+            img.className = 'recent-run-photo';
+            img.alt =
+              '@' + account.username + '의 기록 게시물';
+            img.loading = 'lazy';
+
+            img.addEventListener('error', () => {
+              img.replaceWith(
+                el('p', '이미지를 불러오지 못했어요.')
+              );
+            }, { once: true });
+
+            img.src = data.signedUrl;
+            article.append(img);
+          } catch (error) {
+            console.error('프로필 이미지 조회 실패:', error);
+            article.append(
+              el('p', '이미지를 불러오지 못했어요.')
+            );
+          }
+
+          if (post.caption) {
+            article.append(
+              el('p', post.caption, 'frt-published-caption')
+            );
+          }
+
+          article.append(
+            el(
+              'small',
+              new Date(post.created_at).toLocaleDateString(
+                document.documentElement.lang || 'ko'
+              )
+            )
+          );
+
+          return article;
+        })
+      );
+
+      const confirmed = await user();
+      if (!isCurrent()) return;
+
+      if (confirmed.id !== current.id) {
+        clearPublicProfile();
+        return;
+      }
+
+      list.replaceChildren(...cards);
+
+      status.textContent = !rows.length
+        ? '아직 공개한 게시물이 없어요.'
+        : rows.length === 30
+          ? '최근 공개 게시물 30개를 표시해요.'
+          : '';
+      status.textContent = [profileNotice, status.textContent]
+        .filter(Boolean)
+        .join(' ');    
+    } catch (error) {
+      if (!isCurrent()) return;
+
+      console.error('계정 프로필 조회 실패:', error);
+
+      status.textContent =
+        error.message === '로그인이 필요해요.'
+          ? error.message
+          : '게시물을 불러오지 못했어요. 다시 시도해 주세요.';
+    }
+  }
+
+  function mountPublicProfile() {
+    const screen =
+      document.getElementById('profileFeedScreen');
+
+    if (!screen) return;
+
+    new MutationObserver(() => {
+      if (
+        screen.classList.contains('hidden') &&
+        document.getElementById('frtPublicProfile')
+      ) {
+        clearPublicProfile();
+      }
+    }).observe(screen, {
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    document.querySelectorAll('.app-nav-button').forEach(nav => {
+      nav.addEventListener('click', () => {
+        if (nav.dataset.pageTarget) {
+          clearPublicProfile();
+        }
+      }, true);
+    });
+
+    let accountId;
+
+    client.auth.onAuthStateChange((event, session) => {
+      const nextId = session?.user?.id || null;
+
+      if (nextId !== accountId || event === 'SIGNED_OUT') {
+        accountId = nextId;
+        clearPublicProfile();
+      }
+    });
+  }
+    function mountAccountSearch() {
+    const trigger =
+      document.getElementById('homeAccountSearchBtn');
+
+    if (!trigger) return;
+
+    const dialog = el('dialog');
+    dialog.id = 'frtAccountSearchDialog';
+    dialog.setAttribute(
+      'aria-labelledby',
+      'frtAccountSearchTitle'
+    );
+
+    const header = el(
+      'div',
+      undefined,
+      'frt-account-search-header'
+    );
+
+    const title = el('h2', '계정 검색');
+    title.id = 'frtAccountSearchTitle';
+
+    const close = button('닫기', () => dialog.close());
+    close.setAttribute('aria-label', '계정 검색 닫기');
+
+    header.append(title, close);
+
+    const form = el('form');
+    form.className = 'frt-account-search-form';
+
+    const input = el('input');
+    input.type = 'search';
+    input.placeholder = '아이디 검색';
+    input.maxLength = 21;
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.setAttribute('autocapitalize', 'none');
+    input.setAttribute('aria-label', '검색할 계정 아이디');
+    input.setAttribute('enterkeyhint', 'search');
+
+    const submit = el('button', '검색');
+    submit.type = 'submit';
+
+    form.append(input, submit);
+
+    const status = el('p', '찾고 싶은 아이디를 입력해 주세요.');
+    status.setAttribute('role', 'status');
+
+    const list = el('ul');
+    list.setAttribute('aria-label', '계정 검색 결과');
+
+    dialog.append(header, form, status, list);
+    document.body.append(dialog);
+
+    let revision = 0;
+    let timer;
+    let composing = false;
+
+    function invalidate() {
+      clearTimeout(timer);
+      revision++;
+      list.replaceChildren();
+    }
+
+    async function search() {
+      invalidate();
+
+      const request = revision;
+      const query = input.value
+        .trim()
+        .replace(/^@/, '')
+        .toLowerCase();
+
+      if (!query) {
+        status.textContent =
+          '찾고 싶은 아이디를 입력해 주세요.';
+        return;
+      }
+
+      if (!/^[a-z0-9_]{1,20}$/.test(query)) {
+        status.textContent =
+          '영문·숫자·밑줄(_)로 아이디를 검색해 주세요.';
+        return;
+      }
+
+      status.textContent = '계정을 검색하고 있어요.';
+
+      try {
+        await user();
+
+        if (request !== revision || !dialog.open) return;
+
+        const rows = checked(
+          await client.rpc('frt_social_search_accounts', {
+            search_text: query
+          })
+        ) || [];
+
+        if (request !== revision || !dialog.open) return;
+
+        for (const row of rows) {
+          const item = el('li');
+
+          const accountButton = button(
+            '@' + row.username,
+            () => {
+              dialog.close();
+              void openAccountProfile(row);
+            }
+          );
+
+          accountButton.className = 'frt-account-result';
+          accountButton.setAttribute(
+            'aria-label',
+            '@' + row.username + '의 기록 프로필 피드 보기'
+          );
+
+          item.append(accountButton);
+          list.append(item);
+        }
+
+        status.textContent = rows.length
+          ? rows.length === 30
+            ? '검색 결과 30개예요. 아이디를 더 입력하면 결과를 좁힐 수 있어요.'
+            : `검색 결과 ${rows.length}개예요.`
+          : '일치하는 계정이 없어요.';
+      } catch (error) {
+        if (request !== revision || !dialog.open) return;
+
+        console.error('계정 검색 실패:', error);
+        status.textContent =
+          error.message === '로그인이 필요해요.'
+            ? error.message
+            : '검색하지 못했어요. 잠시 후 다시 시도해 주세요.';
+      }
+    }
+
+    function scheduleSearch() {
+      invalidate();
+
+      if (composing) return;
+
+      status.textContent = input.value.trim()
+        ? '검색을 준비하고 있어요.'
+        : '찾고 싶은 아이디를 입력해 주세요.';
+
+      timer = setTimeout(search, 300);
+    }
+
+    input.addEventListener('input', scheduleSearch);
+
+    input.addEventListener('compositionstart', () => {
+      composing = true;
+      invalidate();
+    });
+
+    input.addEventListener('compositionend', () => {
+      composing = false;
+      scheduleSearch();
+    });
+
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+      if (!composing) void search();
+    });
+
+    trigger.addEventListener('click', () => {
+      invalidate();
+      input.value = '';
+      status.textContent =
+        '찾고 싶은 아이디를 입력해 주세요.';
+
+      if (!dialog.open) dialog.showModal();
+      input.focus();
+    });
+
+    dialog.addEventListener('close', () => {
+      if (!dialog.open) invalidate();
+    });
+
+    client.auth.onAuthStateChange((event, session) => {
+      if (
+        event === 'SIGNED_OUT' ||
+        event === 'SIGNED_IN' ||
+        !session
+      ) {
+        invalidate();
+        input.value = '';
+        if (dialog.open) dialog.close();
+      }
+    });
+  }
   function mount() {
     mountProfileFollows();
+    mountProfileAvatar();
+    mountPublicProfile();
+    mountAccountSearch();
 
     const anchor = document.getElementById('frtHomeFeedRoot');
     if (!anchor) return;
