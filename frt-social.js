@@ -28,7 +28,41 @@
     }));
     return new Map((rows || []).map(row => [row.user_id, row.username]));
   }
-  const author = (map, id) => map.get(id) ? '@' + map.get(id) : '사용자';
+  const author = (map, id) => map.get(id) || '사용자';
+
+  function accountIdentity(map, id) {
+    const identity = el(
+      'span',
+      undefined,
+      'frt-account-identity'
+    );
+
+    const avatar = el(
+      'span',
+      undefined,
+      'frt-account-identity-avatar'
+    );
+
+    avatar.setAttribute('aria-hidden', 'true');
+    paintAvatar(avatar, null);
+
+    identity.append(
+      avatar,
+      el('strong', author(map, id), 'frt-account-identity-name')
+    );
+
+    // 계정명이 실제 화면에 나타날 때 사진을 조회한다.
+    const observer = new IntersectionObserver(entries => {
+      if (!entries.some(entry => entry.isIntersecting)) return;
+
+      observer.disconnect();
+      void loadAvatar(avatar, id);
+    });
+
+    observer.observe(identity);
+
+    return identity;
+  }
   function button(text, action) {
     const node = el('button', text);
     node.type = 'button';
@@ -67,7 +101,10 @@
       if (!rows.length) panel.append(el('p', '첫 댓글을 남겨보세요.'));
       for (const row of rows.slice().reverse()) {
         const item = el('p');
-        item.append(el('strong', author(authors, row.user_id)), document.createTextNode(' ' + row.body));
+        item.append(
+          accountIdentity(authors, row.user_id),
+          document.createTextNode(' ' + row.body)
+        );
         panel.append(item);
       }
       if (rows.length === 100) panel.prepend(el('p', '최근 댓글 100개를 표시해요.'));
@@ -83,7 +120,7 @@
     );
 
     authorRow.append(
-      el('strong', author(authors, post.user_id))
+      accountIdentity(authors, post.user_id)
     );
 
     const followStatus = el(
@@ -590,7 +627,9 @@
           state.seen.add(row.user_id);
 
           const item = el('li');
-          item.append(el('strong', author(authors, row.user_id)));
+          item.append(
+            accountIdentity(authors, row.user_id)
+          );
 
           if (state.kind === 'following') {
             const cancel = button('팔로우 취소', async () => {
@@ -1173,12 +1212,12 @@
     `;
 
     const heading = hero.querySelector('.hero-name');
-    heading.textContent = '@' + account.username;
+    heading.textContent = account.username;
 
     const status = el('p', '프로필을 불러오고 있어요.');
     status.setAttribute('role', 'status');
 
-    const list = el('div');
+    const list = el('div', undefined, 'frt-profile-post-grid');
     const recent = el('div', undefined, 'recent-feed');
 
     recent.append(el('h3', 'Recent Runs'), list);
@@ -1234,7 +1273,7 @@
           throw new Error('계정 정보를 찾을 수 없어요.');
         }
 
-        heading.textContent = '@' + profile.username;
+        heading.textContent = profile.username;
 
         hero.querySelector('[data-stat="trips"]').textContent =
           String(profile.runtrip_count ?? 0);
@@ -1290,7 +1329,7 @@
             const img = el('img');
             img.className = 'recent-run-photo';
             img.alt =
-              '@' + account.username + '의 기록 게시물';
+              account.username + '의 기록 게시물';
             img.loading = 'lazy';
 
             img.addEventListener('error', () => {
@@ -1498,7 +1537,7 @@
           const item = el('li');
 
           const accountButton = button(
-            '@' + row.username,
+            row.username,
             () => {
               dialog.close();
               void openAccountProfile(row);
@@ -1508,11 +1547,30 @@
           accountButton.className = 'frt-account-result';
           accountButton.setAttribute(
             'aria-label',
-            '@' + row.username + '의 기록 프로필 피드 보기'
+            row.username + '의 기록 프로필 피드 보기'
           );
+
+          const avatar = el(
+            'span',
+            undefined,
+            'frt-account-result-avatar'
+          );
+
+          avatar.setAttribute('aria-hidden', 'true');
+          paintAvatar(avatar, null);
+
+          const name = el(
+            'span',
+            row.username,
+            'frt-account-result-name'
+          );
+
+          accountButton.replaceChildren(avatar, name);
 
           item.append(accountButton);
           list.append(item);
+
+          void loadAvatar(avatar, row.user_id);
         }
 
         status.textContent = rows.length

@@ -10115,3 +10115,298 @@ body {
   -webkit-mask-image: none;
   mask-image: none;
 }
+/* 계정 검색 결과: 위치마커 프로필 사진과 계정명 */
+#frtAccountSearchDialog .frt-account-result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+#frtAccountSearchDialog .frt-account-result-avatar {
+  position: relative;
+  display: block;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 52px;
+}
+
+#frtAccountSearchDialog .frt-account-result-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#frtAccountSearchDialog .frt-avatar-pin {
+  --frt-logo-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 144'%3E%3Cpath d='M50 0C22 0 0 27 0 57C0 90 25 121 50 144C75 121 100 90 100 57C100 27 78 0 50 0Z'/%3E%3C/svg%3E");
+
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  box-sizing: border-box;
+  width: 36px;
+  height: 52px;
+  background: #5eead4;
+  overflow: hidden;
+
+  -webkit-mask-image: var(--frt-logo-mask);
+  mask-image: var(--frt-logo-mask);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+#frtAccountSearchDialog .frt-avatar-pin > img,
+#frtAccountSearchDialog .frt-avatar-letter {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  box-sizing: border-box;
+  width: calc(100% - 4px);
+  height: calc(100% - 5px);
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: #334155;
+
+  -webkit-mask-image: var(--frt-logo-mask);
+  mask-image: var(--frt-logo-mask);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+#frtAccountSearchDialog .frt-avatar-pin > img {
+  display: block;
+  max-width: none;
+  object-fit: cover;
+  object-position: center;
+}
+
+#frtAccountSearchDialog .frt-avatar-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 8px;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+/* 투명 로고는 기존 프로필과 동일하게 자체 윤곽 유지 */
+#frtAccountSearchDialog .frt-avatar-pin.frt-avatar-cutout {
+  background: transparent;
+  overflow: visible;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+#frtAccountSearchDialog .frt-avatar-pin.frt-avatar-cutout > img {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  object-fit: contain;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+/* 기록 프로필 게시물: 최신순 3열 썸네일 */
+#profileRecentRuns,
+#frtPublicProfile .frt-profile-post-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-flow: row;
+  gap: 2px;
+  width: 100%;
+  min-width: 0;
+}
+
+#profileRecentRuns > .recent-run-card,
+#frtPublicProfile .frt-profile-post-grid > .recent-run-card {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  aspect-ratio: 3 / 4;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background: #e2e8f0;
+  box-shadow: none;
+}
+
+#profileRecentRuns > .recent-run-card > .recent-run-photo,
+#frtPublicProfile .frt-profile-post-grid
+  > .recent-run-card > .recent-run-photo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border-radius: 0;
+  object-fit: cover;
+  object-position: center;
+}
+
+/* 격자에는 사진만 표시 */
+#profileRecentRuns > .recent-run-card > .frt-published-caption,
+#frtPublicProfile .frt-profile-post-grid
+  > .recent-run-card > .frt-published-caption,
+#frtPublicProfile .frt-profile-post-grid
+  > .recent-run-card > small {
+  display: none;
+}
+
+/* 게시물이 없을 때 안내는 전체 너비로 표시 */
+#profileRecentRuns > .small-feed-card {
+  grid-column: 1 / -1;
+}
+/* 공통 계정 표시: 위치마커 프로필 사진 + 계정명 */
+.frt-account-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+  vertical-align: middle;
+}
+
+.frt-account-identity > .frt-account-identity-name {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.frt-account-identity > .frt-account-identity-avatar {
+  position: relative;
+  display: block;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 40px;
+}
+
+/* 기존 프로필과 같은 위치마커 윤곽 */
+.frt-account-identity-avatar > .frt-avatar-pin {
+  --frt-logo-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 144'%3E%3Cpath d='M50 0C22 0 0 27 0 57C0 90 25 121 50 144C75 121 100 90 100 57C100 27 78 0 50 0Z'/%3E%3C/svg%3E");
+
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #5eead4;
+  transform: none;
+  box-shadow: none;
+  overflow: hidden;
+
+  -webkit-mask-image: var(--frt-logo-mask);
+  mask-image: var(--frt-logo-mask);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.frt-account-identity-avatar > .frt-avatar-pin > img,
+.frt-account-identity-avatar > .frt-avatar-pin > .frt-avatar-letter {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  box-sizing: border-box;
+  width: calc(100% - 4px);
+  height: calc(100% - 5px);
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #334155;
+  transform: none;
+
+  -webkit-mask-image: var(--frt-logo-mask);
+  mask-image: var(--frt-logo-mask);
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+
+.frt-account-identity-avatar > .frt-avatar-pin > img {
+  display: block;
+  object-fit: cover;
+  object-position: center;
+}
+
+.frt-account-identity-avatar > .frt-avatar-pin > .frt-avatar-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 6px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+/* 투명 로고는 자체 윤곽 유지 */
+.frt-account-identity-avatar > .frt-avatar-pin.frt-avatar-cutout {
+  background: transparent;
+  overflow: visible;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.frt-account-identity-avatar > .frt-avatar-pin.frt-avatar-cutout > img {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  object-fit: contain;
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+/* 홈피드 프로필 사진은 지정한 마커 높이 유지 */
+#frtHomeFeedRoot .frt-account-identity-avatar
+  > .frt-avatar-pin > img {
+  width: calc(100% - 4px);
+  height: calc(100% - 5px);
+}
+
+#frtHomeFeedRoot .frt-account-identity-avatar
+  > .frt-avatar-pin.frt-avatar-cutout > img {
+  width: 100%;
+  height: 100%;
+}
+/* 위치마커 윤곽 유지, 민트색 테두리 제거 */
+#profileFeedScreen .frt-avatar-pin,
+#frtAccountSearchDialog .frt-avatar-pin,
+.frt-account-identity-avatar > .frt-avatar-pin {
+  background: transparent;
+}
+
+#profileFeedScreen .frt-avatar-pin > img,
+#profileFeedScreen .frt-avatar-pin > .frt-avatar-letter,
+#frtAccountSearchDialog .frt-avatar-pin > img,
+#frtAccountSearchDialog .frt-avatar-pin > .frt-avatar-letter,
+.frt-account-identity-avatar > .frt-avatar-pin > img,
+.frt-account-identity-avatar > .frt-avatar-pin > .frt-avatar-letter {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* 홈피드의 기존 이미지 크기 보정도 덮어쓰기 */
+#frtHomeFeedRoot .frt-account-identity-avatar
+  > .frt-avatar-pin > img {
+  width: 100%;
+  height: 100%;
+}

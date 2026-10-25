@@ -6066,7 +6066,9 @@ function renderRecordProfileFeed() {
     document.getElementById('profileRunTripCount');
   const profileRecentRuns = document.getElementById('profileRecentRuns');
   const publishedRecords =
-      runRecords.slice();
+    runRecords.filter(function (record) {
+      return Boolean(record.publishedContentPhotoId);
+    });
    const featured =
   document.getElementById(
     'profileFeedScreen'
@@ -6164,7 +6166,7 @@ if (featured) {
     profileRecentRuns.innerHTML = `
       <div class="feed-card small-feed-card">
         <strong>0.00km</strong>
-        <span>아직 저장된 러닝 기록이 없습니다</span>
+        <span>아직 게시한 콘텐츠가 없습니다</span>
       </div>
     `;
     return;
@@ -6177,7 +6179,6 @@ profileRecentRuns.innerHTML =
       return (b.publishedAt || b.id || 0) -
         (a.publishedAt || a.id || 0);
     })
-    .slice(0, 3)
   .map(function (record) {
     const mood = record.emotionalPace || '마음 환기 Pace';
     const memo = record.memo || '';
@@ -6193,7 +6194,6 @@ profileRecentRuns.innerHTML =
             class="recent-run-photo"
             data-frt-content-photo="${photoId}"
             alt="게시한 콘텐츠를 불러오고 있어요."
-            style="display:block;width:100%;height:auto;object-fit:contain;"
           />
           ${record.publishedCaption
             ? `<p class="frt-published-caption">${escapePlaceSearchText(record.publishedCaption)}</p>`
