@@ -24159,7 +24159,7 @@ openAppPage('home');
       username ? '@' + username : '';
 
     profileName.textContent = user
-      ? (username ? '@' + username : '회원')
+      ? (username ? username : '회원')
       : '게스트';
   }
 
