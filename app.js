@@ -24171,6 +24171,13 @@ openAppPage('home');
       ? '이미 계정이 있다면 로그인'
       : '처음이라면 회원가입';
 
+    const googleButton = el('frtGoogleSignup');
+
+    if (googleButton) {
+      googleButton.textContent = signupMode
+        ? 'Google계정으로 가입하기'
+        : 'Google계정으로 로그인하기';
+    }
     password.autocomplete = signupMode
       ? 'new-password'
       : 'current-password';
@@ -24180,6 +24187,7 @@ openAppPage('home');
     confirm.disabled = !signupMode;
     confirm.required = signupMode;
     el('frtForgotOpen').hidden = signupMode;
+    el('frtRememberWrap').hidden = signupMode;
 
     password.value = '';
     confirm.value = '';
@@ -24718,6 +24726,10 @@ openAppPage('home');
     message('Google 계정 선택 화면으로 이동하고 있어요.');
 
     try {
+      await window.freeRunTripSetRememberLogin(
+        signupMode || el('frtRememberLogin').checked
+      );
+
       const { data, error } = await client.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -24772,7 +24784,11 @@ openAppPage('home');
     message(isSignup ? '가입 요청 중이에요.' : '로그인 중이에요.');
 
     try {
-            const redirectUrl = 'https://freeruntrip.vercel.app/';
+      await window.freeRunTripSetRememberLogin(
+        isSignup || el('frtRememberLogin').checked
+      );
+
+      const redirectUrl = 'https://freeruntrip.vercel.app/';
 
       const result = isSignup
         ? await client.auth.signUp({

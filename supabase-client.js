@@ -77,11 +77,85 @@
     return;
   }
 
+    // 로그인 유지 여부에 따라 인증 정보의 저장 위치를 선택한다.
+  const authStorageKey =
+    'sb-ypabpaammfsygfeulyoe-auth-token';
+
+  const authModeKey = authStorageKey + '-storage-mode';
+
+  function selectedAuthStorage() {
+    return sessionStorage.getItem(authModeKey) === 'session'
+      ? sessionStorage
+      : localStorage;
+  }
+
+  const authStorage = {
+    getItem(key) {
+      return selectedAuthStorage().getItem(key);
+    },
+
+    setItem(key, value) {
+      const target = selectedAuthStorage();
+      const other = target === localStorage
+        ? sessionStorage
+        : localStorage;
+
+      target.setItem(key, value);
+      other.removeItem(key);
+    },
+
+    removeItem(key) {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    }
+  };
+
+  window.freeRunTripSetRememberLogin = async function (remember) {
+    // 인증 초기화가 끝난 다음 저장 위치를 변경한다.
+    await window.freeRunTripSupabase.auth.getSession();
+
+    const previous = selectedAuthStorage();
+    const target = remember ? localStorage : sessionStorage;
+
+    const keys = [
+      authStorageKey,
+      authStorageKey + '-code-verifier',
+      authStorageKey + '-user'
+    ];
+
+    if (previous !== target) {
+      for (const key of keys) {
+        const value = previous.getItem(key);
+
+        if (value !== null) {
+          target.setItem(key, value);
+        } else {
+          target.removeItem(key);
+        }
+      }
+
+      sessionStorage.setItem(
+        authModeKey,
+        remember ? 'local' : 'session'
+      );
+
+      for (const key of keys) {
+        previous.removeItem(key);
+      }
+    } else {
+      sessionStorage.setItem(
+        authModeKey,
+        remember ? 'local' : 'session'
+      );
+    }
+  };
   window.freeRunTripSupabase = window.supabase.createClient(
     projectUrl,
     publishableKey,
     {
       auth: {
+        storageKey: authStorageKey,
+        storage: authStorage,
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true
