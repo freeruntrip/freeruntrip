@@ -6193,6 +6193,7 @@ profileRecentRuns.innerHTML =
           <img
             class="recent-run-photo"
             data-frt-content-photo="${photoId}"
+            data-frt-source-record="${encodeURIComponent(String(record.id))}"
             alt="게시한 콘텐츠를 불러오고 있어요."
           />
           ${record.publishedCaption

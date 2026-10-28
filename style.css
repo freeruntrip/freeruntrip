@@ -10433,3 +10433,179 @@ body {
   accent-color: #0875a5;
   cursor: pointer;
 }
+/* 기록 프로필: 같은 게시물 영역에서 세로 목록으로 전환 */
+#profileRecentRuns.frt-profile-expanded,
+#frtPublicProfile .frt-profile-post-grid.frt-profile-expanded {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+#profileRecentRuns.frt-profile-expanded > .recent-run-card,
+#frtPublicProfile .frt-profile-post-grid.frt-profile-expanded
+  > .recent-run-card {
+  display: block;
+  height: auto;
+  aspect-ratio: auto;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 14px;
+  scroll-margin-top: 16px;
+}
+
+#profileRecentRuns.frt-profile-expanded
+  > .recent-run-card > .recent-run-photo,
+#frtPublicProfile .frt-profile-post-grid.frt-profile-expanded
+  > .recent-run-card > .recent-run-photo {
+  width: 100%;
+  height: auto;
+  aspect-ratio: auto;
+  object-fit: contain;
+}
+
+#profileRecentRuns.frt-profile-expanded
+  > .recent-run-card > .frt-published-caption,
+#frtPublicProfile .frt-profile-post-grid.frt-profile-expanded
+  > .recent-run-card > .frt-published-caption {
+  display: block;
+  margin: 0;
+  padding: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+#frtPublicProfile .frt-profile-post-grid.frt-profile-expanded
+  > .recent-run-card > small {
+  display: block;
+  padding: 0 14px 14px;
+}
+
+.frt-profile-list-bar {
+  margin: 0 0 14px;
+}
+
+.frt-profile-list-bar button {
+  padding: 10px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+  cursor: pointer;
+}
+
+#profileRecentRuns > .recent-run-card,
+#frtPublicProfile .frt-profile-post-grid > .recent-run-card {
+  cursor: pointer;
+}
+/* 프로필 반응은 세로 목록에서만 표시 */
+.frt-profile-reactions {
+  display: none;
+}
+
+.frt-profile-expanded
+  > .recent-run-card
+  > .frt-profile-reactions {
+  display: block;
+  box-sizing: border-box;
+  min-height: 80px;
+  padding: 0 14px 14px;
+}
+
+.frt-profile-reactions .frt-social-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.frt-profile-reactions button {
+  padding: 10px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+  cursor: pointer;
+}
+
+.frt-profile-reactions button[aria-pressed="true"] {
+  color: #d62954;
+  border-color: #d62954;
+}
+
+.frt-profile-reactions button:disabled {
+  opacity: 0.5;
+}
+
+.frt-profile-reactions textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 76px;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  color: #172033;
+  font: inherit;
+}
+
+.frt-profile-reactions form > button {
+  margin-top: 8px;
+}
+
+.frt-profile-reactions p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.frt-profile-reactions .frt-social-status {
+  color: #9b2534;
+  font-size: 13px;
+}
+
+.frt-profile-reactions .frt-social-status:empty {
+  display: none;
+}
+/* 기록 프로필 댓글의 작은 프로필 사진 */
+#profileFeedScreen .frt-profile-reactions
+  .frt-account-identity-avatar {
+  position: relative;
+  display: block;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 40px;
+}
+
+#profileFeedScreen .frt-profile-reactions
+  .frt-account-identity-avatar > .frt-avatar-pin {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  transform: none;
+  box-shadow: none;
+}
+
+#profileFeedScreen .frt-profile-reactions
+  .frt-account-identity-avatar > .frt-avatar-pin > img,
+#profileFeedScreen .frt-profile-reactions
+  .frt-account-identity-avatar > .frt-avatar-pin > .frt-avatar-letter {
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  transform: none;
+}
+
+#profileFeedScreen .frt-profile-reactions
+  .frt-account-identity-avatar > .frt-avatar-pin > .frt-avatar-letter {
+  font-size: 14px;
+  padding-bottom: 6px;
+}

@@ -9,6 +9,7 @@
   const shownCounts = new Map();
   let root;
   let busy = false;
+
   const el = (tag, text, cls) => {
     const node = document.createElement(tag);
     if (text !== undefined) node.textContent = text;
@@ -88,15 +89,245 @@
     }, { onConflict: 'user_id,source_record_id' }).select('id').single());
     await refresh();
   };
+  const postReactionViews = new Set();
+  let reactionAccountEpoch = 0;
 
+  // 같은 게시물을 표시하는 화면들의 반응 갱신
+  async function syncPostReactions(postId) {
+    const jobs = [];
+
+    for (const view of postReactionViews) {
+      if (!view.valid()) {
+        postReactionViews.delete(view);
+      } else if (
+        view.node.isConnected &&
+        String(view.postId) === String(postId)
+      ) {
+        jobs.push(view.refresh());
+      }
+    }
+
+    await Promise.allSettled(jobs);
+  }
+
+  // 홈과 프로필에서 함께 사용하는 좋아요·댓글
+  async function appendPostReactions(
+    post,
+    current,
+    token,
+    container
+  ) {
+    const valid = () =>
+      typeof token === 'function'
+        ? token()
+        : token === generation;
+
+    const wrap = el('div', undefined, 'frt-post-reactions');
+    const status = el('p', '', 'frt-social-status');
+
+    status.setAttribute('role', 'status');
+
+    const actions = el('div', undefined, 'frt-social-actions');
+    const panel = el('div');
+    const area = el('div');
+
+    area.hidden = true;
+
+    let liked = false;
+    let likesRequest = 0;
+    let countRequest = 0;
+
+    const like = button('좋아요 불러오는 중', async () => {
+      like.disabled = true;
+      status.textContent = '';
+
+      try {
+        const active = await user();
+
+        if (active.id !== current.id || !valid()) return;
+
+        if (liked) {
+          checked(
+            await client.from('frt_social_likes')
+              .delete()
+              .eq('post_id', post.id)
+              .eq('user_id', current.id)
+          );
+        } else {
+          checked(
+            await client.from('frt_social_likes').upsert(
+              {
+                post_id: post.id,
+                user_id: current.id
+              },
+              {
+                onConflict: 'post_id,user_id',
+                ignoreDuplicates: true
+              }
+            )
+          );
+        }
+
+        if (!valid()) return;
+
+        await syncPostReactions(post.id);
+      } catch (error) {
+        if (valid()) status.textContent = message(error);
+      } finally {
+        like.disabled = false;
+      }
+    });
+
+    async function loadLikes() {
+      const request = ++likesRequest;
+
+      const [count, mine] = await Promise.all([
+        client.from('frt_social_likes')
+          .select('*', { count: 'exact', head: true })
+          .eq('post_id', post.id),
+
+        client.from('frt_social_likes')
+          .select('user_id')
+          .eq('post_id', post.id)
+          .eq('user_id', current.id)
+      ]);
+
+      checked(count);
+      checked(mine);
+
+      if (!valid() || request !== likesRequest) return;
+
+      liked = (mine.data || []).length > 0;
+
+      like.textContent =
+        `${liked ? '♥' : '♡'} 좋아요 ${count.count || 0}`;
+
+      like.setAttribute('aria-pressed', String(liked));
+    }
+
+    const toggle = button('댓글', async () => {
+      if (!valid()) return;
+
+      area.hidden = !area.hidden;
+
+      toggle.setAttribute(
+        'aria-expanded',
+        String(!area.hidden)
+      );
+
+      if (!area.hidden) {
+        await comments(post, panel, valid);
+      }
+    });
+
+    toggle.setAttribute('aria-expanded', 'false');
+
+    const form = el('form');
+    const input = el('textarea');
+
+    input.maxLength = 1000;
+    input.required = true;
+    input.placeholder = '댓글을 남겨보세요';
+    input.setAttribute('aria-label', '댓글 내용');
+
+    const submit = el('button', '등록');
+    submit.type = 'submit';
+
+    form.append(input, submit);
+
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+
+      const body = input.value.trim();
+
+      if (!body || submit.disabled) return;
+
+      submit.disabled = true;
+      status.textContent = '';
+
+      try {
+        const active = await user();
+
+        if (active.id !== current.id || !valid()) return;
+
+        checked(
+          await client.from('frt_social_comments').insert({
+            post_id: post.id,
+            user_id: current.id,
+            body
+          })
+        );
+
+        if (!valid()) return;
+
+        input.value = '';
+
+        await syncPostReactions(post.id);
+      } catch (error) {
+        if (valid()) status.textContent = message(error);
+      } finally {
+        submit.disabled = false;
+      }
+    });
+
+    async function loadCount() {
+      const request = ++countRequest;
+
+      const result = await client
+        .from('frt_social_comments')
+        .select('*', { count: 'exact', head: true })
+        .eq('post_id', post.id);
+
+      checked(result);
+
+      if (valid() && request === countRequest) {
+        toggle.textContent = `댓글 ${result.count || 0}`;
+      }
+    }
+
+    async function refreshReactions() {
+      try {
+        await Promise.all([
+          loadLikes(),
+          loadCount(),
+          area.hidden
+            ? Promise.resolve()
+            : comments(post, panel, valid)
+        ]);
+      } catch (error) {
+        if (valid()) status.textContent = message(error);
+      }
+    }
+
+    area.append(panel, form);
+    actions.append(like, toggle);
+    wrap.append(actions, area, status);
+    container.append(wrap);
+
+    postReactionViews.add({
+      node: wrap,
+      postId: post.id,
+      valid,
+      refresh: refreshReactions
+    });
+
+    await refreshReactions();
+
+    return wrap;
+  }
   async function comments(post, panel, token) {
+    const isCurrent = () =>
+      typeof token === 'function'
+        ? token()
+        : token === generation;
+
     panel.replaceChildren(el('p', '댓글을 불러오고 있어요.'));
     try {
       const rows = checked(await client.from('frt_social_comments')
         .select('id,user_id,body,created_at').eq('post_id', post.id)
         .order('created_at', { ascending: false }).order('id').limit(100));
       const authors = await names(rows.map(row => row.user_id));
-      if (token !== generation) return;
+      if (!isCurrent()) return;
       panel.replaceChildren();
       if (!rows.length) panel.append(el('p', '첫 댓글을 남겨보세요.'));
       for (const row of rows.slice().reverse()) {
@@ -108,10 +339,19 @@
         panel.append(item);
       }
       if (rows.length === 100) panel.prepend(el('p', '최근 댓글 100개를 표시해요.'));
-    } catch (error) { if (token === generation) panel.replaceChildren(el('p', message(error))); }
+    } catch (error) {
+      if (isCurrent()) {
+        panel.replaceChildren(el('p', message(error)));
+      }
+    }
   }
 
-  async function card(post, current, authors, token) {
+  async function card(
+    post,
+    current,
+    authors,
+    token
+  ) {
     const article = el('article', undefined, 'frt-social-card');
         const authorRow = el(
       'div',
@@ -148,6 +388,8 @@
             return;
           }
 
+          following =
+            followBtn.getAttribute('aria-pressed') === 'true';
           if (following) {
             checked(
               await client
@@ -175,7 +417,6 @@
 
           if (token !== generation) return;
 
-          // 같은 작성자의 다른 게시물 버튼도 함께 갱신한다.
           await refresh();
         } catch (error) {
           if (token === generation) {
@@ -232,70 +473,21 @@
     const signed = await bucket.createSignedUrl(post.image_path, 3600);
     if (signed.error) article.append(el('p', '사진을 불러오지 못했어요.'));
     else {
-      const img = el('img'); img.src = signed.data.signedUrl; img.alt = '공유한 러닝 기록'; img.loading = 'lazy';
+            const img = el('img');
+
+      img.src = signed.data.signedUrl;
+      img.alt = '공유한 러닝 기록';
+      img.loading = 'lazy';
+      img.classList.add('frt-post-media');
+
       article.append(img);
     }
     if (post.caption) article.append(el('p', post.caption));
-    const status = el('p', '', 'frt-social-status'); status.setAttribute('role', 'status');
-    const actions = el('div', undefined, 'frt-social-actions');
-    let liked = false;
-    const like = button('좋아요 불러오는 중', async () => {
-      like.disabled = true; status.textContent = '';
-      try {
-        const active = await user();
-        if (active.id !== current.id || token !== generation) return;
-        if (liked) checked(await client.from('frt_social_likes').delete().eq('post_id', post.id).eq('user_id', current.id));
-        else checked(await client.from('frt_social_likes').upsert({ post_id: post.id, user_id: current.id }, { onConflict: 'post_id,user_id', ignoreDuplicates: true }));
-        await loadLikes();
-      } catch (error) { status.textContent = message(error); }
-      finally { like.disabled = false; }
-    });
-    async function loadLikes() {
-      const [count, mine] = await Promise.all([
-        client.from('frt_social_likes').select('*', { count: 'exact', head: true }).eq('post_id', post.id),
-        client.from('frt_social_likes').select('user_id').eq('post_id', post.id).eq('user_id', current.id)
-      ]);
-      checked(count); checked(mine);
-      liked = mine.data.length > 0;
-      like.textContent = `${liked ? '♥' : '♡'} 좋아요 ${count.count || 0}`;
-      like.setAttribute('aria-pressed', String(liked));
-    }
-    const panel = el('div');
-    const area = el('div'); area.hidden = true;
-    const toggle = button('댓글', async () => {
-      area.hidden = !area.hidden;
-      toggle.setAttribute('aria-expanded', String(!area.hidden));
-      if (!area.hidden) await comments(post, panel, token);
-    });
-    toggle.setAttribute('aria-expanded', 'false');
-    const form = el('form');
-    const input = el('textarea'); input.maxLength = 1000; input.required = true;
-    input.placeholder = '댓글을 남겨보세요'; input.setAttribute('aria-label', '댓글 내용');
-    const submit = el('button', '등록'); submit.type = 'submit';
-    form.append(input, submit);
-    form.addEventListener('submit', async event => {
-      event.preventDefault();
-      const body = input.value.trim(); if (!body) return;
-      submit.disabled = true; status.textContent = '';
-      try {
-        const active = await user();
-        if (active.id !== current.id || token !== generation) return;
-        checked(await client.from('frt_social_comments').insert({ post_id: post.id, user_id: current.id, body }));
-        input.value = ''; await comments(post, panel, token); await loadCount();
-      } catch (error) { status.textContent = message(error); }
-      finally { submit.disabled = false; }
-    });
-    async function loadCount() {
-      const result = await client.from('frt_social_comments').select('*', { count: 'exact', head: true }).eq('post_id', post.id);
-      checked(result); toggle.textContent = `댓글 ${result.count || 0}`;
-    }
-    area.append(panel, form); actions.append(like, toggle); article.append(actions, area, status);
-    try { await Promise.all([loadLikes(), loadCount()]); }
-    catch (error) { status.textContent = message(error); }
+    await appendPostReactions(post, current, token, article);
     return article;
   }
 
-    async function refresh() {
+  async function refresh() {
     if (!root) return;
 
     const token = ++generation;
@@ -1327,6 +1519,10 @@
             }
 
             const img = el('img');
+
+            img.dataset.frtSocialPostId = String(post.id);
+            img.dataset.frtSocialOwner = String(post.user_id);
+
             img.className = 'recent-run-photo';
             img.alt =
               account.username + '의 기록 게시물';
@@ -1340,6 +1536,7 @@
 
             img.src = data.signedUrl;
             article.append(img);
+            
           } catch (error) {
             console.error('프로필 이미지 조회 실패:', error);
             article.append(
@@ -1644,7 +1841,393 @@
       }
     });
   }
+    // 프로필 사진을 기존 공유 게시물에 연결
+  async function getProfilePostLinks(grid, current) {
+    const images = Array.from(
+      grid.querySelectorAll(
+        '.recent-run-card > .recent-run-photo'
+      )
+    );
+
+    const links = new Map();
+
+    // 다른 계정 프로필: 서버 게시물 ID를 그대로 사용
+    if (grid.id !== 'profileRecentRuns') {
+      for (const image of images) {
+        if (
+          image.dataset.frtSocialPostId &&
+          image.dataset.frtSocialOwner
+        ) {
+          links.set(image, {
+            id: image.dataset.frtSocialPostId,
+            user_id: image.dataset.frtSocialOwner
+          });
+        }
+      }
+
+      return links;
+    }
+
+    // 내 프로필: 원본 기록 ID로 기존 공유 게시물 조회
+    const sourceIds = [
+      ...new Set(
+        images
+          .map(image => image.dataset.frtSourceRecord)
+          .filter(Boolean)
+          .map(value => decodeURIComponent(value))
+      )
+    ];
+
+    // 한 번에 너무 많은 ID를 보내지 않도록 나누어 조회
+    for (let start = 0; start < sourceIds.length; start += 50) {
+      const rows = checked(
+        await client
+          .from('frt_social_posts')
+          .select('id,user_id,source_record_id')
+          .eq('user_id', current.id)
+          .in(
+            'source_record_id',
+            sourceIds.slice(start, start + 50)
+          )
+      ) || [];
+
+      const postsByRecord = new Map(
+        rows.map(post => [
+          String(post.source_record_id),
+          post
+        ])
+      );
+
+      for (const image of images) {
+        const encoded =
+          image.dataset.frtSourceRecord;
+
+        if (!encoded) continue;
+
+        const post = postsByRecord.get(
+          decodeURIComponent(encoded)
+        );
+
+        if (post) links.set(image, post);
+      }
+    }
+
+    return links;
+  }
+    const profileReactionLoads = new WeakMap();
+
+  async function mountProfileReactions(grid) {
+    const run =
+      (profileReactionLoads.get(grid) || 0) + 1;
+
+    profileReactionLoads.set(grid, run);
+
+    const epoch = reactionAccountEpoch;
+
+    const valid = () =>
+      grid.isConnected &&
+      grid.classList.contains('frt-profile-expanded') &&
+      profileReactionLoads.get(grid) === run &&
+      reactionAccountEpoch === epoch;
+
+    for (const view of postReactionViews) {
+      if (!view.valid()) {
+        postReactionViews.delete(view);
+      }
+    }
+
+    const hosts = new Map();
+
+    grid.querySelectorAll(
+      ':scope > .recent-run-card'
+    ).forEach(card => {
+      card.querySelectorAll(
+        ':scope > .frt-profile-reactions'
+      ).forEach(node => node.remove());
+
+      const image = card.querySelector(
+        ':scope > .recent-run-photo'
+      );
+
+      if (!image) return;
+
+      const host = el(
+        'div',
+        undefined,
+        'frt-profile-reactions'
+      );
+
+      host.append(
+        el('p', '좋아요·댓글을 불러오고 있어요.')
+      );
+
+      card.append(host);
+      hosts.set(image, host);
+    });
+
+    try {
+      const current = await user();
+
+      if (!valid()) return;
+
+      const links = await getProfilePostLinks(
+        grid,
+        current
+      );
+
+      if (!valid()) return;
+
+      const confirmed = await user();
+
+      if (
+        !valid() ||
+        confirmed.id !== current.id
+      ) {
+        return;
+      }
+
+      await Promise.all(
+        Array.from(hosts, async ([image, host]) => {
+          const currentView = () =>
+            valid() &&
+            host.isConnected &&
+            image.parentElement === host.parentElement;
+
+          if (!currentView()) return;
+
+          host.replaceChildren();
+
+          const post = links.get(image);
+
+          if (!post) {
+            host.append(
+              el(
+                'p',
+                '연결된 공유 게시물이 없어 좋아요·댓글을 표시할 수 없어요.'
+              )
+            );
+            return;
+          }
+
+          await appendPostReactions(
+            post,
+            current,
+            currentView,
+            host
+          );
+        })
+      );
+    } catch (error) {
+      if (!valid()) return;
+
+      console.error('프로필 반응 조회 실패:', error);
+
+      for (const host of hosts.values()) {
+        if (!host.isConnected) continue;
+
+        host.replaceChildren(
+          el('p', '좋아요·댓글을 불러오지 못했어요.')
+        );
+
+        host.append(
+          button('다시 시도', () => {
+            void mountProfileReactions(grid);
+          })
+        );
+      }
+    }
+  }
+    function mountInlineProfileFeed() {
+    const screen =
+      document.getElementById('profileFeedScreen');
+
+    if (!screen || screen.dataset.inlinePostsReady) return;
+
+    screen.dataset.inlinePostsReady = 'true';
+
+    let active = null;
+
+    const selector =
+      '#profileRecentRuns, #frtPublicProfile .frt-profile-post-grid';
+
+    // 사진 격자로 돌아오기
+    function collapse(restore = true) {
+      if (!active) return;
+
+      const saved = active;
+      active = null;
+
+      saved.grid.classList.remove('frt-profile-expanded');
+      saved.bar.remove();
+
+      if (restore) {
+        requestAnimationFrame(() => {
+          if (!saved.grid.isConnected) return;
+
+          for (const item of saved.positions) {
+            item.node.scrollTop = item.top;
+            item.node.scrollLeft = item.left;
+          }
+
+          window.scrollTo(saved.x, saved.y);
+
+          if (saved.card.isConnected) {
+            saved.card.focus({ preventScroll: true });
+          }
+        });
+      }
+    }
+
+    // 기존 격자를 세로 목록으로 전환
+    function open(card, grid) {
+      if (active?.grid === grid) return;
+
+      collapse(false);
+
+      const positions = [];
+
+      for (
+        let node = grid.parentElement;
+        node;
+        node = node.parentElement
+      ) {
+        positions.push({
+          node,
+          top: node.scrollTop,
+          left: node.scrollLeft
+        });
+      }
+
+      const bar = el(
+        'div',
+        undefined,
+        'frt-profile-list-bar'
+      );
+
+      bar.append(
+        button('← 사진 격자로', () => collapse())
+      );
+
+      active = {
+        grid,
+        card,
+        bar,
+        positions,
+        x: window.scrollX,
+        y: window.scrollY
+      };
+
+      grid.before(bar);
+      grid.classList.add('frt-profile-expanded');
+      
+      void mountProfileReactions(grid);
+
+      requestAnimationFrame(() => {
+        if (
+          active?.card === card &&
+          card.isConnected
+        ) {
+          card.scrollIntoView({
+            block: 'start',
+            behavior: 'auto'
+          });
+        }
+      });
+    }
+
+    function activate(event) {
+      if (
+        event.type === 'keydown' &&
+        !['Enter', ' '].includes(event.key)
+      ) {
+        return;
+      }
+
+      if (
+        event.target.closest(
+          'button, a, input, textarea'
+        )
+      ) {
+        return;
+      }
+
+      const card =
+        event.target.closest('.recent-run-card');
+
+      const grid = card?.parentElement;
+
+      if (
+        !grid?.matches(selector) ||
+        !card.querySelector('img')
+      ) {
+        return;
+      }
+
+      if (
+        grid.classList.contains('frt-profile-expanded')
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      open(card, grid);
+    }
+
+    function prepare() {
+      if (
+        active &&
+        (
+          !active.card.isConnected ||
+          screen.classList.contains('hidden') ||
+          (
+            active.grid.id === 'profileRecentRuns' &&
+            screen.classList.contains(
+              'frt-viewing-public-profile'
+            )
+          )
+        )
+      ) {
+        collapse(false);
+      }
+
+      screen.querySelectorAll(selector).forEach(grid => {
+        grid.querySelectorAll(
+          ':scope > .recent-run-card'
+        ).forEach(card => {
+          if (!card.querySelector('img')) return;
+
+          card.tabIndex = 0;
+
+          if (
+            grid.classList.contains('frt-profile-expanded')
+          ) {
+            card.removeAttribute('role');
+            card.removeAttribute('aria-label');
+          } else {
+            card.setAttribute('role', 'button');
+            card.setAttribute(
+              'aria-label',
+              '게시물을 세로 목록으로 보기'
+            );
+          }
+        });
+      });
+    }
+
+    screen.addEventListener('click', activate);
+    screen.addEventListener('keydown', activate);
+
+    new MutationObserver(prepare).observe(screen, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class']
+    });
+
+    prepare();
+  }
   function mount() {
+    mountInlineProfileFeed();
     mountProfileFollows();
     mountProfileAvatar();
     mountPublicProfile();
@@ -1704,12 +2287,18 @@
       const nextAccountId = session?.user?.id || null;
 
       if (nextAccountId !== feedAccountId) {
+        ++reactionAccountEpoch;
+        postReactionViews.clear();
+
         feedAccountId = nextAccountId;
         shownCounts.clear();
       }
 
       ++generation;
-      root.querySelector('.frt-social-list').replaceChildren();
+
+      root.querySelector(
+        '.frt-social-list'
+      ).replaceChildren();
 
       // 인증 콜백이 끝난 뒤 게시물을 조회한다.
       setTimeout(refresh, 0);
