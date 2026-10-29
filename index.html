@@ -29,7 +29,11 @@
 >
   <header class="home-feed-header">
     <strong class="home-feed-logo">
-      FreeRunTrip
+      <img
+        src="./freeruntrip-wordmark.png"
+        alt="FreeRunTrip"
+        class="home-feed-wordmark"
+      >
     </strong>
 
     <div class="home-feed-header-actions">
@@ -679,13 +683,33 @@
   <div class="profile-feed-header">
   <button id="backFromProfileFeedBtn">← Back</button>
   <h2>Record Profile Feed</h2>
+  <div class="frt-profile-account-bar">
+    <button
+      id="frtAccountOpen"
+      type="button"
+      aria-label="계정 설정"
+      title="계정 설정"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        width="24"
+        height="24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="1.8"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M9.8 3h4.4l.6 2.4 1.5.9 2.4-.7 2.2 3.8-1.8 1.7v1.8l1.8 1.7-2.2 3.8-2.4-.7-1.5.9-.6 2.4H9.8l-.6-2.4-1.5-.9-2.4.7-2.2-3.8 1.8-1.7v-1.8L3.1 9.4l2.2-3.8 2.4.7 1.5-.9L9.8 3Z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+    </button>
+  </div>
 </div>
 
-<div class="frt-profile-account-bar">
-  <button id="frtAccountOpen" type="button">
-    로그인 / 회원가입
-  </button>
-</div>
+
 
 <div class="hero-card frt-profile-card">
   <div class="hero-overlay">
@@ -696,9 +720,20 @@
       </div>
 
       <div class="frt-profile-summary">
-        <h2 id="frtProfileName" class="hero-name">
-          게스트
-        </h2>
+        <div class="frt-profile-name-row">
+          <h2 id="frtProfileName" class="hero-name">
+            게스트
+          </h2>
+
+          <div id="frtProfileOwnerActions" hidden>
+            <button
+              id="frtProfileFollowingBtn"
+              type="button"
+            >
+              팔로잉 목록
+            </button>
+          </div>
+        </div>
 
         <div class="frt-profile-stats">
           <div class="frt-profile-stat">

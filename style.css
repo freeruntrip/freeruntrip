@@ -10609,3 +10609,174 @@ body {
   font-size: 14px;
   padding-bottom: 6px;
 }
+/* 홈피드 상단 글자로고 */
+#homeScreen .home-feed-logo {
+  display: flex;
+  align-items: center;
+  flex: 0 1 140px;
+  min-width: 0;
+  line-height: 0;
+}
+
+#homeScreen .home-feed-wordmark {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+#homeScreen .home-feed-header-actions {
+  flex-shrink: 0;
+}
+
+@media (max-width: 390px) {
+  #homeScreen .home-feed-logo {
+    flex-basis: 130px;
+  }
+}
+/* 기록 프로필 피드: 흰색 배경 */
+#profileFeedScreen {
+  background: #ffffff;
+  color: #1f2a24;
+}
+
+/* 계정정보 영역 */
+#profileFeedScreen .frt-profile-card {
+  background: #ffffff;
+  outline: none;
+  box-shadow: none;
+}
+
+#profileFeedScreen .frt-profile-card .hero-overlay {
+  background: transparent;
+  color: #1f2a24;
+}
+
+/* 계정 이름과 통계 숫자 */
+#profileFeedScreen .frt-profile-card .hero-name,
+#profileFeedScreen .frt-profile-card .frt-profile-stat,
+#profileFeedScreen .frt-profile-card .frt-profile-stat strong {
+  color: #1f2a24;
+}
+
+/* 통계 설명과 러너 유형 */
+#profileFeedScreen .frt-profile-card .frt-profile-stat > span,
+#profileFeedScreen .frt-profile-card .hero-badge {
+  color: #526158;
+  opacity: 1;
+}
+
+/* 오늘의 Pace 문구 */
+#profileFeedScreen .frt-profile-card .hero-pace {
+  color: #8b6f4e;
+}
+
+/* 팔로잉 목록 버튼 */
+#profileFeedScreen #frtProfileFollowingBtn {
+  background: #ffffff;
+  color: #1f2a24;
+  border-color: #cbd5ce;
+}
+
+#profileFeedScreen #frtProfileFollowingBtn:active {
+  background: #f1f5f1;
+}
+
+/* 키보드로 버튼을 선택했을 때 */
+#profileFeedScreen #frtProfileFollowersBtn:focus-visible,
+#profileFeedScreen #frtProfileFollowingBtn:focus-visible {
+  outline: 2px solid #6b7f6a;
+  outline-offset: 3px;
+}
+/* 프로필 3열 게시물을 화면 너비로 확대 */
+#profileRecentRuns:not(.frt-profile-expanded),
+#frtPublicProfile .frt-profile-post-grid:not(.frt-profile-expanded) {
+  width: calc(100% + 40px);
+  margin-left: -20px;
+  margin-right: -20px;
+}
+/* 프로필 게시물을 2열로 확대 */
+#profileRecentRuns:not(.frt-profile-expanded),
+#frtPublicProfile .frt-profile-post-grid:not(.frt-profile-expanded) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+/* 3열 유지, 게시물 썸네일 높이 확대 */
+#profileRecentRuns:not(.frt-profile-expanded) > .recent-run-card,
+#frtPublicProfile .frt-profile-post-grid:not(.frt-profile-expanded)
+  > .recent-run-card {
+  aspect-ratio: 2 / 3;
+}
+/* 계정명 오른쪽에 팔로잉 목록 배치 */
+#profileFeedScreen .frt-profile-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+#profileFeedScreen .frt-profile-name-row .hero-name {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+#profileFeedScreen .frt-profile-name-row #frtProfileOwnerActions {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+#profileFeedScreen #frtProfileFollowingBtn {
+  padding: 6px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+/* 기록 프로필 피드의 동기화 안내 숨기기 */
+#profileFeedScreen [data-frt-record-sync] {
+  display: none;
+}
+/* 계정 설정: 톱니바퀴 아이콘 */
+#profileFeedScreen #frtAccountOpen {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #1f2a24;
+  box-shadow: none;
+}
+
+#profileFeedScreen #frtAccountOpen svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+#profileFeedScreen #frtAccountOpen:active {
+  background: #f1f5f1;
+}
+/* 프로필 제목 오른쪽 끝에 설정 버튼 배치 */
+#profileFeedScreen > .profile-feed-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#profileFeedScreen > .profile-feed-header > h2 {
+  flex: 1;
+  min-width: 0;
+  font-size: 18px;
+}
+
+#profileFeedScreen > .profile-feed-header
+  > .frt-profile-account-bar {
+  flex: 0 0 44px;
+  margin: 0 0 0 auto;
+}
+
+#profileFeedScreen #frtAccountOpen svg {
+  width: 32px;
+  height: 32px;
+}

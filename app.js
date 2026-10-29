@@ -24149,9 +24149,12 @@ openAppPage('home');
     return result;
   }
   function renderIdentity() {
-    entry.textContent = user
+    const accountButtonLabel = user
       ? '계정 설정'
       : '로그인 / 회원가입';
+
+    entry.setAttribute('aria-label', accountButtonLabel);
+    entry.title = accountButtonLabel;
 
     el('frtAuthAccountEmail').textContent =
       user?.email || '';
