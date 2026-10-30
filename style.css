@@ -10784,3 +10784,19 @@ body {
 #profileFeedScreen > .profile-feed-header > #backFromProfileFeedBtn {
   display: none;
 }
+/* 프로필 게시물의 '사진 격자로' 버튼과 해당 줄 숨김 */
+#profileFeedScreen .frt-profile-list-bar {
+  display: none;
+}
+
+/* 프로필 화면에서 열린 계정 설정의 닫기 버튼 숨김 */
+body:has(#profileFeedScreen:not(.hidden))
+  #frtAccountDialog #frtAuthClose {
+  display: none;
+}
+
+/* 프로필 화면에서 열린 팔로워·팔로잉 목록의 닫기 버튼 숨김 */
+body:has(#profileFeedScreen:not(.hidden))
+  #frtFollowDialog .frt-follow-dialog-header > form[method="dialog"] {
+  display: none;
+}
