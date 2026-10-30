@@ -27408,9 +27408,6 @@ frtContentUI.publish?.addEventListener(
   let waiting = false;
   let handling = false;
   let queuedPage = null;
-  let returnPage = 'home';
-  let returnX = 0;
-  let returnY = 0;
 
   const visible = () => !screen.classList.contains('hidden');
   const running = () => isRunning || isRunTripFollowing;
@@ -27453,14 +27450,6 @@ frtContentUI.publish?.addEventListener(
       queuedPage = pageName;
       requestBack();
       return;
-    }
-
-    if (pageName === 'profile') {
-      returnPage =
-        currentAppPage === 'profile' ? 'home' : currentAppPage;
-
-      returnX = window.scrollX;
-      returnY = window.scrollY;
     }
 
     originalOpen(pageName);
@@ -27547,9 +27536,8 @@ frtContentUI.publish?.addEventListener(
         return;
       }
 
-      // 내 프로필은 진입하기 전 탭으로 돌아간다.
-      originalOpen(returnPage);
-      window.scrollTo(returnX, returnY);
+      // 닫을 상세 화면이나 창이 없으면 현재 프로필 탭을 유지한다.
+      return;
     } finally {
       handling = false;
 
