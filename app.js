@@ -23018,12 +23018,7 @@ nextPeriodBtn.addEventListener('click', function () {
 });
 
 if (profileFeedBtn) profileFeedBtn.addEventListener('click', function () {
-  map.getContainer().style.display = 'none';
-  controlsSection.style.display = 'none';
-  recordsSection.classList.add('hidden');
-  recordDetail.classList.add('hidden');
-
-  profileFeedScreen.classList.remove('hidden');
+  openAppPage('profile');
 });
 
 backFromProfileFeedBtn.addEventListener('click', function () {
@@ -27394,3 +27389,181 @@ frtContentUI.publish?.addEventListener(
   'click',
   frtPublishContentImage
 );
+/* 기록 프로필 전용: 브라우저 기본 뒤로가기 연결 */
+(() => {
+  const screen = document.getElementById('profileFeedScreen');
+  if (!screen || window.frtProfileBackReady) return;
+  window.frtProfileBackReady = true;
+
+  const originalOpen = openAppPage;
+  const key = 'frtProfileBackV1';
+  const token = String(Date.now()) + Math.random();
+  const backButtons = [
+    '#backFromProfileFeedBtn',
+    '#frtPublicProfile > .profile-feed-header > button',
+    '#profileFeedScreen .frt-profile-list-bar > button'
+  ].join(',');
+
+  let armed = false;
+  let waiting = false;
+  let handling = false;
+  let queuedPage = null;
+  let returnPage = 'home';
+  let returnX = 0;
+  let returnY = 0;
+
+  const visible = () => !screen.classList.contains('hidden');
+  const running = () => isRunning || isRunTripFollowing;
+
+  function cleanState() {
+    const state = { ...(history.state || {}) };
+    delete state[key];
+    return state;
+  }
+
+  function arm() {
+    const base = cleanState();
+
+    history.replaceState(
+      { ...base, [key]: { token, guard: false } },
+      ''
+    );
+
+    history.pushState(
+      { ...base, [key]: { token, guard: true } },
+      ''
+    );
+
+    armed = true;
+  }
+
+  function requestBack() {
+    if (!armed || waiting || running()) return;
+
+    waiting = true;
+    history.back();
+  }
+
+  openAppPage = function (pageName) {
+    if (running()) return;
+    if (handling) return originalOpen(pageName);
+    if (waiting) return;
+
+    if (armed) {
+      queuedPage = pageName;
+      requestBack();
+      return;
+    }
+
+    if (pageName === 'profile') {
+      returnPage =
+        currentAppPage === 'profile' ? 'home' : currentAppPage;
+
+      returnX = window.scrollX;
+      returnY = window.scrollY;
+    }
+
+    originalOpen(pageName);
+
+    if (pageName === 'profile' && visible()) {
+      arm();
+    }
+  };
+
+  document.addEventListener('click', event => {
+    if (handling) return;
+
+    if (waiting && event.target.closest('button, a')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+
+    if (
+      !visible() ||
+      !armed ||
+      !event.target.closest(backButtons)
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    requestBack();
+  }, true);
+
+  window.addEventListener('popstate', () => {
+    if (!armed && !waiting) {
+      if (history.state?.[key]) {
+        history.replaceState(cleanState(), '');
+      }
+      return;
+    }
+
+    armed = false;
+    waiting = false;
+    history.replaceState(cleanState(), '');
+    handling = true;
+
+    try {
+      if (running()) return;
+
+      if (queuedPage !== null) {
+        const page = queuedPage;
+        queuedPage = null;
+        originalOpen(page);
+        return;
+      }
+
+      if (!visible()) return;
+
+      // 열린 설정·팔로워 등의 창부터 닫는다.
+      const dialogs = [
+        ...document.querySelectorAll('dialog[open]')
+      ];
+
+      if (dialogs.length) {
+        dialogs[dialogs.length - 1].close();
+        return;
+      }
+
+      // 펼친 게시물은 사진 격자로 돌아간다.
+      const collapse = screen.querySelector(
+        '.frt-profile-list-bar > button'
+      );
+
+      if (collapse) {
+        collapse.click();
+        return;
+      }
+
+      // 검색한 계정의 프로필은 기존 검색 복귀 동작을 사용한다.
+      const publicBack = screen.querySelector(
+        '#frtPublicProfile > .profile-feed-header > button'
+      );
+
+      if (publicBack) {
+        publicBack.click();
+        return;
+      }
+
+      // 내 프로필은 진입하기 전 탭으로 돌아간다.
+      originalOpen(returnPage);
+      window.scrollTo(returnX, returnY);
+    } finally {
+      handling = false;
+
+      if (visible() || running()) {
+        arm();
+      }
+    }
+  });
+
+  // 프로필에서 새로고침한 경우 이전 임시 이력을 정리한다.
+  if (history.state?.[key]?.guard && !running()) {
+    waiting = true;
+    history.back();
+  } else if (history.state?.[key]) {
+    history.replaceState(cleanState(), '');
+  }
+})();
