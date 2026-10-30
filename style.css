@@ -10780,3 +10780,7 @@ body {
   width: 32px;
   height: 32px;
 }
+/* 기록 프로필 상단 뒤로가기 버튼 숨김 */
+#profileFeedScreen > .profile-feed-header > #backFromProfileFeedBtn {
+  display: none;
+}
