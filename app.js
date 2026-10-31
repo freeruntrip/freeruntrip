@@ -1777,7 +1777,7 @@ function frtRenderAccountRecords() {
   );
 }
 
-function frtSwitchRecordAccount(user) {
+function frtSwitchRecordAccount(user, { navigate = true } = {}) {
   const owner = user?.id || 'guest';
   const state = frtRecordsState;
 
@@ -1860,7 +1860,7 @@ function frtSwitchRecordAccount(user) {
 
   if (initial) {
     initializeAppWithRunTripRecovery();
-  } else {
+  } else if (navigate) {
     openAppPage('home');
   }
 
@@ -25465,8 +25465,22 @@ openAppPage('home');
       clearGoogleDeleteState();
       panels.delete.reset();
 
-      // 현재 브라우저의 인증 세션만 정리한다.
-      // 러닝 기록과 사진 저장소는 건드리지 않는다.
+      // 게스트 기록으로 전환하되 자동 홈 이동은 생략한다.
+      // 뒤이어 발생하는 로그아웃 이벤트에서는 같은 계정이므로
+      // 기록 전환과 홈 이동이 다시 실행되지 않는다.
+      frtSwitchRecordAccount(null, { navigate: false });
+
+      // 로그아웃 이벤트가 로그인 화면으로 바꾸지 않도록
+      // 완료 화면 상태를 먼저 설정한다.
+      showView(
+        'deleted',
+        '회원 탈퇴가 완료되었어요.'
+      );
+
+      await syncSession(null, true);
+      dialog.scrollTop = 0;
+
+      // 현재 브라우저의 인증 세션을 정리한다.
       try {
         await client.auth.signOut({
           scope: 'local'
@@ -25474,15 +25488,6 @@ openAppPage('home');
       } catch {
         // 서버의 계정 삭제는 이미 완료됐다.
       }
-
-      await syncSession(null, true);
-
-      showView(
-        'deleted',
-        '회원 탈퇴가 완료되었어요.'
-      );
-
-      dialog.scrollTop = 0;
     } catch (error) {
       if (googleDelete) {
         clearGoogleDeleteState();
@@ -25502,7 +25507,9 @@ openAppPage('home');
 
   el('frtDeleteDoneConfirm').addEventListener('click', () => {
     if (busy) return;
+
     closeDialog();
+    openAppPage('home');
   });
   logout.addEventListener('click', async () => {
     if (busy || !client) return;
