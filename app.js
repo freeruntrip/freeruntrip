@@ -24083,7 +24083,7 @@ openAppPage('home');
     el('frtAuthErrorContinue').hidden =
       next !== 'return-error';
 
-    logout.hidden = !user || next === 'loading';
+    logout.hidden = !user || next === 'loading' || next === 'deleted';
 
     if (open) showDialog();
   }
