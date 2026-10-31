@@ -1348,7 +1348,8 @@
     ) return;
 
     clearPublicProfile();
-    window.openAppPage('profile');
+
+    if (!window.frtOpenProfileFromSearch?.()) return;
 
     if (screen.classList.contains('hidden')) return;
 
@@ -1359,7 +1360,7 @@
     const back = button('← 검색으로 돌아가기', () => {
       clearPublicProfile();
       window.openAppPage('home');
-      document.getElementById('homeAccountSearchBtn')?.click();
+      window.frtRestoreAccountSearch?.();
     });
 
         const header = el('div', undefined, 'profile-feed-header');
@@ -1636,8 +1637,9 @@
 
     if (!trigger) return;
 
-    const dialog = el('dialog');
+    const dialog = el('section');
     dialog.id = 'frtAccountSearchDialog';
+    dialog.hidden = true;
     dialog.setAttribute(
       'aria-labelledby',
       'frtAccountSearchTitle'
@@ -1652,10 +1654,8 @@
     const title = el('h2', '계정 검색');
     title.id = 'frtAccountSearchTitle';
 
-    const close = button('닫기', () => dialog.close());
-    close.setAttribute('aria-label', '계정 검색 닫기');
-
-    header.append(title, close);
+    title.tabIndex = -1;
+    header.append(title);
 
     const form = el('form');
     form.className = 'frt-account-search-form';
@@ -1687,6 +1687,60 @@
     let revision = 0;
     let timer;
     let composing = false;
+    let savedScrollTop = 0;
+
+    function hideSearchPage(reset = false) {
+      savedScrollTop = dialog.scrollTop;
+      input.blur();
+      dialog.hidden = true;
+      document.body.classList.remove('frt-search-page-open');
+
+      // 진행 중인 검색 응답이 화면을 다시 변경하지 않도록 한다.
+      clearTimeout(timer);
+      revision++;
+
+      if (reset) {
+        list.replaceChildren();
+        input.value = '';
+        composing = false;
+        savedScrollTop = 0;
+        status.textContent = '찾고 싶은 아이디를 입력해 주세요.';
+      }
+    }
+
+    function showSearchPage(restore = false) {
+      if (!restore) {
+        invalidate();
+        input.value = '';
+        composing = false;
+        savedScrollTop = 0;
+        status.textContent = '찾고 싶은 아이디를 입력해 주세요.';
+      }
+
+      dialog.hidden = false;
+      document.body.classList.add('frt-search-page-open');
+      dialog.scrollTop = savedScrollTop;
+
+      window.frtArmDetailBack?.();
+
+      if (restore) {
+        title.focus({ preventScroll: true });
+      } else {
+        input.focus({ preventScroll: true });
+      }
+    }
+
+    window.frtRestoreAccountSearch = function () {
+      showSearchPage(true);
+    };
+
+    window.frtCloseAccountSearch = function () {
+      if (dialog.hidden) return false;
+
+      hideSearchPage(true);
+      trigger.focus({ preventScroll: true });
+      return true;
+    };
 
     function invalidate() {
       clearTimeout(timer);
@@ -1720,7 +1774,7 @@
       try {
         await user();
 
-        if (request !== revision || !dialog.open) return;
+        if (request !== revision || dialog.hidden) return;
 
         const rows = checked(
           await client.rpc('frt_social_search_accounts', {
@@ -1728,7 +1782,7 @@
           })
         ) || [];
 
-        if (request !== revision || !dialog.open) return;
+        if (request !== revision || dialog.hidden) return;
 
         for (const row of rows) {
           const item = el('li');
@@ -1736,7 +1790,7 @@
           const accountButton = button(
             row.username,
             () => {
-              dialog.close();
+              hideSearchPage();
               void openAccountProfile(row);
             }
           );
@@ -1776,7 +1830,7 @@
             : `검색 결과 ${rows.length}개예요.`
           : '일치하는 계정이 없어요.';
       } catch (error) {
-        if (request !== revision || !dialog.open) return;
+        if (request !== revision || dialog.hidden) return;
 
         console.error('계정 검색 실패:', error);
         status.textContent =
@@ -1815,18 +1869,8 @@
       if (!composing) void search();
     });
 
-    trigger.addEventListener('click', () => {
-      invalidate();
-      input.value = '';
-      status.textContent =
-        '찾고 싶은 아이디를 입력해 주세요.';
-
-      if (!dialog.open) dialog.showModal();
-      input.focus();
-    });
-
-    dialog.addEventListener('close', () => {
-      if (!dialog.open) invalidate();
+      trigger.addEventListener('click', () => {
+      showSearchPage();
     });
 
     client.auth.onAuthStateChange((event, session) => {
@@ -1835,9 +1879,7 @@
         event === 'SIGNED_IN' ||
         !session
       ) {
-        invalidate();
-        input.value = '';
-        if (dialog.open) dialog.close();
+        hideSearchPage(true);
       }
     });
   }

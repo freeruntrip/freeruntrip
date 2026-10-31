@@ -201,6 +201,7 @@ export default async function handler(req, res) {
   if (
     ![
       'delete',
+      'verify-password',
       'start-google',
       'verify-google',
       'cancel-google'
@@ -245,8 +246,10 @@ export default async function handler(req, res) {
   }
 
   if (
-    action === 'delete' &&
-    !googleDelete &&
+    (
+      action === 'verify-password' ||
+      (action === 'delete' && !googleDelete)
+    ) &&
     (
       typeof body?.password !== 'string' ||
       !body.password ||
@@ -437,6 +440,13 @@ export default async function handler(req, res) {
       }
     }
 
+    // 비밀번호 확인 요청은 계정을 삭제하지 않고 종료한다.
+    if (action === 'verify-password') {
+      return res.status(200).json({
+        verified: true,
+        userId: currentUser.id
+      });
+    }
     // 최종 확인 요청에서만 실제 계정을 삭제한다.
     const deleteResponse = await fetch(
       `${projectUrl}/auth/v1/admin/users/${

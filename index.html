@@ -1253,14 +1253,15 @@
 
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <!-- FreeRunTrip 가입 안내·계정 설정 -->
-<dialog
+<section
   id="frtAccountDialog"
   class="frt-account-dialog"
   aria-labelledby="frtAuthTitle"
+  hidden
 >
   <section id="frtAuthCard" class="frt-auth-card">
     <div class="frt-auth-heading">
-      <h2 id="frtAuthTitle" tabindex="-1">계정 설정</h2>
+      <h2 id="frtAuthTitle" tabindex="-1">설정</h2>
 
       <button
         id="frtAuthClose"
@@ -1414,14 +1415,13 @@
 
     <div id="frtAuthAccount" hidden>
       <p class="frt-account-label">
-        로그인 이메일 · 나에게만 표시
+        로그인 이메일
       </p>
       <p
         id="frtAuthAccountEmail"
         class="frt-auth-email"
       ></p>
 
-      <p class="frt-account-label">공개 아이디</p>
       <p
         id="frtAccountHandle"
         class="frt-account-handle"
@@ -1442,9 +1442,6 @@
   회원 탈퇴
 </button>
 
-      <p class="frt-auth-note">
-        현재 러닝 기록과 사진은 이 브라우저에 저장됩니다.
-      </p>
     </div>
 
     <form id="frtDeleteForm" hidden>
@@ -1474,7 +1471,7 @@
     hidden
   >
     Google에서 같은 계정으로 본인 확인 후 돌아오면
-    최종 삭제 버튼이 표시됩니다.
+    삭제 여부를 최종 확인합니다.
     Google 계정 자체는 삭제되지 않습니다.
   </p>
 
@@ -1492,7 +1489,7 @@
     class="frt-auth-danger"
     type="submit"
   >
-    계정 영구 삭제
+    비밀번호 확인
   </button>
 
   <button
@@ -1606,7 +1603,7 @@
       로그아웃
     </button>
   </section>
-</dialog>
+</section>
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.25.0/mapbox-gl.js"></script>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

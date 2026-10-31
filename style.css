@@ -10800,3 +10800,111 @@ body:has(#profileFeedScreen:not(.hidden))
   #frtFollowDialog .frt-follow-dialog-header > form[method="dialog"] {
   display: none;
 }
+/* 계정 설정을 독립 페이지 형태로 표시 */
+#frtAccountDialog {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  color: #0f172a;
+  box-shadow: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+#frtAccountDialog[hidden] {
+  display: none !important;
+}
+
+#frtAccountDialog .frt-auth-card {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 640px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding:
+    calc(24px + env(safe-area-inset-top, 0px))
+    24px
+    calc(32px + env(safe-area-inset-bottom, 0px));
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+}
+
+body.frt-settings-page-open {
+  overflow: hidden;
+}
+/* 설정 페이지를 기존 앱 화면 너비에 맞춤 */
+#frtAccountDialog {
+  left: 50%;
+  right: auto;
+  width: min(100%, var(--app-mobile-width));
+  transform: translateX(-50%);
+}
+
+/* 톱니바퀴 주변 파란 포커스 테두리 제거 */
+#profileFeedScreen #frtAccountOpen:focus,
+#profileFeedScreen #frtAccountOpen:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* 설정 제목에 생기는 포커스 테두리 제거 */
+#frtAuthTitle:focus {
+  outline: none;
+}
+/* 계정 검색 페이지 */
+#frtAccountSearchDialog {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  right: auto;
+  z-index: 10000;
+  box-sizing: border-box;
+  width: min(100%, var(--app-mobile-width));
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding:
+    calc(24px + env(safe-area-inset-top, 0px))
+    24px
+    calc(32px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  color: #0f172a;
+  box-shadow: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+#frtAccountSearchDialog[hidden] {
+  display: none !important;
+}
+
+#frtAccountSearchTitle:focus {
+  outline: none;
+}
+
+#frtAccountSearchDialog .frt-account-search-form input {
+  min-width: 0;
+}
+
+body.frt-search-page-open {
+  overflow: hidden;
+}

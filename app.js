@@ -23991,10 +23991,52 @@ openAppPage('home');
     status.hidden = !text;
   }
 
-  function showDialog() {
-    if (!dialog.open) dialog.showModal();
+    function showDialog() {
+    const profileScreen =
+      document.getElementById('profileFeedScreen');
+
+    if (profileScreen?.classList.contains('hidden')) {
+      openAppPage('profile');
+    }
+
+    if (profileScreen?.classList.contains('hidden')) {
+      return;
+    }
+
+    dialog.hidden = false;
+    dialog.setAttribute('open', '');
+    document.body.classList.add('frt-settings-page-open');
     title.focus();
   }
+
+  function closeDialog() {
+    if (!dialog.hasAttribute('open')) return;
+
+    dialog.hidden = true;
+    dialog.removeAttribute('open');
+    document.body.classList.remove('frt-settings-page-open');
+
+    // 기존 비밀번호 초기화 등 닫기 처리를 유지한다.
+    dialog.dispatchEvent(new Event('close'));
+
+    if (
+      !document
+        .getElementById('profileFeedScreen')
+        ?.classList.contains('hidden')
+    ) {
+      entry.focus({ preventScroll: true });
+    }
+  }
+
+  window.frtCloseAccountPage = function (force = false) {
+    if (!dialog.hasAttribute('open')) return false;
+
+    // 인증·저장 처리 중에는 뒤로가기로 화면을 닫지 않는다.
+    if (!force && (busy || mandatory())) return true;
+
+    closeDialog();
+    return true;
+  };
 
   function setBusy(value) {
     busy = value;
@@ -24084,6 +24126,9 @@ openAppPage('home');
     el('frtDeleteGoogleNote').hidden = !google;
     el('frtDeleteGoogleVerify').hidden = !google || ready;
     el('frtDeleteSubmit').hidden = google && !ready;
+    el('frtDeleteSubmit').textContent = google
+      ? '삭제 여부 확인'
+      : '비밀번호 확인';
 
     showView(
       'delete',
@@ -24091,7 +24136,7 @@ openAppPage('home');
       '삭제할 계정: ' + user.email +
         (
           ready
-            ? '\n본인 확인이 완료됐어요. 계정 영구 삭제 버튼을 누르면 탈퇴가 완료됩니다.'
+            ? '\n본인 확인이 완료됐어요. 다음 단계에서 삭제 여부를 최종 확인합니다.'
             : ''
         )
     );
@@ -24204,7 +24249,7 @@ openAppPage('home');
 
   function showAccount(text = '') {
     renderIdentity();
-    showView('account', '계정 설정', text);
+    showView('account', '설정', text);
   }
 
   function showHandle(edit = false) {
@@ -24277,7 +24322,7 @@ openAppPage('home');
       recoveryUserId = null;
 
       if (view !== 'deleted' && view !== 'resetDone') {
-        showLogin(undefined, dialog.open || openAccount);
+        showLogin(undefined, dialog.hasAttribute('open') || openAccount);
       }
 
       return null;
@@ -24313,7 +24358,7 @@ openAppPage('home');
 
       if (!username) showHandle();
       else if (openAccount) showAccount();
-      else dialog.close();
+      else closeDialog();
 
       return username;
     } catch (error) {
@@ -24668,7 +24713,7 @@ openAppPage('home');
   });
 
   closeButton.addEventListener('click', () => {
-    if (!busy && !mandatory()) dialog.close();
+    if (!busy && !mandatory()) closeDialog();
   });
 
   dialog.addEventListener('cancel', (event) => {
@@ -24972,7 +25017,7 @@ openAppPage('home');
   el('frtStart').addEventListener('click', () => {
     if (busy || !username) return;
 
-    dialog.close();
+    closeDialog();
 
     if (typeof openAppPage === 'function') {
       openAppPage('home');
@@ -25329,7 +25374,7 @@ openAppPage('home');
     const targetUserId = user.id;
 
     setBusy(true);
-    message('본인 확인 후 계정을 삭제하고 있어요.');
+    message('본인 확인 중이에요.');
 
     try {
       const { data, error } = await client.auth.getSession();
@@ -25345,6 +25390,59 @@ openAppPage('home');
         );
       }
 
+            // 먼저 본인 확인만 진행한다. 이 요청은 계정을 삭제하지 않는다.
+      const verification = await deleteApi(
+        googleDelete
+          ? { action: 'verify-google' }
+          : {
+              action: 'verify-password',
+              password: deletePassword.value
+            },
+        data.session
+      );
+
+      if (
+        verification.verified !== true ||
+        verification.userId !== targetUserId
+      ) {
+        throw new Error('본인 확인에 실패했어요.');
+      }
+
+      // 확인 중 계정이 바뀌거나 탈퇴 화면이 닫혔다면 중단한다.
+      if (
+        user?.id !== targetUserId ||
+        view !== 'delete' ||
+        !dialog.hasAttribute('open')
+      ) {
+        return;
+      }
+
+      const confirmed = window.confirm(
+        '정말 계정을 삭제하시겠어요?\n\n' +
+        '삭제한 계정은 복구할 수 없습니다.\n' +
+        '계속하려면 확인, 돌아가려면 취소를 눌러 주세요.'
+      );
+
+      if (!confirmed) {
+        clearGoogleDeleteState();
+        panels.delete.reset();
+
+        await deleteApi({
+          action: 'cancel-google'
+        }).catch(() => {});
+
+        if (
+          user?.id === targetUserId &&
+          view === 'delete' &&
+          dialog.hasAttribute('open')
+        ) {
+          showAccount();
+        }
+
+        return;
+      }
+
+      message('계정을 삭제하고 있어요.');
       const result = await deleteApi(
         {
           action: 'delete',
@@ -25404,7 +25502,7 @@ openAppPage('home');
 
   el('frtDeleteDoneConfirm').addEventListener('click', () => {
     if (busy) return;
-    dialog.close();
+    closeDialog();
   });
   logout.addEventListener('click', async () => {
     if (busy || !client) return;
@@ -27411,7 +27509,30 @@ frtContentUI.publish?.addEventListener(
 
   const visible = () => !screen.classList.contains('hidden');
   const running = () => isRunning || isRunTripFollowing;
+  const searchVisible = () => {
+    const page =
+      document.getElementById('frtAccountSearchDialog');
 
+    return Boolean(page && !page.hidden);
+  };
+
+  window.frtArmDetailBack = function () {
+    if (armed || waiting || handling || running()) return;
+    arm();
+  };
+
+  window.frtOpenProfileFromSearch = function () {
+    if (waiting || running()) return false;
+
+    // 검색에서 프로필을 열 때 기존 뒤로가기 이력을 유지한다.
+    originalOpen('profile');
+
+    if (visible() && !armed && !handling) {
+      arm();
+    }
+
+    return visible();
+  };
   function cleanState() {
     const state = { ...(history.state || {}) };
     delete state[key];
@@ -27500,13 +27621,26 @@ frtContentUI.publish?.addEventListener(
       if (queuedPage !== null) {
         const page = queuedPage;
         queuedPage = null;
+
+        window.frtCloseAccountPage?.(true);
+        window.frtCloseAccountSearch?.();
         originalOpen(page);
+        return;
+      }
+
+      // 검색 페이지에서 뒤로가면 아래의 홈 화면으로 복귀한다.
+      if (window.frtCloseAccountSearch?.()) {
         return;
       }
 
       if (!visible()) return;
 
-      // 열린 설정·팔로워 등의 창부터 닫는다.
+      // 설정 페이지에서 뒤로가면 프로필로 복귀한다.
+      if (window.frtCloseAccountPage?.()) {
+        return;
+      }
+
+      // 열린 팔로워 등의 창부터 닫는다.
       const dialogs = [
         ...document.querySelectorAll('dialog[open]')
       ];
@@ -27541,7 +27675,7 @@ frtContentUI.publish?.addEventListener(
     } finally {
       handling = false;
 
-      if (visible() || running()) {
+      if (visible() || searchVisible() || running()) {
         arm();
       }
     }
