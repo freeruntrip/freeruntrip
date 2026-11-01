@@ -10789,15 +10789,10 @@ body {
   display: none;
 }
 
-/* 프로필 화면에서 열린 계정 설정의 닫기 버튼 숨김 */
-body:has(#profileFeedScreen:not(.hidden))
-  #frtAccountDialog #frtAuthClose {
-  display: none;
-}
-
 /* 프로필 화면에서 열린 팔로워·팔로잉 목록의 닫기 버튼 숨김 */
 body:has(#profileFeedScreen:not(.hidden))
-  #frtFollowDialog .frt-follow-dialog-header > form[method="dialog"] {
+  #frtFollowDialog:not(.frt-following-page)
+  .frt-follow-dialog-header > form[method="dialog"] {
   display: none;
 }
 /* 계정 설정을 독립 페이지 형태로 표시 */
@@ -10907,4 +10902,204 @@ body.frt-settings-page-open {
 
 body.frt-search-page-open {
   overflow: hidden;
+}
+/* 프로필 계정명: 전체 너비의 독립된 한 줄 */
+#profileFeedScreen .frt-profile-card .frt-profile-top {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 14px;
+}
+
+/* 내부 요소를 위의 공통 격자에 배치 */
+#profileFeedScreen .frt-profile-card .frt-profile-summary,
+#profileFeedScreen .frt-profile-name-row {
+  display: contents;
+}
+
+/* 계정명: 첫 줄 전체 사용, 왼쪽 정렬 */
+#profileFeedScreen .frt-profile-card .hero-name {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  text-align: left;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+  font-family: "Nunito", sans-serif;
+  font-weight: 500;
+}
+
+/* 사진과 통계: 계정명 아래에 나란히 표시 */
+#profileFeedScreen .frt-profile-card .hero-avatar {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+#profileFeedScreen .frt-profile-card .frt-profile-stats {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
+}
+
+/* 팔로잉 목록: 계정명 공간과 분리 */
+#profileFeedScreen .frt-profile-name-row #frtProfileOwnerActions {
+  grid-column: 2;
+  grid-row: 3;
+  justify-self: end;
+  margin: 0;
+}
+/* 세 화면의 상단·좌우 여백 통일 */
+#frtAccountDialog .frt-auth-card,
+#frtAccountSearchDialog {
+  padding-top: calc(20px + env(safe-area-inset-top, 0px));
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+#profileFeedScreen.frt-viewing-public-profile {
+  padding-top: calc(20px + env(safe-area-inset-top, 0px));
+}
+
+/* 뒤로가기 버튼과 제목을 같은 줄에 배치 */
+#frtAccountDialog .frt-auth-heading,
+#frtAccountSearchDialog .frt-account-search-header,
+#frtPublicProfile > .profile-feed-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 44px;
+  margin: 0 0 20px;
+}
+
+/* 설정 버튼을 제목 왼쪽으로 이동 */
+#frtAuthClose {
+  order: -1;
+}
+
+#frtAccountDialog .frt-auth-heading > h2,
+#frtAccountSearchDialog .frt-account-search-header > h2,
+#frtPublicProfile > .profile-feed-header > h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+/* 공통 뒤로가기 버튼: 검은 꺾쇠, 투명 배경 */
+#frtAccountDialog #frtAuthClose.frt-page-back,
+#frtAccountSearchDialog #frtAccountSearchBack.frt-page-back,
+#frtPublicProfile > .profile-feed-header > button.frt-page-back {
+  box-sizing: border-box;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #000;
+  box-shadow: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* 기존 hidden 상태는 유지 */
+.frt-page-back:not([hidden]) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.frt-page-back svg {
+  display: block;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  pointer-events: none;
+}
+/* Following 목록을 전체 페이지 형태로 표시 */
+#frtFollowDialog.frt-following-page {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  right: auto;
+  box-sizing: border-box;
+  width: min(100%, var(--app-mobile-width));
+  max-width: none;
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding:
+    calc(20px + env(safe-area-inset-top, 0px))
+    20px
+    calc(32px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  color: #0f172a;
+  box-shadow: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+#frtFollowDialog.frt-following-page::backdrop {
+  background: transparent;
+}
+
+body:has(#frtFollowDialog.frt-following-page[open]) {
+  overflow: hidden;
+}
+
+#frtFollowDialog.frt-following-page .frt-follow-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  min-height: 44px;
+  margin: 0 0 20px;
+}
+
+#frtFollowDialog.frt-following-page
+  .frt-follow-dialog-header > form {
+  display: block;
+  order: -1;
+  flex: 0 0 44px;
+  margin: 0;
+}
+
+#frtFollowDialog.frt-following-page #frtFollowDialogTitle {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+#frtFollowDialog.frt-following-page #frtFollowBack {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #000;
+  box-shadow: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
 }

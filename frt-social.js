@@ -902,8 +902,12 @@
       if (!accountId) return;
 
       clearList();
+      dialog.classList.toggle(
+        'frt-following-page',
+        kind === 'following'
+      );
       title.textContent =
-        kind === 'followers' ? '팔로워' : '팔로잉 목록';
+        kind === 'followers' ? '팔로워' : 'Following';
       list.setAttribute('aria-label', title.textContent);
 
       const state = {
@@ -1357,13 +1361,33 @@
     const panel = el('section');
     panel.id = 'frtPublicProfile';
 
-    const back = button('← 검색으로 돌아가기', () => {
+    const back = button('', () => {
       clearPublicProfile();
       window.openAppPage('home');
       window.frtRestoreAccountSearch?.();
     });
 
-        const header = el('div', undefined, 'profile-feed-header');
+    back.classList.add('frt-page-back');
+    back.setAttribute('aria-label', '계정 검색으로 돌아가기');
+
+    back.innerHTML = `
+      <svg
+        width="28"
+        height="28"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M15 5L8 12L15 19"></path>
+      </svg>
+    `;
+
+    const header = el('div', undefined, 'profile-feed-header');
     header.append(back, el('h2', 'Record Profile Feed'));
 
     const hero = el(
@@ -1383,24 +1407,21 @@
             <div class="frt-profile-stats">
               <div class="frt-profile-stat">
                 <strong data-stat="trips">—</strong>
-                <span>런트립 횟수</span>
+                <span>RunTrip</span>
               </div>
 
               <div class="frt-profile-stat">
                 <strong data-stat="distance">—</strong>
-                <span>러닝 km</span>
+                <span>Running</span>
               </div>
 
               <div class="frt-profile-stat">
                 <strong data-stat="followers">—</strong>
-                <span>팔로워</span>
+                <span>Followers</span>
               </div>
             </div>
           </div>
         </div>
-
-        <div class="hero-badge">🌙 Night Runner</div>
-        <p class="hero-pace">"오늘도 잘 버틴 Pace"</p>
       </div>
     `;
 
@@ -1655,7 +1676,34 @@
     title.id = 'frtAccountSearchTitle';
 
     title.tabIndex = -1;
-    header.append(title);
+
+    const back = button('', () => {
+      window.frtCloseAccountSearch?.();
+      window.openAppPage('home');
+    });
+
+    back.id = 'frtAccountSearchBack';
+    back.classList.add('frt-page-back');
+    back.setAttribute('aria-label', '홈 피드로 돌아가기');
+
+    back.innerHTML = `
+      <svg
+        width="28"
+        height="28"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <path d="M15 5L8 12L15 19"></path>
+      </svg>
+    `;
+
+    header.append(back, title);
 
     const form = el('form');
     form.className = 'frt-account-search-form';

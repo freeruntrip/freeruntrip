@@ -24926,9 +24926,9 @@ openAppPage('home');
     handleInput.value = handleInput.value.trim().toLowerCase();
 
     handleInput.setCustomValidity(
-      /^[a-z0-9_]{3,20}$/.test(handleInput.value)
+      /^[a-z0-9_]{3,15}$/.test(handleInput.value)
         ? ''
-        : '영문 소문자·숫자·밑줄(_)로 3~20자를 입력해 주세요.'
+        : '영문 소문자·숫자·밑줄(_)로 3~15자를 입력해 주세요.'
     );
 
     if (!panels.handle.reportValidity()) return;
@@ -27506,7 +27506,8 @@ frtContentUI.publish?.addEventListener(
   const backButtons = [
     '#backFromProfileFeedBtn',
     '#frtPublicProfile > .profile-feed-header > button',
-    '#profileFeedScreen .frt-profile-list-bar > button'
+    '#profileFeedScreen .frt-profile-list-bar > button',
+    '#frtFollowBack'
   ].join(',');
 
   let armed = false;

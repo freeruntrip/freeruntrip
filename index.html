@@ -16,6 +16,12 @@
   rel="stylesheet"
 />
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link
+  href="https://fonts.googleapis.com/css2?family=Nunito:wght@500&display=swap"
+  rel="stylesheet"
+>
 <link rel="stylesheet" href="style.css" />
 </head>
 
@@ -730,7 +736,7 @@
               id="frtProfileFollowingBtn"
               type="button"
             >
-              팔로잉 목록
+              Following
             </button>
           </div>
         </div>
@@ -738,12 +744,12 @@
         <div class="frt-profile-stats">
           <div class="frt-profile-stat">
             <strong id="profileRunTripCount">—</strong>
-            <span>런트립 횟수</span>
+            <span>RunTrip</span>
           </div>
 
           <div class="frt-profile-stat">
             <strong id="profileTotalDistance">0.0km</strong>
-            <span>러닝 km</span>
+            <span>Running</span>
           </div>
 
           <button
@@ -753,19 +759,11 @@
             aria-label="팔로워 목록 보기"
           >
             <strong id="profileFollowers">0</strong>
-            <span>팔로워</span>
+            <span>Followers</span>
           </button>
         </div>
       </div>
     </div>
-
-    <div class="hero-badge">
-      🌙 Night Runner
-    </div>
-
-    <p class="hero-pace">
-      "오늘도 잘 버틴 Pace"
-    </p>
     
   </div>
 </div>
@@ -808,8 +806,26 @@
     <h2 id="frtFollowDialogTitle">팔로워</h2>
 
     <form method="dialog">
-      <button type="submit" aria-label="목록 닫기">
-        닫기
+      <button
+        id="frtFollowBack"
+        class="frt-page-back"
+        type="submit"
+        aria-label="프로필로 돌아가기"
+      >
+        <svg
+          width="28"
+          height="28"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M15 5L8 12L15 19"></path>
+        </svg>
       </button>
     </form>
   </div>
@@ -1265,11 +1281,24 @@
 
       <button
         id="frtAuthClose"
-        class="frt-auth-small"
+        class="frt-auth-small frt-page-back"
         type="button"
-        aria-label="계정 설정 닫기"
+        aria-label="프로필로 돌아가기"
       >
-        닫기
+        <svg
+          width="28"
+          height="28"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path d="M15 5L8 12L15 19"></path>
+        </svg>
       </button>
     </div>
 
@@ -1535,8 +1564,8 @@
           name="username"
           type="text"
           minlength="3"
-          maxlength="20"
-          pattern="[a-zA-Z0-9_]{3,20}"
+          maxlength="15"
+          pattern="[a-zA-Z0-9_]{3,15}"
           autocomplete="off"
           autocapitalize="none"
           spellcheck="false"
@@ -1546,7 +1575,7 @@
       </div>
 
       <p id="frtHandleHelp" class="frt-auth-note">
-        영문 소문자·숫자·밑줄(_)로 3~20자.
+        영문 소문자·숫자·밑줄(_)로 3~15자.
         대문자는 소문자로 저장돼요.
         아이디는 다른 사람에게 공개되며 나중에 변경할 수 있어요.
       </p>
