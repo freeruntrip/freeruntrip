@@ -306,24 +306,6 @@
     </div>
   </header>
 
-  <section class="records-summary-grid">
-    <article class="records-summary-card">
-      <span>누적 거리</span>
-
-      <strong id="recordsTotalDistance">
-        0.0 km
-      </strong>
-    </article>
-
-    <article class="records-summary-card">
-      <span>전체 활동</span>
-
-      <strong id="recordsTotalCount">
-        0회
-      </strong>
-    </article>
-  </section>
-
   <button
     id="recordsAnalysisBtn"
     class="records-analysis-btn"
@@ -331,7 +313,7 @@
   >
     <span>
       <small>ACTIVITY ANALYSIS</small>
-      <strong>내 러닝 활동 분석 보기</strong>
+      <strong>달려온 시간들</strong>
     </span>
 
     <span aria-hidden="true">
@@ -847,7 +829,30 @@
 </dialog>
 <section id="monthlyReportScreen" class="screen hidden">
   <div class="monthly-report-header">
-    <button id="backFromMonthlyReportBtn">← Back</button>
+    <div class="analysis-page-heading">
+      <button
+        id="backFromMonthlyReportBtn"
+        type="button"
+        aria-label="기록 페이지로 돌아가기"
+      >
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M15 5L8 12L15 19"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </button>
+      <h1>달려온 시간들</h1>
+    </div>
 
     <div class="analysis-tabs" role="tablist">
       <button class="analysis-tab active" data-period="week" type="button">주</button>
@@ -880,10 +885,15 @@
       <span>러닝</span>
     </div>
 
-    <div>
-      <strong id="analysisAveragePace">--'--"</strong>
-      <span>평균 Pace</span>
-    </div>
+    <div class="analysis-pace-stat">
+  <button
+    id="analysisAveragePace"
+    type="button"
+    data-showing="emotional"
+    title="누르면 감성 문구와 평균 숫자 페이스가 전환됩니다"
+  >아직 기록 없음</button>
+  <span>나의 Pace</span>
+</div>
 
     <div>
       <strong id="analysisTotalDuration">0:00</strong>
@@ -934,8 +944,8 @@
       </div>
 
       <div>
-        <span>평균 Pace</span>
-        <strong id="longTermAveragePace">--'--"</strong>
+        <span>가장 많이 선택한 Pace</span>
+        <strong id="longTermAveragePace">아직 기록 없음</strong>
       </div>
 
       <div>

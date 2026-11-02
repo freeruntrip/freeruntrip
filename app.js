@@ -1702,7 +1702,7 @@ async function frtSyncAccountRecords() {
     frtSetRecordsStatus(
       hasPending
         ? '저장한 기록을 전송하고 있어요.'
-        : '계정에 기록이 동기화됐어요.'
+        : ''
     );
 
     frtRenderAccountRecords();
@@ -5479,21 +5479,7 @@ function getRecordFilterTitle() {
 }
 
 function renderRecordsSummary() {
-  const totalDistanceKm = runRecords.reduce(
-    function (sum, record) {
-      return (
-        sum +
-        (Number(record.distance) || 0)
-      );
-    },
-    0
-  );
-
-  recordsTotalDistance.textContent =
-    `${totalDistanceKm.toFixed(1)} km`;
-
-  recordsTotalCount.textContent =
-    `${runRecords.length}회`;
+  // 기록 페이지 상단 요약 지표 제거
 }
 
 function renderRecordsEmptyState() {
@@ -5693,37 +5679,31 @@ function renderRunRecords() {
         </strong>
       </div>
 
-      <div class="record-card-stat">
-        <span>평균 Pace</span>
+      <div class="record-card-stat record-card-mood-stat">
+        <span>나의 Pace</span>
 
-        <strong>
-          ${safePace}
-        </strong>
+        <button
+          class="record-card-pace-toggle"
+          type="button"
+          data-showing="emotional"
+          title="누르면 감성 문구와 숫자 페이스가 전환됩니다"
+        >
+          ${safeEmotionalPace}
+        </button>
       </div>
     </div>
 
-    <div class="record-card-footer">
-      <button
-        class="record-card-pace-toggle"
-        type="button"
-        data-showing="emotional"
-        aria-label="Pace 표시 전환"
-      >
-        ${safeEmotionalPace}
-      </button>
-
-      ${
-        isRunTrip
-          ? `
-            <span
-              class="record-card-journey-label"
-            >
+    ${
+      isRunTrip
+        ? `
+          <div class="record-card-footer">
+            <span class="record-card-journey-label">
               도시 여행 기록
             </span>
-          `
-          : ''
-      }
-    </div>
+          </div>
+        `
+        : ''
+    }
   `;
 
   function openRecordDetail() {
@@ -5981,6 +5961,10 @@ if (isRunTrip) {
   recordCard.addEventListener(
     'keydown',
     function (event) {
+      if (event.target !== recordCard) {
+        return;
+      }
+
       if (
         event.key !== 'Enter' &&
         event.key !== ' '
@@ -5989,7 +5973,6 @@ if (isRunTrip) {
       }
 
       event.preventDefault();
-
       openRecordDetail();
     }
   );
@@ -22407,6 +22390,31 @@ const monthlyReportRecentRuns = document.getElementById('monthlyReportRecentRuns
 const analysisDistance = document.getElementById('analysisDistance');
 const analysisRunCount = document.getElementById('analysisRunCount');
 const analysisAveragePace = document.getElementById('analysisAveragePace');
+function updateAnalysisPaceDisplay(showNumeric) {
+  const emotionalPace =
+    analysisAveragePace.dataset.emotionalPace || '아직 기록 없음';
+  const numericPace =
+    analysisAveragePace.dataset.numericPace || '--\'--"';
+
+  analysisAveragePace.dataset.showing =
+    showNumeric ? 'numeric' : 'emotional';
+
+  analysisAveragePace.textContent =
+    showNumeric ? numericPace : emotionalPace;
+
+  analysisAveragePace.setAttribute(
+    'aria-label',
+    showNumeric
+      ? `평균 페이스 ${numericPace}. 누르면 감성 페이스 보기`
+      : `${emotionalPace}. 누르면 평균 숫자 페이스 보기`
+  );
+}
+
+analysisAveragePace.addEventListener('click', function () {
+  updateAnalysisPaceDisplay(
+    analysisAveragePace.dataset.showing !== 'numeric'
+  );
+});
 const analysisTotalDuration = document.getElementById('analysisTotalDuration');
 
 const analysisMoodTitle = document.getElementById('analysisMoodTitle');
@@ -22804,14 +22812,6 @@ function renderDistanceChart(records) {
 }
 
 function renderLongTermStats(records, totalDistanceKm, totalDurationSeconds) {
-  const shouldShow =
-    selectedAnalysisMode === 'year' ||
-    selectedAnalysisMode === 'all';
-
-  if (!shouldShow) {
-    longTermStatsSection.classList.add('hidden');
-    return;
-  }
 
   longTermStatsSection.classList.remove('hidden');
 
@@ -22846,21 +22846,24 @@ function renderLongTermStats(records, totalDistanceKm, totalDurationSeconds) {
   const runsPerWeek = runCount / weeksInPeriod;
 
   longTermStatsTitle.textContent =
-    selectedAnalysisMode === 'year'
-      ? `${selectedAnalysisDate.getFullYear()}년 통계`
-      : '전체 활동 통계';
+    selectedAnalysisMode === 'all'
+      ? '전체 활동 통계'
+      : `${getPeriodTitle()} 활동 통계`;
 
-  averageRunsPerWeek.textContent =
-    `${runsPerWeek.toFixed(1)}러닝/주`;
+  averageRunsPerWeek.textContent = runsPerWeek.toFixed(1);
 
   averageDistancePerRun.textContent =
-    `${averageDistance.toFixed(1)}km/러닝`;
+    `${averageDistance.toFixed(1)}km`;
+
+  const moodRanking = getMoodSummary(records);
 
   longTermAveragePace.textContent =
-    formatAveragePace(totalDurationSeconds, totalDistanceKm);
+    moodRanking.length > 0
+      ? moodRanking[0].mood
+      : '아직 기록 없음';
 
   averageDurationPerRun.textContent =
-    `${formatAnalysisDuration(averageDuration)}/러닝`;
+    formatAnalysisDuration(averageDuration);
 }
 
 function renderRecentRuns(records) {
@@ -22919,8 +22922,19 @@ function renderMonthlyReport() {
 
   analysisDistance.textContent = totalDistanceKm.toFixed(1);
   analysisRunCount.textContent = records.length;
-  analysisAveragePace.textContent =
-    formatAveragePace(totalDurationSeconds, totalDistanceKm);
+  const periodMoodRanking = getMoodSummary(records);
+
+analysisAveragePace.dataset.emotionalPace =
+  periodMoodRanking.length > 0
+    ? periodMoodRanking[0].mood
+    : records.length > 0
+      ? '선택한 Pace 없음'
+      : '아직 기록 없음';
+
+analysisAveragePace.dataset.numericPace =
+  formatAveragePace(totalDurationSeconds, totalDistanceKm);
+
+updateAnalysisPaceDisplay(false);
 
   analysisTotalDuration.textContent =
     formatAnalysisDuration(totalDurationSeconds);

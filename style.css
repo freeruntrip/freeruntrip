@@ -11103,3 +11103,938 @@ body:has(#frtFollowDialog.frt-following-page[open]) {
   appearance: none;
   -webkit-appearance: none;
 }
+/* ========================================
+   기록 페이지 디자인 정리
+   감성 Pace 강조
+======================================== */
+
+#records {
+  background: #fff;
+  color: #202925;
+}
+
+/* 상단 제목 */
+#records .records-header {
+  margin-bottom: 24px;
+}
+
+#records .records-header h2 {
+  margin: 0;
+  color: #202925;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+#records .records-eyebrow,
+#records .records-description,
+#records .records-analysis-btn small {
+  display: none;
+}
+
+/* 누적 지표 */
+#records .records-summary-grid {
+  gap: 0;
+  margin-bottom: 16px;
+  padding: 20px 0;
+  border-bottom: 1px solid #edf0ee;
+}
+
+#records .records-summary-card {
+  padding: 0 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+#records .records-summary-card + .records-summary-card {
+  border-left: 1px solid #e8edea;
+}
+
+#records .records-summary-card span {
+  margin-bottom: 10px;
+  color: #747e78;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#records .records-summary-card strong {
+  color: #202925;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 활동 분석 */
+#records .records-analysis-btn {
+  min-height: 54px;
+  margin-bottom: 24px;
+  padding: 14px 16px;
+  border: 1px solid #e8edea;
+  border-radius: 14px;
+  background: #f7f9f8;
+  color: #34483d;
+  box-shadow: none;
+}
+
+#records .records-analysis-btn strong {
+  color: #34483d;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+#records .records-analysis-btn > span:last-child {
+  color: #76857b;
+  font-size: 24px;
+}
+
+/* 전체 / 러닝 / RunTrip */
+#records .records-filter-tabs {
+  gap: 4px;
+  padding: 4px;
+  border: 0;
+  border-radius: 14px;
+  background: #f2f5f3;
+}
+
+#records .records-filter-tab {
+  height: 42px;
+  border-radius: 11px;
+  color: #717c75;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+#records .records-filter-tab.active {
+  background: #fff;
+  color: #245c47;
+  box-shadow: 0 2px 6px rgba(32, 57, 43, 0.07);
+}
+
+/* 목록 제목 */
+#records .records-list-heading {
+  align-items: center;
+  margin: 24px 0 14px;
+}
+
+#records .records-list-heading h3 {
+  color: #28352d;
+  font-size: 17px;
+  font-weight: 650;
+}
+
+#records #recordsFilteredCount {
+  padding: 0;
+  background: transparent;
+  color: #79847d;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#records #recordsList {
+  gap: 16px;
+}
+
+/* 기록 카드 */
+#records .record-card {
+  margin: 0;
+  padding: 18px;
+  border: 1px solid #e5ebe7;
+  border-radius: 20px;
+  background: #fff;
+  color: #202925;
+  box-shadow: 0 4px 16px rgba(30, 55, 40, 0.035);
+}
+
+/* 기존 왼쪽 색상 띠와 영문 배지 숨김 */
+#records .record-card::before,
+#records .record-activity-badge {
+  display: none;
+}
+
+/* 기존 nth-child 스타일이 내부 요소에 겹치지 않도록 정리 */
+#records .record-card div {
+  margin: 0;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+#records .record-card .record-card-header {
+  justify-content: flex-start;
+  margin-bottom: 10px;
+}
+
+#records .record-card-date {
+  color: #7a857e;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#records .record-card .record-card-title-row {
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+#records .record-card-title {
+  color: #26372d;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+
+#records .record-card-subtitle {
+  margin-top: 6px;
+  color: #7a857e;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+#records .record-card-arrow {
+  color: #8c9890;
+  font-size: 24px;
+}
+
+/* 거리 / 시간 / 평균 페이스 */
+#records .record-card .record-card-stats {
+  gap: 0;
+  margin-bottom: 16px;
+  padding: 14px 0;
+  border-top: 1px solid #f0f3f1;
+  border-bottom: 1px solid #f0f3f1;
+}
+
+#records .record-card .record-card-stat {
+  min-width: 0;
+  padding: 0 6px;
+  border-radius: 0;
+  background: transparent;
+  text-align: center;
+}
+
+#records .record-card-stat + .record-card-stat {
+  border-left: 1px solid #edf1ee;
+}
+
+#records .record-card-stat span {
+  margin-bottom: 7px;
+  color: #7a857e;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+#records .record-card-stat strong {
+  color: #27382e;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+
+#records .record-card-stat small {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+/* 감성 페이스를 카드의 주요 요소로 강조 */
+#records .record-card .record-card-footer {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+#records .record-card-pace-toggle {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 52px;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid #d9eee3;
+  border-radius: 14px;
+  background: #edf8f2;
+  color: #28634b;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.5;
+  letter-spacing: -0.025em;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  box-shadow: none;
+}
+
+#records .record-card-pace-toggle:active {
+  background: #e0f1e7;
+}
+
+#records .record-card-journey-label {
+  align-self: flex-end;
+  color: #8b826c;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+#records .record-card:focus-visible,
+#records button:focus-visible {
+  outline: 2px solid #408369;
+  outline-offset: 3px;
+}
+
+/* 작은 스마트폰 화면 */
+@media (max-width: 390px) {
+  #records .record-card {
+    padding: 16px;
+  }
+
+  #records .records-summary-card strong {
+    font-size: 24px;
+  }
+
+  #records .record-card-stat strong {
+    font-size: 15px;
+  }
+
+  #records .record-card-pace-toggle {
+    font-size: 16px;
+  }
+}
+/* 기록 페이지 컬러 — 새벽과 도시 야경 */
+#records {
+  background: #fff;
+  color: #17243b;
+}
+
+#records .records-header h2,
+#records .records-list-heading h3 {
+  color: #17243b;
+}
+
+/* 누적 지표: 은은한 블루그레이 */
+#records .records-summary-grid {
+  gap: 10px;
+  padding: 0;
+  border-bottom: 0;
+}
+
+#records .records-summary-card,
+#records .records-summary-card + .records-summary-card {
+  padding: 18px 16px;
+  border: 1px solid #dce3ee;
+  border-radius: 16px;
+  background: #f0f3f8;
+}
+
+#records .records-summary-card span {
+  color: #65738b;
+}
+
+#records .records-summary-card strong {
+  color: #203657;
+}
+
+/* 활동 분석: 도시 야경의 네이비 */
+#records .records-analysis-btn {
+  border: 1px solid #263d5e;
+  background: linear-gradient(120deg, #152238, #2b4568);
+  box-shadow: 0 5px 14px rgba(21, 34, 56, 0.12);
+}
+
+#records .records-analysis-btn strong {
+  color: #f5f7fc;
+}
+
+#records .records-analysis-btn > span:last-child {
+  color: #b9c9df;
+}
+
+/* 필터 */
+#records .records-filter-tabs {
+  background: #eef1f6;
+}
+
+#records .records-filter-tab {
+  color: #68768c;
+}
+
+#records .records-filter-tab.active {
+  background: #203451;
+  color: #fff;
+  box-shadow: 0 3px 8px rgba(23, 36, 59, 0.14);
+}
+
+/* 기록 카드 */
+#records .record-card {
+  border-color: #dce3ed;
+  color: #1c2b43;
+  box-shadow: 0 4px 16px rgba(24, 40, 65, 0.04);
+}
+
+#records .record-card-title,
+#records .record-card-stat strong {
+  color: #203451;
+}
+
+#records .record-card-date,
+#records .record-card-subtitle,
+#records .record-card-stat span,
+#records #recordsFilteredCount {
+  color: #6c7b92;
+}
+
+#records .record-card-arrow {
+  color: #8293ad;
+}
+
+#records .record-card .record-card-stats {
+  border-color: #e9edf4;
+}
+
+#records .record-card-stat + .record-card-stat {
+  border-left-color: #e9edf4;
+}
+
+/* 감성 Pace: 네이비 위에 은은한 새벽빛 */
+#records .record-card-pace-toggle {
+  border: 1px solid #344764;
+  background: linear-gradient(
+    110deg,
+    #203451 0%,
+    #344663 65%,
+    #55506b 100%
+  );
+  color: #ffe1c7;
+  box-shadow: none;
+}
+
+#records .record-card-pace-toggle:active {
+  background: #263b59;
+}
+
+#records .record-card-journey-label {
+  color: #747b91;
+}
+
+#records .record-card:focus-visible,
+#records button:focus-visible {
+  outline-color: #718bb5;
+}
+
+/* 비어 있는 동기화 안내와 여백 제거 */
+#records [data-frt-record-sync]:empty {
+  display: none;
+}
+/* 기록 카드: 거리 / 시간 / 감성 Pace */
+#records .record-card .record-card-stats {
+  grid-template-columns:
+    minmax(0, 0.85fr)
+    minmax(0, 0.85fr)
+    minmax(0, 1.6fr);
+  align-items: stretch;
+  margin-bottom: 0;
+  padding: 14px 0 0;
+  border-bottom: 0;
+}
+
+#records .record-card .record-card-stat {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+}
+
+#records .record-card-stat > span {
+  margin-bottom: 8px;
+}
+
+#records .record-card-stat > strong {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 48px;
+}
+
+#records .record-card .record-card-mood-stat {
+  padding-left: 10px;
+  padding-right: 0;
+}
+
+/* 감성 문구와 숫자 모두 같은 자리에서 표시 */
+#records .record-card-mood-stat .record-card-pace-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  padding: 10px 8px;
+  border: 1px solid #344764;
+  border-radius: 12px;
+  background: linear-gradient(
+    110deg,
+    #203451 0%,
+    #344663 65%,
+    #55506b 100%
+  );
+  color: #ffe1c7;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.5;
+  text-align: center;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+}
+
+#records .record-card-mood-stat .record-card-pace-toggle:active {
+  background: #263b59;
+}
+
+#records .record-card .record-card-footer {
+  margin-top: 12px;
+}
+/* ========================================
+   달려온 시간들 — 기록 페이지 디자인 통일
+======================================== */
+
+#monthlyReportScreen {
+  min-height: 100dvh;
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 20px)
+    20px
+    calc(env(safe-area-inset-bottom, 0px) + 104px);
+  background: #fff;
+  color: #17243b;
+}
+
+/* 페이지 제목과 뒤로가기 */
+#monthlyReportScreen .monthly-report-header {
+  gap: 22px;
+  margin-bottom: 24px;
+}
+
+#monthlyReportScreen .analysis-page-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#monthlyReportScreen #backFromMonthlyReportBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #17243b;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+#monthlyReportScreen .analysis-page-heading h1 {
+  margin: 0;
+  color: #17243b;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.04em;
+}
+
+/* 중복되는 영문 소제목 정리 */
+#monthlyReportScreen .card-label {
+  display: none;
+}
+
+/* 주 / 월 / 년 / 전체 */
+#monthlyReportScreen .analysis-tabs {
+  gap: 4px;
+  padding: 4px;
+  border: 0;
+  border-radius: 14px;
+  background: #eef1f6;
+}
+
+#monthlyReportScreen .analysis-tab {
+  min-height: 42px;
+  padding: 8px 0;
+  border-radius: 11px;
+  background: transparent;
+  color: #68768c;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+#monthlyReportScreen .analysis-tab.active {
+  background: #203451;
+  color: #fff;
+  box-shadow: 0 3px 8px rgba(23, 36, 59, 0.14);
+}
+
+/* 기간 이동 */
+#monthlyReportScreen .analysis-period-row {
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  gap: 8px;
+}
+
+#monthlyReportScreen .analysis-period-row > div {
+  min-width: 0;
+  text-align: center;
+}
+
+#monthlyReportScreen #monthlyReportTitle {
+  margin: 0;
+  color: #203451;
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.45;
+  letter-spacing: -0.035em;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+#monthlyReportScreen #monthlyReportSubtitle {
+  margin: 7px 0 0;
+  color: #6c7b92;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+  word-break: keep-all;
+}
+
+#monthlyReportScreen .period-nav-btn {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid #e2e8f1;
+  border-radius: 12px;
+  background: #f3f5f9;
+  color: #203451;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+#monthlyReportScreen .period-nav-btn:disabled {
+  opacity: 0.3;
+}
+
+/* 기간별 거리 */
+#monthlyReportScreen .analysis-hero {
+  margin: 0;
+  padding: 22px 18px;
+  border: 1px solid #dce3ee;
+  border-radius: 18px;
+  background: #f0f3f8;
+}
+
+#monthlyReportScreen .analysis-hero span {
+  color: #203451;
+  font-size: clamp(44px, 12vw, 60px);
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -0.055em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+#monthlyReportScreen .analysis-hero small {
+  margin-top: 8px;
+  color: #6c7b92;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* 러닝 횟수 / 평균 페이스 / 시간 */
+#monthlyReportScreen .analysis-main-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin: 18px 0 24px;
+  padding: 16px 0;
+  border-top: 1px solid #e9edf4;
+  border-bottom: 1px solid #e9edf4;
+}
+
+#monthlyReportScreen .analysis-main-stats > div {
+  padding: 0 6px;
+  text-align: center;
+}
+
+#monthlyReportScreen .analysis-main-stats > div + div {
+  border-left: 1px solid #e9edf4;
+}
+
+#monthlyReportScreen .analysis-main-stats strong {
+  color: #203451;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+#monthlyReportScreen .analysis-main-stats span {
+  margin-top: 6px;
+  color: #6c7b92;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* 감성 페이스 */
+#monthlyReportScreen .pace-mood-report-card {
+  margin-bottom: 20px;
+  padding: 20px;
+  border: 1px solid #344764;
+  border-radius: 20px;
+  background: linear-gradient(
+    110deg,
+    #203451 0%,
+    #344663 65%,
+    #55506b 100%
+  );
+}
+
+#monthlyReportScreen .pace-mood-report-card h3 {
+  margin: 0 0 12px;
+  color: #e1e8f3;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
+#monthlyReportScreen #analysisTopMood {
+  color: #ffe1c7;
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1.5;
+  letter-spacing: -0.03em;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+#monthlyReportScreen #analysisMoodDescription {
+  margin-top: 10px;
+  color: #d5deec;
+  font-size: 12px;
+  line-height: 1.7;
+  word-break: keep-all;
+}
+
+#monthlyReportScreen .analysis-mood-ranking:empty {
+  display: none;
+}
+
+#monthlyReportScreen .mood-ranking-row {
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  border-top-color: rgba(255, 255, 255, 0.16);
+}
+
+#monthlyReportScreen .mood-ranking-row span {
+  color: #ffe1c7;
+  font-weight: 600;
+}
+
+#monthlyReportScreen .mood-ranking-row strong {
+  color: #f4f6fc;
+  font-size: 13px;
+  font-weight: 500;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+#monthlyReportScreen .mood-ranking-row em {
+  color: #d5deec;
+  font-size: 12px;
+}
+
+/* 그래프 / 평균 통계 / 최근 활동 */
+#monthlyReportScreen .monthly-chart-card,
+#monthlyReportScreen .long-term-stats,
+#monthlyReportScreen .monthly-recent-section {
+  margin-bottom: 20px;
+  padding: 18px;
+  border: 1px solid #dce3ed;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 4px 16px rgba(24, 40, 65, 0.035);
+}
+
+#monthlyReportScreen .monthly-section-heading h3 {
+  color: #203451;
+  font-size: 17px;
+  font-weight: 650;
+}
+
+#monthlyReportScreen .monthly-section-heading > span,
+#monthlyReportScreen .monthly-bar-date,
+#monthlyReportScreen .monthly-empty-message {
+  color: #6c7b92;
+}
+
+#monthlyReportScreen .monthly-bar-value {
+  color: #203451;
+  font-weight: 600;
+}
+
+#monthlyReportScreen .monthly-bar {
+  background: linear-gradient(180deg, #7188ae, #203451);
+}
+
+#monthlyReportScreen .long-term-stat-card {
+  border-radius: 14px;
+  background: #f3f5f9;
+}
+
+#monthlyReportScreen .long-term-stat-card > div {
+  padding: 16px;
+  border-bottom-color: #e1e7f0;
+}
+
+#monthlyReportScreen .long-term-stat-card span {
+  color: #6c7b92;
+  font-size: 12px;
+}
+
+#monthlyReportScreen .long-term-stat-card strong {
+  color: #203451;
+  font-size: 22px;
+  font-weight: 650;
+}
+
+#monthlyReportScreen .monthly-recent-run {
+  border-bottom-color: #e9edf4;
+}
+
+#monthlyReportScreen .monthly-recent-run > div {
+  min-width: 0;
+}
+
+#monthlyReportScreen .monthly-recent-run-date {
+  color: #6c7b92;
+}
+
+#monthlyReportScreen .monthly-recent-run-mood {
+  color: #344663;
+  font-size: 14px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+#monthlyReportScreen .monthly-recent-run-distance {
+  color: #203451;
+  font-size: 17px;
+  font-weight: 650;
+}
+
+/* 키보드 포커스 */
+#monthlyReportScreen button:focus-visible {
+  outline: 2px solid #718bb5;
+  outline-offset: 3px;
+}
+
+@media (max-width: 390px) {
+  #monthlyReportScreen {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  #monthlyReportScreen #monthlyReportTitle {
+    font-size: 18px;
+  }
+
+  #monthlyReportScreen .analysis-main-stats strong {
+    font-size: 16px;
+  }
+
+  #monthlyReportScreen #analysisTopMood {
+    font-size: 20px;
+  }
+}
+/* 달려온 시간들: 감성 Pace ↔ 평균 숫자 페이스 */
+#monthlyReportScreen .analysis-main-stats {
+  grid-template-columns:
+    minmax(0, 0.8fr)
+    minmax(0, 1.6fr)
+    minmax(0, 0.9fr);
+  align-items: stretch;
+}
+
+#monthlyReportScreen .analysis-main-stats > div {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+#monthlyReportScreen .analysis-main-stats strong {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+}
+
+#monthlyReportScreen #analysisAveragePace {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  padding: 10px 8px;
+  border: 1px solid #344764;
+  border-radius: 12px;
+  background: linear-gradient(
+    110deg,
+    #203451 0%,
+    #344663 65%,
+    #55506b 100%
+  );
+  color: #ffe1c7;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.5;
+  text-align: center;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+#monthlyReportScreen #analysisAveragePace:active {
+  background: #263b59;
+}
+
+#monthlyReportScreen .analysis-main-stats > div > span {
+  margin-top: auto;
+  padding-top: 6px;
+}
+/* 러닝 / 나의 Pace / 시간: 제목을 위로 배치 */
+#monthlyReportScreen .analysis-main-stats > div > span {
+  order: -1;
+  margin: 0 0 8px;
+  padding: 0;
+}
+/* 러닝 / 시간 / 나의 Pace 순서로 배치 */
+#monthlyReportScreen .analysis-main-stats {
+  grid-template-columns:
+    minmax(0, 0.8fr)
+    minmax(0, 0.9fr)
+    minmax(0, 1.6fr);
+}
+
+#monthlyReportScreen .analysis-main-stats > .analysis-pace-stat {
+  order: 1;
+}
