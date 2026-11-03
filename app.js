@@ -5644,9 +5644,9 @@ function renderRunRecords() {
 
     <div class="record-card-title-row">
       <div class="record-card-title-wrap">
-        <strong class="record-card-title">
-          ${safeTitle}
-        </strong>
+        <span class="record-running-badge">
+          ${isRunTrip ? 'RUNTRIP' : 'RUNNING'}
+        </span>
 
         <span class="record-card-subtitle">
           ${safeSubtitle}
@@ -26122,6 +26122,7 @@ const frtContentState = {
   statsDrag: null,
   selectedElement: 'stats',
   logoImage: null,
+  logoTextWhite: false,
   logoLayout: { x: 0.5, y: 0.49, scale: 1 },
   logoBounds: null,
   routeLayout: { x: 0.5, y: 0.68, scale: 1 },
@@ -26303,6 +26304,7 @@ async function frtOpenContentEditor() {
   frtContentState.statsBounds = null;
   frtContentState.statsDrag = null;
   frtContentState.selectedElement = 'stats';
+  frtContentState.logoTextWhite = false;
   frtContentState.logoLayout = {
     x: 0.5,
     y: 0.49,
@@ -26389,9 +26391,7 @@ async function frtOpenContentEditor() {
 
     // 사용자가 이미 앨범 사진을 선택했다면 안내를 덮어쓰지 않는다.
     if (!frtContentState.image) {
-      frtContentUI.status.textContent = sources.length
-        ? '합성할 사진을 선택해 주세요.'
-        : '저장된 사진이 없어요. 앨범에서 사진을 선택해 주세요.';
+      frtContentUI.status.textContent = '';
     }
   } catch (error) {
     console.error('기록 사진 조회 실패:', error);
@@ -26816,6 +26816,61 @@ async function frtLoadContentLogo() {
 }
 
 /* 원본 비율을 유지하며 로고 그리기 */
+// 원본 로고에서 글자 영역만 흰색으로 변환한다.
+let frtWhiteTextLogoCache = null;
+let frtWhiteTextLogoSource = null;
+
+function frtGetWhiteTextLogo(image) {
+  if (
+    frtWhiteTextLogoCache &&
+    frtWhiteTextLogoSource === image
+  ) {
+    return frtWhiteTextLogoCache;
+  }
+
+  const width = image.naturalWidth;
+  const height = image.naturalHeight;
+
+  // 현재 원본(1272 × 1237)의 그림과 글자 사이 경계
+  const textTop = Math.round(height * 998 / 1237);
+
+  const textLayer = document.createElement('canvas');
+  textLayer.width = width;
+  textLayer.height = height - textTop;
+
+  const textContext = textLayer.getContext('2d');
+
+  textContext.drawImage(
+    image,
+    0, textTop, width, height - textTop,
+    0, 0, width, height - textTop
+  );
+
+  // 글자의 투명도와 윤곽을 유지하며 색상만 변경
+  textContext.globalCompositeOperation = 'source-in';
+  textContext.fillStyle = '#ffffff';
+  textContext.fillRect(
+    0, 0, textLayer.width, textLayer.height
+  );
+
+  const result = document.createElement('canvas');
+  result.width = width;
+  result.height = height;
+
+  const resultContext = result.getContext('2d');
+
+  resultContext.drawImage(
+    image,
+    0, 0, width, textTop,
+    0, 0, width, textTop
+  );
+  resultContext.drawImage(textLayer, 0, textTop);
+
+  frtWhiteTextLogoSource = image;
+  frtWhiteTextLogoCache = result;
+
+  return result;
+}
 function frtDrawContentLogo(context, width, height) {
   const image = frtContentState.logoImage;
 
@@ -26836,7 +26891,13 @@ function frtDrawContentLogo(context, width, height) {
   const y = height * layout.y - logoHeight / 2;
 
   context.save();
-  context.drawImage(image, x, y, logoWidth, logoHeight);
+  const logoSource = frtContentState.logoTextWhite
+  ? frtGetWhiteTextLogo(image)
+  : image;
+
+  context.drawImage(
+  logoSource, x, y, logoWidth, logoHeight
+  );
   context.restore();
 
   const padding = baseSize * 0.015;
@@ -27024,8 +27085,12 @@ if (frtGestureCanvas) {
       frtContentState.selectedElement = element;
 
       drag = {
-        session: frtContentState.session,
-        points: new Map()
+         session: frtContentState.session,
+         points: new Map(),
+         logoTap: element === 'logo',
+         tapStartedAt: performance.now(),
+         tapStartX: event.clientX,
+         tapStartY: event.clientY
       };
 
       frtContentState.statsDrag = drag;
@@ -27036,6 +27101,10 @@ if (frtGestureCanvas) {
     }
 
     event.preventDefault();
+    // 두 번째 손가락이 닿으면 색상 전환을 취소한다.
+    if (drag.points.size > 0) {
+      drag.logoTap = false;
+    }
     drag.points.set(event.pointerId, point);
     frtGestureCanvas.setPointerCapture(event.pointerId);
     frtResetContentGesture(drag);
@@ -27065,6 +27134,15 @@ if (frtGestureCanvas) {
     }
 
     event.preventDefault();
+    // 화면 기준 8px 이상 움직이면 드래그로 판단한다.
+    if (
+      Math.hypot(
+         event.clientX - drag.tapStartX,
+         event.clientY - drag.tapStartY
+      ) > 8
+) {
+  drag.logoTap = false;
+}
     drag.points.set(event.pointerId, point);
 
     const points = Array.from(drag.points.values());
@@ -27130,6 +27208,25 @@ if (frtGestureCanvas) {
       return;
     }
 
+    const toggleLogoText =
+  event.type === 'pointerup' &&
+  drag.logoTap &&
+  drag.points.size === 1 &&
+  drag.session === frtContentState.session &&
+  !frtContentState.saving &&
+  !frtContentState.publishing &&
+  performance.now() - drag.tapStartedAt <= 350 &&
+  Math.hypot(
+    event.clientX - drag.tapStartX,
+    event.clientY - drag.tapStartY
+  ) <= 8;
+
+if (toggleLogoText) {
+  frtContentState.logoTextWhite =
+    !frtContentState.logoTextWhite;
+
+  frtDrawContentPreview();
+}
     drag.points.delete(event.pointerId);
 
     if (frtGestureCanvas.hasPointerCapture(event.pointerId)) {

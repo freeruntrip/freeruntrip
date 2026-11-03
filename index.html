@@ -419,8 +419,26 @@
   </div>
 </div>
 <div id="recordDetail" class="hidden">
-  <button id="backToRecordsBtn" type="button">
-    ← 기록 목록으로
+  <button
+    id="backToRecordsBtn"
+    class="frt-page-back"
+    type="button"
+    aria-label="기록 목록으로 돌아가기"
+  >
+    <svg
+      width="28"
+      height="28"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M15 5L8 12L15 19"></path>
+    </svg>
   </button>
 
   <p
@@ -436,7 +454,13 @@
 
   <div id="detailTimeRange"></div>
 
-  <div id="detailStats">
+  <div id="detailPaceCard">
+    <span id="detailPaceTitle">Pace Mood</span>
+    <strong id="detailNumericPace">마음 환기 Pace</strong>
+    <small id="detailPaceHint">터치하면 숫자 Pace로 바뀝니다</small>
+  </div>
+ 
+<div id="detailStats">
     <div>
       <span>실제 거리</span>
       <strong id="detailDistance">0.00 km</strong>
@@ -521,11 +545,7 @@
   </div>
 </section>
 
-<div id="detailPaceCard">
-  <span id="detailPaceTitle">Pace Mood</span>
-  <strong id="detailNumericPace">마음 환기 Pace</strong>
-  <small id="detailPaceHint">터치하면 숫자 Pace로 바뀝니다</small>
-</div>
+
   <div id="detailMapSection">
   <div id="detailMap"></div>
   <div id="mapboxDetailMap"></div>
@@ -1658,17 +1678,29 @@
 >
   <div class="frt-content-editor-panel">
     <header class="frt-content-editor-header">
-      <h2 id="frtContentEditorTitle">
-        콘텐츠 만들기
-      </h2>
+  <button
+    id="frtCloseContentEditorBtn"
+    type="button"
+    aria-label="상세 기록으로 돌아가기"
+  >
+    <svg
+      width="28"
+      height="28"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M15 5L8 12L15 19"></path>
+    </svg>
+  </button>
 
-      <button
-        id="frtCloseContentEditorBtn"
-        type="button"
-      >
-        닫기
-      </button>
-    </header>
+  <h2 id="frtContentEditorTitle">콘텐츠 만들기</h2>
+</header>
 
     <section
       class="frt-content-photo-picker"
@@ -1738,7 +1770,6 @@
         id="frtContentCaption"
         rows="3"
         maxlength="2200"
-        placeholder="이번 러닝의 이야기를 남겨보세요."
       ></textarea>
     </div>
     <footer class="frt-content-editor-actions">

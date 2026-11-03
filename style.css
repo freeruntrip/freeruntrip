@@ -12038,3 +12038,885 @@ body:has(#frtFollowDialog.frt-following-page[open]) {
 #monthlyReportScreen .analysis-main-stats > .analysis-pace-stat {
   order: 1;
 }
+/* ========================================
+   기록 상세: 흰색 배경과 공통 뒤로가기 버튼
+======================================== */
+
+#recordDetail {
+  background: #ffffff;
+  color: #172033;
+}
+
+/* 좌상단 뒤로가기 */
+#recordDetail #backToRecordsBtn {
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  margin: 0 8px 16px -8px;
+  padding: 8px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #000000;
+  box-shadow: none;
+  vertical-align: middle;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+#recordDetail #backToRecordsBtn:focus-visible {
+  outline: 2px solid #0e7490;
+  outline-offset: 2px;
+}
+
+/* 날짜와 보조 문구 */
+#recordDetail #detailDate {
+  color: #172033;
+}
+
+#recordDetail #detailTimeRange,
+#recordDetail #detailStats span,
+#recordDetail .detail-splits-header > span,
+#recordDetail .split-duration,
+#recordDetail .detail-photo-actions > p,
+#recordDetail #frtRunningPhotoActions p,
+#recordDetail .frt-content-entry > p,
+#recordDetail .detail-runtrip-route-item small {
+  color: #64748b;
+}
+
+/* 활동 종류 */
+#recordDetail .running-detail-type {
+  background: #e8f5fb;
+  color: #03698c;
+}
+
+#recordDetail .runtrip-detail-type {
+  background: #fff4cf;
+  color: #805b08;
+}
+
+/* 기록 지표 */
+#recordDetail #detailStats > div {
+  background: #f3f5f7;
+}
+
+#recordDetail #detailStats strong {
+  color: #172033 !important;
+}
+
+#recordDetail #detailStats #detailDistance {
+  color: #946500 !important;
+}
+
+#recordDetail #detailStats #detailDuration {
+  color: #0e7490 !important;
+}
+
+/* Pace Mood */
+#recordDetail #detailPaceCard {
+  box-shadow: none;
+}
+
+/* 스플릿 */
+#recordDetail .detail-splits {
+  background: #f3f5f7;
+}
+
+#recordDetail .split-row {
+  background: #ffffff;
+}
+
+#recordDetail .detail-splits-header h3,
+#recordDetail .split-label,
+#recordDetail .split-elevation {
+  color: #172033;
+}
+
+#recordDetail .detail-splits-header .card-label,
+#recordDetail .split-pace {
+  color: #946500;
+}
+
+/* 사진과 콘텐츠 만들기 */
+#recordDetail #frtRunningPhotoActions h3 {
+  color: #172033;
+}
+
+#recordDetail .detail-take-photo-btn {
+  background: #f3f5f7;
+  border-color: #dce3e9;
+  color: #172033;
+  box-shadow: none;
+}
+
+#recordDetail .detail-take-photo-btn > span {
+  color: #0e7490;
+}
+
+#recordDetail .detail-take-photo-btn:active {
+  background: #e8edf1;
+  border-color: #94a3b8;
+}
+
+#recordDetail #detailRunMemo {
+  color: #334155;
+}
+
+#recordDetail #detailRunMemoWrap .card-label {
+  color: #64748b;
+}
+
+/* RunTrip 장소 정보 */
+#recordDetail .detail-runtrip-info {
+  background: #fffbef;
+  border-color: #eee3bf;
+}
+
+#recordDetail .detail-runtrip-info-heading h3,
+#recordDetail .detail-runtrip-route-item strong,
+#recordDetail .detail-runtrip-waypoint-name {
+  color: #172033;
+}
+
+#recordDetail .detail-runtrip-info-heading .card-label,
+#recordDetail .detail-runtrip-waypoints > p {
+  color: #805b08;
+}
+
+#recordDetail .detail-runtrip-waypoints {
+  background: #fff7df;
+  border-color: #eee3bf;
+}
+/* ========================================
+   기록 상세 상단: 기록 목록과 디자인 통일
+======================================== */
+
+/* 날짜와 활동 종류 */
+#recordDetail #detailDate {
+  margin: 8px 0 6px;
+  color: #203451;
+  font-size: 23px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.5px;
+}
+
+#recordDetail #detailTimeRange {
+  margin-bottom: 24px;
+  color: #718096;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+#recordDetail .detail-activity-type {
+  background: #edf1f6;
+  color: #203451;
+  font-weight: 650;
+  vertical-align: middle;
+}
+
+/* 4열을 기준으로 핵심 지표와 보조 지표 배치 */
+#recordDetail #detailStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 0 0 20px;
+}
+
+/* 개별 회색 박스 제거 */
+#recordDetail #detailStats > div {
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 16px 6px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  justify-content: flex-start;
+  gap: 7px;
+  text-align: center;
+}
+
+#recordDetail #detailStats span {
+  margin: 0;
+  color: #718096;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+#recordDetail #detailStats strong {
+  overflow: visible;
+  color: #203451 !important;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.5;
+  letter-spacing: -0.3px;
+  white-space: normal;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 첫째 줄: 거리 */
+#recordDetail #detailStats > div:nth-child(1) {
+  grid-column: 1 / -1;
+  padding: 0 0 22px;
+  text-align: left;
+}
+
+#recordDetail #detailStats #detailDistance {
+  color: #203451 !important;
+  font-size: 44px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -1.5px;
+}
+
+/* 둘째 줄: 운동 시간과 평균 페이스 */
+#recordDetail #detailStats > div:nth-child(2),
+#recordDetail #detailStats > div:nth-child(3) {
+  grid-column: span 2;
+  padding: 0 0 22px;
+  text-align: left;
+}
+
+#recordDetail #detailStats > div:nth-child(3) {
+  padding-left: 18px;
+}
+
+#recordDetail #detailStats #detailDuration,
+#recordDetail #detailStats #detailAveragePace {
+  color: #203451 !important;
+  font-size: 26px;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.7px;
+}
+
+/* 셋째 줄: 칼로리·고도·심박수·케이던스 */
+#recordDetail #detailStats > div:nth-child(n + 4) {
+  border-top: 1px solid #e2e9f2;
+  border-bottom: 1px solid #e2e9f2;
+}
+
+#recordDetail #detailStats > div:nth-child(n + 5) {
+  border-left: 1px solid #e2e9f2;
+}
+
+/* Pace: 기록 목록과 같은 네이비 그라데이션 */
+#recordDetail #detailPaceCard {
+  margin: 0 0 18px;
+  padding: 15px 18px;
+  border: 1px solid #344764;
+  border-radius: 14px;
+  background: linear-gradient(
+    110deg,
+    #203451 0%,
+    #344663 65%,
+    #55506b 100%
+  );
+  color: #ffffff;
+  box-shadow: none;
+  text-align: left;
+}
+
+#recordDetail #detailPaceTitle {
+  display: block;
+  margin: 0 0 5px;
+  color: #d5dfec;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+#recordDetail #detailNumericPace {
+  display: block;
+  color: #ffe1c7;
+  font-size: 19px;
+  font-weight: 650;
+  line-height: 1.5;
+  letter-spacing: -0.3px;
+  word-break: keep-all;
+  cursor: pointer;
+}
+
+#recordDetail #detailPaceHint {
+  display: block;
+  margin-top: 5px;
+  color: #d5dfec;
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+/* 작은 화면에서도 보조 지표가 잘리지 않도록 */
+@media (max-width: 360px) {
+  #recordDetail #detailStats > div:nth-child(n + 4) {
+    padding-left: 3px;
+    padding-right: 3px;
+  }
+
+  #recordDetail #detailStats > div:nth-child(n + 4) strong {
+    font-size: 12px;
+  }
+
+  #recordDetail #detailStats span {
+    font-size: 10px;
+  }
+}
+/* 활동 종류를 뒤로가기 버튼 아래에 배치 */
+#recordDetail #backToRecordsBtn {
+  display: flex;
+  margin-bottom: 10px;
+}
+
+#recordDetail #detailActivityType {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: fit-content;
+  height: 28px;
+  min-height: 28px;
+  margin: 0 0 16px;
+  padding: 0 11px;
+  line-height: 1;
+}
+
+/* 감성 페이스 전환 안내 문구 숨김 */
+#recordDetail #detailPaceHint {
+  display: none;
+}
+/* 기록 목록에도 상세 페이지와 같은 활동 배지 표시 */
+#records .record-card .record-card-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+#records .record-card .record-activity-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: fit-content;
+  height: 28px;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 999px;
+  background: #edf1f6;
+  color: #203451;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: 0.1em;
+}
+/* 날짜 위 활동 배지는 숨김 */
+#records .record-card .record-card-header .record-activity-badge {
+  display: none;
+}
+
+/* ‘일반 러닝’ 제목을 대신하는 RUNNING 배지 */
+#records .record-card .record-running-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  align-self: flex-start;
+  width: fit-content;
+  height: 28px;
+  margin: 0;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 999px;
+  background: #edf1f6;
+  color: #203451;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: 0.1em;
+}
+/* 상세 기록 지표: 거리 아래 3열 × 2행 */
+#recordDetail #detailStats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+/* 실제 거리는 한 줄 전체 사용 */
+#recordDetail #detailStats > div:nth-child(1) {
+  grid-column: 1 / -1;
+}
+
+/* 나머지 6개 지표 */
+#recordDetail #detailStats > div:nth-child(n + 2) {
+  grid-column: auto;
+  min-width: 0;
+  padding: 16px 6px;
+  border: 0;
+  border-top: 1px solid #e2e9f2;
+  text-align: center;
+}
+
+/* 각 행의 두 번째·세 번째 칸에 세로 구분선 */
+#recordDetail #detailStats > div:nth-child(3),
+#recordDetail #detailStats > div:nth-child(4),
+#recordDetail #detailStats > div:nth-child(6),
+#recordDetail #detailStats > div:nth-child(7) {
+  border-left: 1px solid #e2e9f2;
+}
+
+/* 마지막 행 아래 구분선 */
+#recordDetail #detailStats > div:nth-child(n + 5) {
+  border-bottom: 1px solid #e2e9f2;
+}
+
+/* 6개 지표의 숫자 크기 통일 */
+#recordDetail #detailStats > div:nth-child(n + 2) strong {
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.5;
+  letter-spacing: -0.3px;
+}
+
+@media (max-width: 360px) {
+  #recordDetail #detailStats > div:nth-child(n + 2) strong {
+    font-size: 16px;
+  }
+}
+/* 운동 시간·평균 페이스를 나머지 지표와 같은 크기로 */
+#recordDetail #detailStats #detailDuration,
+#recordDetail #detailStats #detailAveragePace {
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.5;
+  letter-spacing: -0.3px;
+}
+
+@media (max-width: 360px) {
+  #recordDetail #detailStats #detailDuration,
+  #recordDetail #detailStats #detailAveragePace {
+    font-size: 16px;
+  }
+}
+/* ========================================
+   기록 상세 하단: 화이트·네이비 디자인 통일
+======================================== */
+
+/* 스플릿: 겹친 박스 대신 구분선으로 정리 */
+#recordDetail .detail-splits {
+  margin: 26px 0 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+#recordDetail .detail-splits-header {
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+#recordDetail .detail-splits-header .card-label {
+  margin: 0 0 5px;
+  color: #718096;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+}
+
+#recordDetail .detail-splits-header h3 {
+  color: #203451;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+#recordDetail .detail-splits-header > span {
+  color: #718096;
+  font-size: 11px;
+}
+
+#recordDetail #detailSplitsList {
+  gap: 0;
+  border-top: 1px solid #e2e9f2;
+}
+
+#recordDetail .split-row {
+  grid-template-columns:
+    minmax(0, 1fr) 52px 60px 44px;
+  gap: 8px;
+  padding: 16px 0;
+  border-bottom: 1px solid #e2e9f2;
+  border-radius: 0;
+  background: transparent;
+}
+
+#recordDetail .split-label,
+#recordDetail .split-pace,
+#recordDetail .split-elevation {
+  color: #203451;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+#recordDetail .split-label {
+  min-width: 0;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+#recordDetail .split-duration {
+  color: #718096;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+#recordDetail .split-duration,
+#recordDetail .split-pace,
+#recordDetail .split-elevation {
+  min-width: 0;
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 사진 영역 */
+#recordDetail #frtRunningPhotoActions {
+  margin: 26px 0 20px;
+}
+
+#recordDetail #frtRunningPhotoActions h3 {
+  margin: 0 0 8px;
+  color: #203451;
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.5;
+  letter-spacing: -0.3px;
+}
+
+#recordDetail #frtRunningPhotoActions p,
+#recordDetail .detail-photo-actions > p {
+  color: #718096;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* 촬영·앨범 버튼 */
+#recordDetail .detail-take-photo-btn {
+  min-height: 48px;
+  padding: 12px;
+  border: 1px solid #dce4ef;
+  border-radius: 12px;
+  background: #f5f7fa;
+  color: #203451;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
+  box-shadow: none;
+}
+
+#recordDetail .detail-take-photo-btn:active {
+  background: #eaf0f6;
+  border-color: #b9c8da;
+}
+
+#recordDetail .detail-take-photo-btn:focus-visible {
+  outline: 2px solid #344663;
+  outline-offset: 3px;
+}
+
+#recordDetail #frtRunningPhotoList {
+  gap: 12px;
+}
+
+#recordDetail #frtRunningPhotoList img {
+  border-radius: 12px;
+}
+
+/* 콘텐츠 만들기: 주요 동작을 네이비로 강조 */
+#recordDetail .frt-content-entry {
+  margin: 22px 0 26px;
+}
+
+#recordDetail #frtOpenContentEditorBtn {
+  min-height: 50px;
+  border: 1px solid #344764;
+  border-radius: 12px;
+  background: linear-gradient(
+    110deg,
+    #203451 0%,
+    #344663 65%,
+    #55506b 100%
+  );
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 650;
+  box-shadow: none;
+}
+
+#recordDetail #frtOpenContentEditorBtn:active {
+  background: #263b59;
+}
+
+#recordDetail .frt-content-entry > p {
+  margin-top: 10px;
+  color: #718096;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* 광고 공간도 같은 색상 계열로 */
+#recordDetail .frt-ad-slot {
+  border-color: #dce4ef;
+  border-radius: 12px;
+  background: #f8fafc;
+  box-shadow: none;
+}
+
+#recordDetail .frt-ad-slot-label,
+#recordDetail .frt-ad-slot-body {
+  color: #718096;
+}
+
+/* 좁은 화면에서 스플릿 열 간격 조정 */
+@media (max-width: 360px) {
+  #recordDetail .split-row {
+    grid-template-columns:
+      minmax(0, 1fr) 44px 52px 38px;
+    gap: 6px;
+  }
+
+  #recordDetail .split-label,
+  #recordDetail .split-pace,
+  #recordDetail .split-elevation {
+    font-size: 12px;
+  }
+
+  #recordDetail .split-duration {
+    font-size: 11px;
+  }
+}
+/* 콘텐츠 만들기: 뒤로가기 버튼 */
+#frtContentEditor .frt-content-editor-header {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+#frtContentEditor #frtCloseContentEditorBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  margin: 0 0 0 -8px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+}
+
+#frtContentEditor #frtCloseContentEditorBtn svg {
+  display: block;
+  flex-shrink: 0;
+}
+
+#frtContentEditor #frtCloseContentEditorBtn:active {
+  background: rgba(148, 163, 184, 0.15);
+}
+/* 콘텐츠 만들기: 기록 페이지와 디자인 통일 */
+#frtContentEditor {
+  background: #e8edf2;
+  color: #203451;
+}
+
+#frtContentEditor .frt-content-editor-panel {
+  width: 100%;
+  max-width: 430px;
+  min-height: 100%;
+  margin: 0 auto;
+  padding:
+    calc(16px + env(safe-area-inset-top, 0px))
+    20px
+    calc(32px + env(safe-area-inset-bottom, 0px));
+  background: #ffffff;
+}
+
+/* 제목과 뒤로가기 */
+#frtContentEditor .frt-content-editor-header {
+  margin-bottom: 28px;
+}
+
+#frtContentEditor #frtContentEditorTitle {
+  color: #203451;
+  font-size: 23px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.5px;
+}
+
+#frtContentEditor #frtCloseContentEditorBtn {
+  background: transparent;
+  color: #203451;
+}
+
+#frtContentEditor #frtCloseContentEditorBtn:active {
+  background: #edf1f6;
+}
+
+/* 배경 사진 선택 */
+#frtContentEditor .frt-content-photo-picker {
+  margin-bottom: 20px;
+}
+
+#frtContentEditor .frt-content-photo-picker h3,
+#frtContentEditor .frt-content-caption-field label {
+  color: #203451;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+#frtContentEditor .frt-content-photo-picker > p,
+#frtContentEditor #frtContentEditorStatus,
+#frtContentEditor #frtContentEditHint {
+  color: #718096;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+#frtContentEditor #frtContentSavedPhotos {
+  gap: 12px;
+}
+
+#frtContentEditor #frtContentSavedPhotos button {
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: #f5f7fa;
+}
+
+#frtContentEditor #frtContentSavedPhotos button[aria-pressed="true"] {
+  border-color: #203451;
+}
+
+/* 앨범·저장 버튼 */
+#frtContentEditor #frtContentAlbumBtn,
+#frtContentEditor #frtContentSaveToPhoneBtn {
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1px solid #dce4ef;
+  border-radius: 12px;
+  background: #f5f7fa;
+  color: #203451;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.5;
+  box-shadow: none;
+}
+
+#frtContentEditor #frtContentAlbumBtn:active:not(:disabled),
+#frtContentEditor #frtContentSaveToPhoneBtn:active:not(:disabled) {
+  background: #eaf0f6;
+}
+
+/* 사진 합성 미리보기 */
+#frtContentEditor .frt-content-preview-wrap {
+  border: 1px solid #dce4ef;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+#frtContentEditor #frtContentEmptyHint {
+  color: #718096;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* 게시글 입력 */
+#frtContentEditor .frt-content-caption-field {
+  margin: 24px 0;
+}
+
+#frtContentEditor #frtContentCaption {
+  padding: 14px;
+  border: 1px solid #dce4ef;
+  border-radius: 12px;
+  background: #f8fafc;
+  color: #203451;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+#frtContentEditor #frtContentCaption::placeholder {
+  color: #718096;
+  opacity: 1;
+}
+
+#frtContentEditor #frtContentCaption:focus {
+  border-color: #344663;
+  outline: 2px solid #e2e9f2;
+  outline-offset: 2px;
+}
+
+/* 공개 버튼 */
+#frtContentEditor .frt-content-editor-actions {
+  gap: 10px;
+  margin-top: 24px;
+}
+
+#frtContentEditor #frtContentPublishBtn {
+  min-height: 50px;
+  padding: 12px 14px;
+  border: 1px solid #344764;
+  border-radius: 12px;
+  background: linear-gradient(
+    110deg,
+    #203451 0%,
+    #344663 65%,
+    #55506b 100%
+  );
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.5;
+  box-shadow: none;
+}
+
+#frtContentEditor #frtContentPublishBtn:active:not(:disabled) {
+  background: #263b59;
+}
+
+#frtContentEditor button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+#frtContentEditor button:focus-visible {
+  outline: 2px solid #344663;
+  outline-offset: 3px;
+}
+/* 콘텐츠 만들기: 설명 문구 숨김 */
+#frtContentEditor .frt-content-photo-picker > p,
+#frtContentEditor #frtContentEmptyHint,
+#frtContentEditor #frtContentEditHint {
+  display: none;
+}
