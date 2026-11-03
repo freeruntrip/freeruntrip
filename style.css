@@ -12920,3 +12920,15 @@ body:has(#frtFollowDialog.frt-following-page[open]) {
 #frtContentEditor #frtContentEditHint {
   display: none;
 }
+/* 공유하기 페이지: 저장·게시 버튼 나란히 배치 */
+#frtContentEditor .frt-content-editor-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+#frtContentEditor .frt-content-editor-actions button {
+  width: 100%;
+  min-width: 0;
+  min-height: 50px;
+}
