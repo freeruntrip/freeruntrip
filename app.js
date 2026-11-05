@@ -3087,9 +3087,6 @@ async function announceRunTripWaypointArrival(number) {
   // 이전 안내를 취소하고 도착 음성에 우선권을 준다.
   cancelFreeRunTripVoiceGuidance();
 
-  // 취소된 임박 안내의 대기가 다음 구간을 막지 않게 한다.
-  runTripNavigationImminentRequest = null;
-
   const token = {};
   runTripArrivalVoiceToken = token;
 
@@ -12968,17 +12965,10 @@ const runTripNavigationSecondaryInstruction =
 let runTripNavigationRuntimeSegments = [];
 let runTripStandardNavigationSteps = [];
 let runTripStandardNavigationStepIndex = 0;
-let runTripStandardNavigationLastAnnouncedStepIndex = -1;
 let runTripStandardNavigationClosestDistance = Infinity;
-let runTripStandardNavigationVoiceSuppressedForTest = false;
 let runTripStandardNavigationDisplayedDistance = null;
 // 배너·음성·Watch가 공유할 현재 내비게이션 상태
 let runTripNavigationState = null;
-// 같은 maneuver의 임박 안내 중복 요청 방지
-let runTripNavigationImminentKey = null;
-
-// 임박 음성 처리 중 다른 안내가 끼어드는 것을 막기 위한 상태
-let runTripNavigationImminentRequest = null;
 // RunTrip 상단 배너: navigation 또는 record
 let runTripTopBannerMode = 'navigation';
 
@@ -13189,8 +13179,6 @@ connectRunTripTopBannerSwipe(
 );
 let runTripNavigationRouteMetrics = null;
 let runTripCurrentNavigationSegmentIndex = 0;
-let runTripNavigationFirstAnnouncementDone = false;
-let runTripNavigationSecondAnnouncementDone = false;
 let runTripNavigationLastRouteProgressMeters = 0;
 let runTripNavigationLastRouteSegmentIndex = 0;
 let runTripNavigationHasJoinedRoute = false;
@@ -13232,55 +13220,6 @@ function getRunTripNavigationDirectionArrow(direction) {
 
 function getRunTripNavigationDirectionLabel(direction) {
   return direction === 'left' ? '좌회전' : '우회전';
-}
-
-function buildRunTripNavigationFirstMessage(
-  direction,
-  remainingDistanceMeters
-) {
-  const distance =
-    getRunTripNavigationVoiceDistance(
-      remainingDistanceMeters
-    );
-
-  return (
-    `${distance}미터 앞에서 ` +
-    `${getRunTripNavigationDirectionLabel(direction)}입니다.`
-  );
-}
-
-function buildRunTripNavigationSecondMessage(
-  currentDirection,
-  currentRemainingDistanceMeters,
-  nextSegment
-) {
-  const currentDistance =
-    getRunTripNavigationVoiceDistance(
-      currentRemainingDistanceMeters
-    );
-
-  let message =
-    `${currentDistance}미터 앞에서 ` +
-    `${getRunTripNavigationDirectionLabel(currentDirection)}입니다.`;
-
-  const nextDirection =
-    nextSegment?.endAction?.direction;
-
-  if (
-    nextDirection === 'left' ||
-    nextDirection === 'right'
-  ) {
-    const nextDistance =
-      getRunTripNavigationVoiceDistance(
-        nextSegment.lengthMeters
-      );
-
-    message +=
-      ` ${nextDistance}미터 직진 후 ` +
-      `${getRunTripNavigationDirectionLabel(nextDirection)}입니다.`;
-  }
-
-  return message;
 }
 
 function ensureRunTripOffRouteBanner() {
@@ -13970,21 +13909,13 @@ function buildRunTripNavigationRuntimeSegments(
   return runtimeSegments;
 }
 
-function resetRunTripNavigationSegmentAnnouncements() {
-  runTripNavigationFirstAnnouncementDone = false;
-  runTripNavigationSecondAnnouncementDone = false;
-}
-
 function resetRunTripNavigationGuidance() {
   runTripNavigationState = null;
-  runTripNavigationImminentKey = null;
-  runTripNavigationImminentRequest = null;
   hideRunTripNavigationBanners();
   resetRunTripOffRouteGuidance();
 
   runTripStandardNavigationSteps = [];
   runTripStandardNavigationStepIndex = 0;
-  runTripStandardNavigationLastAnnouncedStepIndex = -1;
   runTripStandardNavigationClosestDistance = Infinity;
   runTripStandardNavigationDisplayedDistance = null;
   runTripNavigationRuntimeSegments = [];
@@ -13994,7 +13925,6 @@ function resetRunTripNavigationGuidance() {
   runTripNavigationLastRouteSegmentIndex = 0;
   runTripNavigationHasJoinedRoute = false;
   runTripNavigationJoinedAtMs = null;
-  resetRunTripNavigationSegmentAnnouncements();
 }
 
 function initializeRunTripNavigationGuidance(routeSummary) {
@@ -14019,8 +13949,6 @@ function initializeRunTripNavigationGuidance(routeSummary) {
 }
 function initializeRunTripNavigationForActiveLeg() {
   runTripNavigationState = null;
-  runTripNavigationImminentKey = null;
-  runTripNavigationImminentRequest = null;
 
   hideRunTripNavigationBanners();
   showRunTripNavigationWaitingBanners();
@@ -14034,7 +13962,6 @@ function initializeRunTripNavigationForActiveLeg() {
   */
   runTripStandardNavigationSteps = [];
   runTripStandardNavigationStepIndex = 0;
-  runTripStandardNavigationLastAnnouncedStepIndex = -1;
   runTripStandardNavigationClosestDistance = Infinity;
   runTripStandardNavigationDisplayedDistance = null;
   /*
@@ -14051,7 +13978,6 @@ function initializeRunTripNavigationForActiveLeg() {
   runTripNavigationJoinedAtMs = null;
 
   resetRunTripOffRouteGuidance();
-  resetRunTripNavigationSegmentAnnouncements();
 
   if (!latestRunTripRouteSummary) {
     return;
@@ -14099,9 +14025,6 @@ function initializeRunTripNavigationForActiveLeg() {
     runTripStandardNavigationSteps = activeSteps;
 
   runTripStandardNavigationStepIndex = 0;
-
-  runTripStandardNavigationLastAnnouncedStepIndex =
-    -1;
 
   positionRunTripNavigationBanners();
 
@@ -14187,7 +14110,9 @@ function buildRunTripManeuverDetail(step) {
     step.maneuver?.modifier || ''
   ).trim().toLowerCase();
 
-  const roadName = String(step.name || '').trim();
+  const roadName = String(
+    step.name || ''
+  ).trim();
 
   const rawInstruction = String(
     step.maneuver?.instruction || ''
@@ -14198,75 +14123,30 @@ function buildRunTripManeuverDetail(step) {
     modifier
   );
 
-  const exitNumber = Number(step.maneuver?.exit);
-
-  const roundaboutExit =
-    Number.isInteger(exitNumber) && exitNumber > 0
-      ? exitNumber
-      : null;
-
-  let instruction =
-    displayData.instruction ||
-    rawInstruction ||
-    '경로를 따라 이동';
-
-  if (type === 'fork') {
-    instruction = modifier.includes('right')
-      ? '갈림길에서 오른쪽 방향'
-      : modifier.includes('left')
-        ? '갈림길에서 왼쪽 방향'
-        : '갈림길에서 직진';
-  }
-
-  if (type === 'roundabout' || type === 'rotary') {
-    instruction = roundaboutExit
-      ? `회전교차로에서 ${roundaboutExit}번째 출구로 이동`
-      : '회전교차로 진입';
-  }
-
-    if (type === 'arrive') {
-    const legCount =
-      latestRunTripRouteSummary?.legSteps?.length || 0;
-
-    const isFinalLeg =
-      legCount > 0 &&
-      runTripNextWaypointIndex >= legCount - 1;
-
-    instruction = isFinalLeg
-      ? '최종 목적지 접근'
-      : legCount > 0
-        ? `경유지 ${runTripNextWaypointIndex + 1} 접근`
-        : '목적지 접근';
-  }
-
-  if (
-    roadName &&
-    type !== 'arrive' &&
-    type !== 'roundabout' &&
-    type !== 'rotary'
-  ) {
-    instruction = `${roadName} 방면으로 ${instruction}`;
-  }
-
-    // 제공된 한국어 원문에 횡단보도가 명시된 경우,
-  // 방향과 횡단 순서를 추측하지 않고 원문을 사용한다.
-  const hasCrosswalkInstruction =
-    type !== 'arrive' &&
-    rawInstruction.includes('횡단보도');
-
-  if (hasCrosswalkInstruction) {
-    instruction = rawInstruction;
-  }
+  const exitNumber = Number(
+    step.maneuver?.exit
+  );
 
   return {
     type,
     modifier,
     roadName,
     rawInstruction,
-    roundaboutExit,
-    hasCrosswalkInstruction,
+
+    roundaboutExit:
+      Number.isInteger(exitNumber) && exitNumber > 0
+        ? exitNumber
+        : null,
+
+    hasCrosswalkInstruction:
+      rawInstruction.includes('횡단보도'),
+
     arrow: displayData.arrow || '↑',
-    instruction
+
+    // Mapbox 원본 문구를 사용한다.
+    // 도로명이나 자체 방향 문구를 추가하지 않는다.
+    instruction:
+      rawInstruction || '안내 문구가 제공되지 않았습니다'
   };
 }
 function getRunTripNavigationState() {
@@ -15033,185 +14913,6 @@ window.testFreeRunTripManeuverMappings =
 
     return summary;
   };
-  function announceRunTripImminentNavigation(state) {
-    if (
-    runTripArrivalVoiceToken !== null ||
-    hasRunTripArrivalNotified
-    ) {
-    return false;
-    }
-    if (
-    !isRunTripFollowing ||
-    isRunTripPaused ||
-    runTripStandardNavigationVoiceSuppressedForTest ||
-    !state?.current ||
-    state.current.type === 'arrive' ||
-    state.legIndex !== runTripNextWaypointIndex ||
-    !Number.isFinite(state.remainingDistanceMeters) ||
-    state.remainingDistanceMeters > 20 ||
-    state.maneuverId === runTripNavigationImminentKey
-  ) {
-    return false;
-  }
-
-  const instruction = state.current.instruction;
-
-  const voiceInstruction =
-    /[.!?。]$|다$/.test(instruction)
-      ? instruction
-      : /이동$|진입$|접근$/.test(instruction)
-        ? `${instruction}합니다`
-        : `${instruction}입니다`;
-
-  runTripNavigationImminentKey = state.maneuverId;
-
-  // 이 maneuver의 일반 거리 안내도 중복 요청하지 않음
-  runTripStandardNavigationLastAnnouncedStepIndex =
-    state.stepIndex;
-
-    const request = {
-    maneuverId: state.maneuverId,
-    requestedAt: Date.now()
-  };
-
-  runTripNavigationImminentRequest = request;
-
-    requestRunningDynamicVoice(
-    `잠시 후 ${voiceInstruction}`,
-        {
-      waitForEnd: true,
-      isCurrent: function () {
-        return (
-          isRunTripFollowing &&
-          !isRunTripPaused &&
-          runTripNextWaypointIndex === state.legIndex &&
-          runTripNavigationImminentRequest === request &&
-          Date.now() - request.requestedAt <= 8000
-        );
-      }
-    }
-  ).catch(function (error) {
-    console.warn(
-      'FreeRunTrip 임박 음성 요청 실패:',
-      error
-    );
-  }).finally(function () {
-    if (runTripNavigationImminentRequest === request) {
-      runTripNavigationImminentRequest = null;
-    }
-  });
-
-  return true;
-}
-function announceRunTripStandardNavigation(
-  stepIndex,
-  distanceMeters
-) {
-  if (
-    runTripArrivalVoiceToken !== null ||
-    hasRunTripArrivalNotified
-  ) {
-    return;
-  }
-  const state = runTripNavigationState;
-  // 임박 음성 처리 중에는 일반 거리 안내를 요청하지 않음
-  if (runTripNavigationImminentRequest !== null) {
-    return;
-  }
-  if (
-    !isRunTripFollowing ||
-    isRunTripPaused ||
-    runTripStandardNavigationVoiceSuppressedForTest ||
-    !state?.current ||
-    state.stepIndex !== stepIndex ||
-    state.legIndex !== runTripNextWaypointIndex ||
-    state.current.type === 'arrive' ||
-    !Number.isFinite(state.displayedDistanceMeters)
-  ) {
-    return;
-  }
-
-  if (
-    stepIndex ===
-    runTripStandardNavigationLastAnnouncedStepIndex
-  ) {
-    return;
-  }
-
-  const instruction = state.current.instruction;
-
-  const voiceInstruction =
-    /[.!?。]$|다$/.test(instruction)
-      ? instruction
-      : /이동$|진입$|접근$/.test(instruction)
-        ? `${instruction}합니다`
-        : `${instruction}입니다`;
-
-  const distance = getRunTripNavigationVoiceDistance(
-    state.displayedDistanceMeters
-  );
-
-  const message = distance > 0
-    ? `${distance}미터 앞 ${voiceInstruction}`
-    : voiceInstruction;
-
-  runTripStandardNavigationLastAnnouncedStepIndex =
-    stepIndex;
-
-    requestRunningDynamicVoice(message, {
-    isCurrent: function () {
-      return (
-        isRunTripFollowing &&
-        !isRunTripPaused &&
-        runTripNextWaypointIndex === state.legIndex &&
-        runTripStandardNavigationStepIndex === state.stepIndex
-      );
-    }
-  });
-}
-function getNextTurnNavigationSegment(currentIndex) {
-  for (
-    let index = currentIndex + 1;
-    index < runTripNavigationRuntimeSegments.length;
-    index++
-  ) {
-    const segment = runTripNavigationRuntimeSegments[index];
-    const direction = segment?.endAction?.direction;
-
-    if (direction === 'left' || direction === 'right') {
-      return segment;
-    }
-  }
-
-  return null;
-}
-
-function announceRunTripNavigationFirst(
-  direction,
-  remainingDistanceMeters
-) {
-  requestRunningDynamicVoice(
-    buildRunTripNavigationFirstMessage(
-      direction,
-      remainingDistanceMeters
-    )
-  );
-}
-
-function announceRunTripNavigationSecond(
-  currentDirection,
-  currentRemainingDistanceMeters,
-  nextSegment
-) {
-  requestRunningDynamicVoice(
-    buildRunTripNavigationSecondMessage(
-      currentDirection,
-      currentRemainingDistanceMeters,
-      nextSegment
-    )
-  );
-}
-
 function canJoinRunTripNavigationRoute(
   latitude,
   longitude,
@@ -15351,34 +15052,6 @@ function updateRunTripNavigationGuidance(
       runTripStandardNavigationClosestDistance,
       distanceToTarget
     );
-    // step을 넘기기 전에 현재 maneuver의 임박 안내를 처리
-  const currentManeuverKey =
-    `${runTripNextWaypointIndex}:${runTripStandardNavigationStepIndex}`;
-
-    if (
-    distanceToTarget <= 20 &&
-    runTripNavigationImminentKey !== currentManeuverKey &&
-    !runTripStandardNavigationVoiceSuppressedForTest &&
-    getRunTripStandardNavigationType(
-      runTripStandardNavigationStepIndex
-    ) !== 'arrive'
-  ) {
-    showRunTripStandardNavigationBanner(
-      runTripStandardNavigationStepIndex,
-      distanceToTarget
-    );
-
-    const requestedImminent =
-      announceRunTripImminentNavigation(
-        runTripNavigationState
-      );
-
-    if (requestedImminent) {
-      // 이번 GPS 갱신에서는 현재 안내를 유지하고,
-      // 다음 갱신부터 기존 step 전환 조건을 적용
-      return;
-    }
-  }
   const hasPassedRunTripStandardManeuver =
     runTripStandardNavigationClosestDistance <= 30 &&
     distanceToTarget >=
@@ -15399,9 +15072,6 @@ function updateRunTripNavigationGuidance(
       runTripStandardNavigationSteps.length - 2
   ) {
     runTripStandardNavigationStepIndex++;
-    runTripNavigationImminentKey = null;
-    runTripStandardNavigationLastAnnouncedStepIndex =
-      -1;
 
     runTripStandardNavigationClosestDistance =
       Infinity;
@@ -15456,20 +15126,6 @@ function updateRunTripNavigationGuidance(
     runTripStandardNavigationStepIndex,
     distanceToTarget
   );
-
-  /*
-    다음 maneuver 60m 안에서
-    해당 step당 한 번만 음성을 안내한다.
-  */
-    if (
-    distanceToTarget <= 60 &&
-    nextType !== 'arrive'
-  ) {
-    announceRunTripStandardNavigation(
-      runTripStandardNavigationStepIndex,
-      distanceToTarget
-    );
-  }
 
   console.log(
     'FreeRunTrip Mapbox 표준 NAV:',
@@ -15672,12 +15328,6 @@ window.getFreeRunTripHeadingDebug =
     const originalDisplayedDistance =
       runTripStandardNavigationDisplayedDistance;
 
-    const originalAnnouncedStepIndex =
-      runTripStandardNavigationLastAnnouncedStepIndex;
-
-    const originalVoiceSuppressedForTest =
-      runTripStandardNavigationVoiceSuppressedForTest;
-
     const target =
       getRunTripStandardStepTarget(
         originalStepIndex
@@ -15725,19 +15375,6 @@ window.getFreeRunTripHeadingDebug =
     let testResult = null;
 
     try {
-      /*
-        실내 테스트 중에는
-        Typecast maneuver 음성을 절대 호출하지 않는다.
-      */
-      runTripStandardNavigationVoiceSuppressedForTest =
-        true;
-
-      /*
-        혹시 기존 announce 상태가 있더라도
-        테스트 결과에 영향을 주지 않도록 맞춘다.
-      */
-      runTripStandardNavigationLastAnnouncedStepIndex =
-        originalStepIndex;
 
       runTripStandardNavigationClosestDistance =
         Infinity;
@@ -15849,12 +15486,6 @@ window.getFreeRunTripHeadingDebug =
 
       runTripStandardNavigationDisplayedDistance =
         originalDisplayedDistance;
-
-      runTripStandardNavigationLastAnnouncedStepIndex =
-        originalAnnouncedStepIndex;
-
-      runTripStandardNavigationVoiceSuppressedForTest =
-        originalVoiceSuppressedForTest;
 
       console.log(
         'FreeRunTrip NAV 통과 테스트 상태 복원 완료'
@@ -16506,12 +16137,6 @@ function createRunTripRecoveryState() {
           0,
           Number(runTripNavigationLastRouteSegmentIndex) || 0
         ),
-
-      firstAnnouncementDone:
-        Boolean(runTripNavigationFirstAnnouncementDone),
-
-      secondAnnouncementDone:
-        Boolean(runTripNavigationSecondAnnouncementDone),
 
       hasJoinedRoute:
         Boolean(runTripNavigationHasJoinedRoute),
@@ -17363,11 +16988,6 @@ updateMapboxRunTripActualRoute();
         Number(savedState.navigationState.lastRouteSegmentIndex) || 0
       );
 
-    runTripNavigationFirstAnnouncementDone =
-      Boolean(savedState.navigationState.firstAnnouncementDone);
-
-    runTripNavigationSecondAnnouncementDone =
-      Boolean(savedState.navigationState.secondAnnouncementDone);
     const restoredNavigationLegIndex =
   Math.max(
     0,

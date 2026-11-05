@@ -100,6 +100,14 @@ function normalizeStep(step, legIndex, stepIndex) {
       ? step.intersections
       : [],
     geometry: geometryCoordinates,
+
+    voiceInstructions: Array.isArray(step?.voiceInstructions)
+      ? step.voiceInstructions
+      : [],
+
+    bannerInstructions: Array.isArray(step?.bannerInstructions)
+      ? step.bannerInstructions
+      : [],
   };
 }
 
@@ -363,6 +371,9 @@ module.exports = async function handler(request, response) {
   mapboxUrl.searchParams.set("access_token", mapboxAccessToken);
   mapboxUrl.searchParams.set("alternatives", "false");
   mapboxUrl.searchParams.set("steps", "true");
+  mapboxUrl.searchParams.set("voice_instructions", "true");
+  mapboxUrl.searchParams.set("banner_instructions", "true");
+  mapboxUrl.searchParams.set("voice_units", "metric");
   mapboxUrl.searchParams.set("geometries", "geojson");
   mapboxUrl.searchParams.set("overview", "full");
   mapboxUrl.searchParams.set(
