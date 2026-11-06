@@ -14037,56 +14037,146 @@ function getRunTripStandardNavigationInstruction(
     ''
   ).trim();
 }
-function buildRunTripManeuverDetail(step) {
+function getRunTripMapboxBannerInstruction(
+  step,
+  remainingDistanceMeters = null
+) {
+  const banners = (
+    Array.isArray(step?.bannerInstructions)
+      ? step.bannerInstructions
+      : []
+  ).filter(function (banner) {
+    return (
+      typeof banner?.primary?.text === 'string' &&
+      banner.primary.text.trim() !== '' &&
+      Number.isFinite(banner.distanceAlongGeometry) &&
+      banner.distanceAlongGeometry >= 0
+    );
+  }).sort(function (a, b) {
+    return b.distanceAlongGeometry - a.distanceAlongGeometry;
+  });
+
+  // 다음 구간의 미리보기에는 첫 번째 배너를 사용한다.
+  if (remainingDistanceMeters === null) {
+    return banners[0] || null;
+  }
+
+  if (
+    !Number.isFinite(remainingDistanceMeters) ||
+    remainingDistanceMeters < 0
+  ) {
+    return null;
+  }
+
+  let selected = null;
+
+  banners.forEach(function (banner) {
+    if (remainingDistanceMeters <= banner.distanceAlongGeometry) {
+      selected = banner;
+    }
+  });
+
+  return selected;
+}
+
+function getRunTripStepRemainingDistance(
+  stepIndex,
+  latitude,
+  longitude
+) {
+  const step = runTripStandardNavigationSteps[stepIndex];
+  const metrics = buildRunTripNavigationRouteMetrics(step?.geometry);
+  const stepDistance = Number(step?.distanceMeters);
+
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    !metrics ||
+    !Number.isFinite(metrics.totalDistanceMeters) ||
+    metrics.totalDistanceMeters <= 0 ||
+    !Number.isFinite(stepDistance) ||
+    stepDistance <= 0
+  ) {
+    return null;
+  }
+
+  const projection = projectRunTripPointToRoute(
+    latitude,
+    longitude,
+    { metrics }
+  );
+
+  if (
+    !Number.isFinite(projection?.remainingDistanceMeters) ||
+    !Number.isFinite(projection?.distanceToRouteMeters) ||
+    projection.distanceToRouteMeters >
+      RUNTRIP_NAVIGATION_MAX_OFF_ROUTE_METERS
+  ) {
+    return null;
+  }
+
+  return Math.max(0, Math.min(
+    stepDistance,
+    stepDistance * projection.remainingDistanceMeters /
+      metrics.totalDistanceMeters
+  ));
+}
+
+function buildRunTripManeuverDetail(step, banner = null) {
   if (!step) {
     return null;
   }
 
+  const primary = banner?.primary;
   const type = String(
-    step.maneuver?.type || ''
+    primary?.type || step.maneuver?.type || ''
   ).trim().toLowerCase();
-
   const modifier = String(
-    step.maneuver?.modifier || ''
+    primary?.modifier || step.maneuver?.modifier || ''
   ).trim().toLowerCase();
-
-  const roadName = String(
-    step.name || ''
-  ).trim();
-
+  const roadName = String(step.name || '').trim();
   const rawInstruction = String(
     step.maneuver?.instruction || ''
   ).trim();
 
-  const displayData = getRunTripManeuverDisplayData(
-    type,
-    modifier
-  );
+  const primaryText = typeof primary?.text === 'string'
+    ? primary.text.trim()
+    : '';
+  const secondaryText =
+    primaryText && typeof banner?.secondary?.text === 'string'
+      ? banner.secondary.text.trim()
+      : '';
 
-  const exitNumber = Number(
-    step.maneuver?.exit
-  );
+  // secondary도 같은 회전 안내에 속하는 보충 문구다.
+  const instruction = primaryText
+    ? [primaryText, secondaryText].filter(Boolean).join(' ')
+    : rawInstruction || '안내 문구가 제공되지 않았습니다';
+
+  const displayData = getRunTripManeuverDisplayData(type, modifier);
+  const exitNumber = Number(step.maneuver?.exit);
 
   return {
     type,
     modifier,
     roadName,
     rawInstruction,
-
     roundaboutExit:
       Number.isInteger(exitNumber) && exitNumber > 0
         ? exitNumber
         : null,
-
     hasCrosswalkInstruction:
       rawInstruction.includes('횡단보도'),
-
     arrow: displayData.arrow || '↑',
-
-    // Mapbox 원본 문구를 사용한다.
-    // 도로명이나 자체 방향 문구를 추가하지 않는다.
-    instruction:
-      rawInstruction || '안내 문구가 제공되지 않았습니다'
+    instruction,
+    instructionSource: primaryText
+      ? 'bannerInstructions'
+      : 'maneuver.instruction',
+    bannerPrimaryText: primaryText,
+    bannerSecondaryText: secondaryText,
+    bannerDistanceAlongGeometry:
+      Number.isFinite(banner?.distanceAlongGeometry)
+        ? banner.distanceAlongGeometry
+        : null
   };
 }
 function getRunTripNavigationState() {
@@ -14139,19 +14229,32 @@ window.getRunTripNavigationState =
 function buildRunTripNavigationState(
   stepIndex,
   remainingDistanceMeters,
-  displayedDistanceMeters
+  displayedDistanceMeters,
+  bannerRemainingDistanceMeters = null
 ) {
+  const activeStep =
+    runTripStandardNavigationSteps[stepIndex];
   const currentStep =
     runTripStandardNavigationSteps[stepIndex + 1];
-
   const nextStep =
     getRunTripStandardSecondaryStep(stepIndex);
 
-  const current =
-    buildRunTripManeuverDetail(currentStep);
+  const currentBanner = Number.isFinite(bannerRemainingDistanceMeters)
+    ? getRunTripMapboxBannerInstruction(
+        activeStep,
+        bannerRemainingDistanceMeters
+      )
+    : null;
 
-  const next =
-    buildRunTripManeuverDetail(nextStep);
+  const nextBanner = nextStep
+    ? getRunTripMapboxBannerInstruction(currentStep)
+    : null;
+
+  const current = buildRunTripManeuverDetail(
+    currentStep,
+    currentBanner
+  );
+  const next = buildRunTripManeuverDetail(nextStep, nextBanner);
 
   if (next) {
     next.distanceMeters = Math.max(
@@ -14162,29 +14265,21 @@ function buildRunTripNavigationState(
 
   return {
     version: 1,
-
-    maneuverId:
-      `${runTripNextWaypointIndex}:${stepIndex}`,
-
+    maneuverId: `${runTripNextWaypointIndex}:${stepIndex}`,
     legIndex: runTripNextWaypointIndex,
     stepIndex,
-
     current,
     next,
-
     remainingDistanceMeters:
       Number.isFinite(remainingDistanceMeters)
         ? Math.max(0, remainingDistanceMeters)
         : null,
-
     displayedDistanceMeters:
       Number.isFinite(displayedDistanceMeters)
         ? Math.max(0, displayedDistanceMeters)
         : null,
-
     following: isRunTripFollowing,
     paused: isRunTripPaused,
-
     checkpoint: activeRunTripCheckpointNotice
       ? {
           type: activeRunTripCheckpointNotice.type,
@@ -14502,7 +14597,8 @@ function getRunTripStandardNavigationArrow(
 
 function showRunTripStandardNavigationBanner(
   stepIndex,
-  distanceMeters
+  distanceMeters,
+  bannerRemainingDistanceMeters = null
 ) {
   const displayedDistance =
     getRunTripStandardNavigationDisplayedDistance(
@@ -14512,7 +14608,8 @@ function showRunTripStandardNavigationBanner(
   runTripNavigationState = buildRunTripNavigationState(
     stepIndex,
     distanceMeters,
-    displayedDistance
+    displayedDistance,
+    bannerRemainingDistanceMeters
   );
 
   const state = runTripNavigationState;
@@ -15062,9 +15159,16 @@ function updateRunTripNavigationGuidance(
     실제 경유지/도착 판정은 기존 도착 감지 로직이 담당한다.
   */
 
+  const remainingAlongRoute = getRunTripStepRemainingDistance(
+    runTripStandardNavigationStepIndex,
+    latitudeNumber,
+    longitudeNumber
+  );
+
   showRunTripStandardNavigationBanner(
     runTripStandardNavigationStepIndex,
-    distanceToTarget
+    remainingAlongRoute ?? distanceToTarget,
+    remainingAlongRoute
   );
 
   console.log(
