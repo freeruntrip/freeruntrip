@@ -6049,66 +6049,6 @@ function renderRecordProfileFeed() {
     runRecords.filter(function (record) {
       return Boolean(record.publishedContentPhotoId);
     });
-   const featured =
-  document.getElementById(
-    'profileFeedScreen'
-  )?.querySelector(
-    '.featured-runtrip'
-  );
-
-if (featured) {
-  const latestTrip =
-    runRecords
-      .filter(function (record) {
-        return (
-          getRecordActivityType(record) ===
-          'runtrip'
-        );
-      })
-      .sort(function (a, b) {
-        return (
-          Number(b.id) -
-          Number(a.id)
-        );
-      })[0];
-
-  featured.hidden = !latestTrip;
-
-  featured.style.display =
-    latestTrip ? '' : 'none';
-
-  if (latestTrip) {
-    const title =
-      featured.querySelector('h3');
-
-    const description =
-      featured.querySelector(
-        'p:not(.card-label)'
-      );
-
-    if (title) {
-      title.textContent =
-        getRecordCardTitle(
-          normalizeActivityRecord(
-            latestTrip
-          )
-        );
-    }
-
-    if (description) {
-      description.textContent = [
-        latestTrip.originName,
-        ...(
-          latestTrip.waypointNames ||
-          []
-        ),
-        latestTrip.destinationName
-      ]
-        .filter(Boolean)
-        .join(' → ');
-    }
-  }
-}   
   const runCount = runRecords.length;
   const runTripCount = runRecords.filter(function (record) {
     return getRecordActivityType(record) === 'runtrip';
