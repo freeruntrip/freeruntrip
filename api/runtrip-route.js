@@ -1,6 +1,15 @@
 const MAPBOX_DIRECTIONS_BASE_URL =
   "https://api.mapbox.com/directions/v5/mapbox/walking";
-
+const GOOGLE_PLACES_BASE_URL = "https://places.googleapis.com/v1/places";
+const GOOGLE_DETAILS_TIMEOUT_MS = 2500;
+const GOOGLE_DETAILS_CACHE_TTL_MS = 5 * 60 * 1000;
+const GOOGLE_DETAILS_CACHE_MAX_ENTRIES = 128;
+const MAX_PLACE_LOCATION_DISTANCE_METERS = 100;
+const MAX_DESTINATION_CANDIDATE_DISTANCE_METERS = 250;
+const MAX_DESTINATION_CANDIDATES = 3;
+const MAX_DESTINATION_SNAP_DISTANCE_METERS = 75;
+const MAX_ENDPOINT_MISMATCH_METERS = 2;
+const destinationDetailsCache = new Map();
 /*
   FreeRunTrip 글로벌 RunTrip 라우팅 V2
   - Mapbox Directions API walking profile 사용
@@ -35,12 +44,36 @@ function normalizeMapboxLanguage(value) {
   return language.slice(0, 2) || "en";
 }
 
+function finiteNumber(value) {
+  if (
+    typeof value !== "number" &&
+    (typeof value !== "string" || value.trim() === "")
+  ) {
+    return null;
+  }
+
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function normalizeLatLng(latitudeValue, longitudeValue) {
+  const latitude = finiteNumber(latitudeValue);
+  const longitude = finiteNumber(longitudeValue);
+
+  if (
+    latitude === null ||
+    longitude === null ||
+    Math.abs(latitude) > 90 ||
+    Math.abs(longitude) > 180
+  ) {
+    return null;
+  }
+
+  return [latitude, longitude];
+}
+
 function isValidCoordinate(point) {
-  return (
-    point &&
-    Number.isFinite(Number(point.lat)) &&
-    Number.isFinite(Number(point.lng))
-  );
+  return !!normalizeLatLng(point?.lat, point?.lng);
 }
 
 function normalizeLatLngFromMapbox(coordinate) {
@@ -48,14 +81,197 @@ function normalizeLatLngFromMapbox(coordinate) {
     return null;
   }
 
-  const longitude = Number(coordinate[0]);
-  const latitude = Number(coordinate[1]);
+  return normalizeLatLng(coordinate[1], coordinate[0]);
+}
 
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    return null;
+function distanceBetweenCoordinates(first, second) {
+  const radians = Math.PI / 180;
+  const latitudeDelta = (second[0] - first[0]) * radians;
+  const longitudeDelta = (second[1] - first[1]) * radians;
+
+  const a =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(first[0] * radians) *
+      Math.cos(second[0] * radians) *
+      Math.sin(longitudeDelta / 2) ** 2;
+
+  return 6371000 * 2 * Math.asin(Math.sqrt(Math.min(1, a)));
+}
+
+function normalizeGoogleLocation(location) {
+  return normalizeLatLng(location?.latitude, location?.longitude);
+}
+
+function normalizePlaceId(value) {
+  if (typeof value !== "string") return "";
+
+  const id = value.trim();
+  return id && id.length <= 512 && !/[\s/]/.test(id) ? id : "";
+}
+
+function cacheDestinationDetails(id, details) {
+  const now = Date.now();
+
+  for (const [key, entry] of destinationDetailsCache) {
+    if (entry.expiresAt <= now) {
+      destinationDetailsCache.delete(key);
+    }
   }
 
-  return [latitude, longitude];
+  destinationDetailsCache.delete(id);
+
+  while (destinationDetailsCache.size >= GOOGLE_DETAILS_CACHE_MAX_ENTRIES) {
+    destinationDetailsCache.delete(destinationDetailsCache.keys().next().value);
+  }
+
+  destinationDetailsCache.set(id, {
+    details,
+    expiresAt: now + GOOGLE_DETAILS_CACHE_TTL_MS
+  });
+}
+
+async function getDestinationDetails(id, apiKey) {
+  const cached = destinationDetailsCache.get(id);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.details;
+  }
+
+  if (cached) {
+    destinationDetailsCache.delete(id);
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(
+    () => controller.abort(),
+    GOOGLE_DETAILS_TIMEOUT_MS
+  );
+
+  try {
+    const result = await fetch(
+      `${GOOGLE_PLACES_BASE_URL}/${encodeURIComponent(id)}`,
+      {
+        method: "GET",
+        signal: controller.signal,
+        headers: {
+          "X-Goog-Api-Key": apiKey,
+          "X-Goog-FieldMask": "id,location,entrances,navigationPoints"
+        }
+      }
+    );
+
+    if (!result.ok) return null;
+
+    const data = await result.json();
+    const location = normalizeGoogleLocation(data?.location);
+
+    if (data?.id !== id || !location) {
+      return null;
+    }
+
+    const details = {
+      id,
+      location,
+
+      preferredEntrances: (
+        Array.isArray(data.entrances) ? data.entrances : []
+      )
+        .filter(
+          entrance =>
+            Array.isArray(entrance?.tags) &&
+            entrance.tags.includes("PREFERRED")
+        )
+        .map(entrance => normalizeGoogleLocation(entrance?.location))
+        .filter(Boolean)
+        .slice(0, 100),
+
+      walkingNavigationPoints: (
+        Array.isArray(data.navigationPoints) ? data.navigationPoints : []
+      )
+        .filter(
+          point =>
+            Array.isArray(point?.travelModes) &&
+            point.travelModes.includes("WALK")
+        )
+        .map(point => normalizeGoogleLocation(point?.location))
+        .filter(Boolean)
+        .slice(0, 100)
+    };
+
+    cacheDestinationDetails(id, details);
+    return details;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function destinationCandidates(details, requestedDestination) {
+  if (
+    !details ||
+    distanceBetweenCoordinates(details.location, requestedDestination) >
+      MAX_PLACE_LOCATION_DISTANCE_METERS
+  ) {
+    return [];
+  }
+
+  for (const [points, source] of [
+    [details.preferredEntrances, "google-preferred-entrance"],
+    [details.walkingNavigationPoints, "google-walking-navigation"]
+  ]) {
+    const candidates = [];
+
+    for (const location of points) {
+      if (
+        distanceBetweenCoordinates(location, requestedDestination) >
+          MAX_DESTINATION_CANDIDATE_DISTANCE_METERS ||
+        candidates.some(
+          candidate =>
+            distanceBetweenCoordinates(candidate.location, location) < 1
+        )
+      ) {
+        continue;
+      }
+
+      candidates.push({ location, source });
+
+      if (candidates.length === MAX_DESTINATION_CANDIDATES) {
+        break;
+      }
+    }
+
+    if (candidates.length) {
+      return candidates;
+    }
+  }
+
+  return [];
+}
+
+function normalizeSnappedWaypoints(data, route, inputs) {
+  const waypoints = [route?.waypoints, data?.waypoints].find(
+    points => Array.isArray(points) && points.length === inputs.length
+  );
+
+  return inputs.map((point, index) => {
+    const inputLocation = normalizeLatLng(point.lat, point.lng);
+    const waypoint = waypoints?.[index];
+    const location = normalizeLatLngFromMapbox(waypoint?.location);
+    const reportedDistance = finiteNumber(waypoint?.distance);
+
+    return {
+      index,
+      inputLocation,
+      location,
+      distanceMeters: location
+        ? reportedDistance !== null && reportedDistance >= 0
+          ? reportedDistance
+          : distanceBetweenCoordinates(inputLocation, location)
+        : null,
+      name: typeof waypoint?.name === "string" ? waypoint.name : ""
+    };
+  });
 }
 
 function normalizeStep(step, legIndex, stepIndex) {
@@ -310,54 +526,28 @@ function createFreeRunTripNavigationSegments(steps) {
 
 function buildMapboxCoordinates(origin, destination, waypoints) {
   return [origin, ...waypoints, destination]
-    .filter(isValidCoordinate)
-    .map((point) => `${Number(point.lng)},${Number(point.lat)}`)
+    .map(point => `${Number(point.lng)},${Number(point.lat)}`)
     .join(";");
 }
 
-module.exports = async function handler(request, response) {
-  setCorsHeaders(response);
+function routeError(message, status = 502) {
+  const error = new Error(message);
 
-  if (request.method === "OPTIONS") {
-    return response.status(204).end();
-  }
+  error.status =
+    Number.isInteger(status) && status >= 400 && status <= 599
+      ? status
+      : 502;
 
-  if (request.method !== "POST") {
-    return response.status(405).json({
-      error: "POST 요청만 사용할 수 있습니다.",
-    });
-  }
+  return error;
+}
 
-  const {
-    origin,
-    destination,
-    waypoints = [],
-    language = "ko",
-  } = request.body || {};
-
-  if (!isValidCoordinate(origin) || !isValidCoordinate(destination)) {
-    return response.status(400).json({
-      error: "출발지와 도착지 좌표가 필요합니다.",
-    });
-  }
-
-  if (!Array.isArray(waypoints) || waypoints.length > 23) {
-    return response.status(400).json({
-      error: "경유지는 최대 23개까지 사용할 수 있습니다.",
-    });
-  }
-
-  const mapboxAccessToken =
-    process.env.MAPBOX_ACCESS_TOKEN ||
-    process.env.MAPBOX_PUBLIC_ACCESS_TOKEN ||
-    PUBLIC_MAPBOX_FALLBACK_TOKEN;
-
-  if (!mapboxAccessToken) {
-    return response.status(500).json({
-      error: "Mapbox access token이 설정되지 않았습니다.",
-    });
-  }
-
+async function requestWalkingRoute({
+  origin,
+  destination,
+  waypoints,
+  language,
+  mapboxAccessToken
+}) {
   const coordinatePath = buildMapboxCoordinates(
     origin,
     destination,
@@ -382,62 +572,207 @@ module.exports = async function handler(request, response) {
   );
   mapboxUrl.searchParams.set("roundabout_exits", "false");
 
-  try {
-    const mapboxResponse = await fetch(mapboxUrl, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-      },
+  const mapboxResponse = await fetch(mapboxUrl, {
+    method: "GET",
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  const data = await mapboxResponse.json().catch(() => null);
+
+  if (!mapboxResponse.ok || data?.code !== "Ok") {
+    throw routeError(
+      typeof data?.message === "string"
+        ? data.message
+        : "Mapbox 보행 경로를 불러오지 못했습니다.",
+      mapboxResponse.status
+    );
+  }
+
+  const route = Array.isArray(data?.routes) ? data.routes[0] : null;
+  const rawCoordinates = route?.geometry?.coordinates;
+
+  const coordinates = Array.isArray(rawCoordinates)
+    ? rawCoordinates.map(normalizeLatLngFromMapbox)
+    : [];
+
+  if (
+    coordinates.length < 2 ||
+    coordinates.some(point => !point)
+  ) {
+    throw routeError(
+      "Mapbox 응답에서 경로 좌표를 찾지 못했습니다."
+    );
+  }
+
+  return {
+    route,
+    coordinates,
+    snappedWaypoints: normalizeSnappedWaypoints(
+      data,
+      route,
+      [origin, ...waypoints, destination]
+    )
+  };
+}
+
+function isUsableDestinationRoute(result, target) {
+  const snappedDestination = result.snappedWaypoints.at(-1);
+  const routeEnd = result.coordinates.at(-1);
+  const routeDistance = finiteNumber(result.route?.distance);
+
+  return !!(
+    snappedDestination?.location &&
+    routeDistance !== null &&
+    routeDistance >= 0 &&
+    snappedDestination.distanceMeters <= MAX_DESTINATION_SNAP_DISTANCE_METERS &&
+    distanceBetweenCoordinates(target, snappedDestination.location) <=
+      MAX_DESTINATION_SNAP_DISTANCE_METERS &&
+    distanceBetweenCoordinates(target, routeEnd) <=
+      MAX_DESTINATION_SNAP_DISTANCE_METERS &&
+    distanceBetweenCoordinates(snappedDestination.location, routeEnd) <=
+      MAX_ENDPOINT_MISMATCH_METERS
+  );
+}
+
+module.exports = async function handler(request, response) {
+  setCorsHeaders(response);
+
+  if (request.method === "OPTIONS") {
+    return response.status(204).end();
+  }
+
+  if (request.method !== "POST") {
+    return response.status(405).json({
+      error: "POST 요청만 사용할 수 있습니다."
     });
+  }
 
-    const data = await mapboxResponse.json().catch(() => null);
+  const {
+    origin,
+    destination,
+    waypoints = [],
+    language = "ko",
+    destinationPlaceId,
+    autoAdjustDestination = false
+  } = request.body || {};
 
-    if (!mapboxResponse.ok || data?.code !== "Ok") {
-      console.error("Mapbox Directions error:", {
-        status: mapboxResponse.status,
-        code: data?.code,
-        message: data?.message,
-      });
+  if (!isValidCoordinate(origin) || !isValidCoordinate(destination)) {
+    return response.status(400).json({
+      error: "올바른 출발지와 도착지 좌표가 필요합니다."
+    });
+  }
 
-      return response.status(mapboxResponse.status || 502).json({
-        error:
-          data?.message ||
-          "Mapbox 보행 경로를 불러오지 못했습니다.",
-      });
+  if (!Array.isArray(waypoints) || waypoints.length > 23) {
+    return response.status(400).json({
+      error: "경유지는 최대 23개까지 사용할 수 있습니다."
+    });
+  }
+
+  if (!waypoints.every(isValidCoordinate)) {
+    return response.status(400).json({
+      error: "모든 경유지에 올바른 좌표가 필요합니다."
+    });
+  }
+
+  const mapboxAccessToken =
+    process.env.MAPBOX_ACCESS_TOKEN ||
+    process.env.MAPBOX_PUBLIC_ACCESS_TOKEN ||
+    PUBLIC_MAPBOX_FALLBACK_TOKEN;
+
+  if (!mapboxAccessToken) {
+    return response.status(500).json({
+      error: "Mapbox access token이 설정되지 않았습니다."
+    });
+  }
+
+  const requestedDestination = normalizeLatLng(
+    destination.lat,
+    destination.lng
+  );
+
+  const routeOptions = {
+    origin,
+    destination,
+    waypoints,
+    language,
+    mapboxAccessToken
+  };
+
+  try {
+    let chosenRoute = null;
+    let destinationTarget = requestedDestination;
+    let destinationSource = "place-coordinate";
+
+    const googleApiKey = String(
+      process.env.GOOGLE_MAPS_API_KEY || ""
+    ).trim();
+
+    const placeId = normalizePlaceId(destinationPlaceId);
+
+    if (autoAdjustDestination === true && googleApiKey && placeId) {
+      const details = await getDestinationDetails(placeId, googleApiKey);
+
+      const candidates = destinationCandidates(
+        details,
+        requestedDestination
+      );
+
+      const results = await Promise.allSettled(
+        candidates.map(async candidate => {
+          const result = await requestWalkingRoute({
+            ...routeOptions,
+            destination: {
+              lat: candidate.location[0],
+              lng: candidate.location[1]
+            }
+          });
+
+          return isUsableDestinationRoute(result, candidate.location)
+            ? { ...candidate, result }
+            : null;
+        })
+      );
+
+      const validCandidates = results
+        .filter(result => result.status === "fulfilled" && result.value)
+        .map(result => result.value)
+        .sort(
+          (first, second) =>
+            first.result.route.distance - second.result.route.distance
+        );
+
+      if (validCandidates.length) {
+        const best = validCandidates[0];
+
+        chosenRoute = best.result;
+        destinationTarget = best.location;
+        destinationSource = best.source;
+      }
     }
 
-    const route = Array.isArray(data?.routes) ? data.routes[0] : null;
-
-    const routeCoordinates =
-      Array.isArray(route?.geometry?.coordinates)
-        ? route.geometry.coordinates
-            .map(normalizeLatLngFromMapbox)
-            .filter(Boolean)
-        : [];
-
-    if (routeCoordinates.length < 2) {
-      return response.status(502).json({
-        error: "Mapbox 응답에서 경로 좌표를 찾지 못했습니다.",
-      });
+    if (!chosenRoute) {
+      chosenRoute = await requestWalkingRoute(routeOptions);
     }
+
+    const { route, coordinates, snappedWaypoints } = chosenRoute;
 
     const steps = flattenRouteSteps(route);
-    const legSteps =
-       buildRouteLegSteps(route);
-    const legCoordinates =
-      buildRouteLegCoordinates(route);
+    const legSteps = buildRouteLegSteps(route);
+    const legCoordinates = buildRouteLegCoordinates(route);
 
     const navigationSegments =
       createFreeRunTripNavigationSegments(steps);
 
     const legNavigationSegments =
-       buildRouteLegNavigationSegments(route);
-      
-           return response.status(200).json({
+      buildRouteLegNavigationSegments(route);
+
+    return response.status(200).json({
       provider: "mapbox",
       profile: "mapbox/walking",
       language: normalizeMapboxLanguage(language),
-      coordinates: routeCoordinates,
+      coordinates,
       distanceMeters: Math.max(0, Number(route?.distance) || 0),
       durationSeconds: Math.max(0, Number(route?.duration) || 0),
       steps,
@@ -445,12 +780,28 @@ module.exports = async function handler(request, response) {
       legCoordinates,
       navigationSegments,
       legNavigationSegments,
+      requestedDestination,
+      destinationTarget,
+      destinationSource,
+      snappedWaypoints
     });
   } catch (error) {
-    console.error("RunTrip Mapbox route server error:", error);
+    console.error(
+      "RunTrip Mapbox route server error:",
+      error?.message
+    );
 
-    return response.status(500).json({
-      error: "Mapbox 보행 경로 요청 중 서버 오류가 발생했습니다.",
+    const status =
+      Number.isInteger(error?.status) &&
+      error.status >= 400 &&
+      error.status <= 599
+        ? error.status
+        : 502;
+
+    return response.status(status).json({
+      error: error?.status
+        ? error.message
+        : "Mapbox 보행 경로 요청 중 서버 오류가 발생했습니다."
     });
   }
 };
