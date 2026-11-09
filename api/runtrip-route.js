@@ -560,6 +560,7 @@ async function requestWalkingRoute({
 
   mapboxUrl.searchParams.set("access_token", mapboxAccessToken);
   mapboxUrl.searchParams.set("alternatives", "true");
+  mapboxUrl.searchParams.set("waypoints_per_route", "true");
   mapboxUrl.searchParams.set("steps", "true");
   mapboxUrl.searchParams.set("voice_instructions", "true");
   mapboxUrl.searchParams.set("banner_instructions", "true");
@@ -609,24 +610,48 @@ async function requestWalkingRoute({
     : [];
 
   if (
-    coordinates.length < 2 ||
-    coordinates.some(point => !point)
-  ) {
-    throw routeError(
-      "Mapbox 응답에서 경로 좌표를 찾지 못했습니다."
-    );
-  }
-
-  return {
-    route,
-    coordinates,
-    snappedWaypoints: normalizeSnappedWaypoints(
-      data,
-      route,
-      [origin, ...waypoints, destination]
-    )
-  };
+  coordinates.length < 2 ||
+  coordinates.some(point => !point)
+) {
+  throw routeError(
+    "Mapbox 응답에서 경로 좌표를 찾지 못했습니다."
+  );
 }
+
+const diagnosticInputs = [
+  origin,
+  ...waypoints,
+  destination
+];
+
+const diagnosticSnappedWaypoints =
+  normalizeSnappedWaypoints(
+    data,
+    route,
+    diagnosticInputs
+  );
+
+console.log(
+  "FreeRunTrip route snapping diagnostics",
+  {
+    inputs: diagnosticInputs,
+    snappedWaypoints: diagnosticSnappedWaypoints,
+    distanceMeters: route?.distance,
+    durationSeconds: route?.duration
+  }
+);
+
+return {
+  route,
+  coordinates,
+  snappedWaypoints: normalizeSnappedWaypoints(
+    data,
+    route,
+    [origin, ...waypoints, destination]
+  )
+};
+}
+
 
 function isUsableDestinationRoute(result, target) {
   const snappedDestination = result.snappedWaypoints.at(-1);
