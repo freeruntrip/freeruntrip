@@ -97,7 +97,49 @@ function distanceBetweenCoordinates(first, second) {
 
   return 6371000 * 2 * Math.asin(Math.sqrt(Math.min(1, a)));
 }
+function bearingBetweenCoordinates(first, second) {
+  if (
+    !Array.isArray(first) ||
+    !Array.isArray(second) ||
+    first.length < 2 ||
+    second.length < 2
+  ) {
+    return null;
+  }
 
+  const lat1 = Number(first[0]) * Math.PI / 180;
+  const lat2 = Number(second[0]) * Math.PI / 180;
+  const lngDelta =
+    (Number(second[1]) - Number(first[1])) *
+    Math.PI / 180;
+
+  if (
+    !Number.isFinite(lat1) ||
+    !Number.isFinite(lat2) ||
+    !Number.isFinite(lngDelta)
+  ) {
+    return null;
+  }
+
+  const y =
+    Math.sin(lngDelta) *
+    Math.cos(lat2);
+
+  const x =
+    Math.cos(lat1) *
+      Math.sin(lat2) -
+    Math.sin(lat1) *
+      Math.cos(lat2) *
+      Math.cos(lngDelta);
+
+  const degrees =
+    Math.atan2(y, x) *
+    180 / Math.PI;
+
+  return Math.round(
+    (degrees + 360) % 360
+  );
+}
 function normalizeGoogleLocation(location) {
   return normalizeLatLng(location?.latitude, location?.longitude);
 }
@@ -548,6 +590,36 @@ async function requestWalkingRoute({
   language,
   mapboxAccessToken
 }) {
+  const routePoints = [
+  origin,
+  ...waypoints,
+  destination
+];
+
+const originLocation =
+  normalizeLatLng(
+    origin.lat,
+    origin.lng
+  );
+
+const firstTargetPoint =
+  waypoints.length > 0
+    ? waypoints[0]
+    : destination;
+
+const firstTargetLocation =
+  normalizeLatLng(
+    firstTargetPoint.lat,
+    firstTargetPoint.lng
+  );
+
+const initialBearing =
+  originLocation && firstTargetLocation
+    ? bearingBetweenCoordinates(
+        originLocation,
+        firstTargetLocation
+      )
+    : null;
   const coordinatePath = buildMapboxCoordinates(
     origin,
     destination,
@@ -561,6 +633,19 @@ async function requestWalkingRoute({
   mapboxUrl.searchParams.set("access_token", mapboxAccessToken);
   mapboxUrl.searchParams.set("alternatives", "true");
   mapboxUrl.searchParams.set("waypoints_per_route", "true");
+  if (initialBearing !== null) {
+  const bearings =
+    routePoints.map(function (_, index) {
+      return index === 0
+        ? `${initialBearing},90`
+        : "";
+    });
+
+  mapboxUrl.searchParams.set(
+    "bearings",
+    bearings.join(";")
+  );
+}
   mapboxUrl.searchParams.set("steps", "true");
   mapboxUrl.searchParams.set("voice_instructions", "true");
   mapboxUrl.searchParams.set("banner_instructions", "true");
