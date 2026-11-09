@@ -12226,6 +12226,7 @@ function clearMapboxRunTripActualRoute() {
 }
 const runTripPreviewLayer = L.layerGroup().addTo(map);
 let runTripRouteRequestId = 0;
+let isRunTripRoutePreviewLoading = false;
 let latestRunTripRouteSummary = null;
 let isRunTripConfirmed = false;
 const runTripEditorCard = runTripPanel.querySelector(
@@ -22282,6 +22283,8 @@ async function requestRunTripRoute(
 async function renderRunTripMapPreview(prefetchedRoute = null) {
   const requestId = ++runTripRouteRequestId;
 
+  isRunTripRoutePreviewLoading = true;
+
   latestRunTripRouteSummary = null;
 
   clearRunTripMapPreview();
@@ -22350,7 +22353,8 @@ async function renderRunTripMapPreview(prefetchedRoute = null) {
   }
 
   if (previewMarkers.length === 0) {
-    return;
+  isRunTripRoutePreviewLoading = false;
+  return;
   }
 
   previewMarkers.forEach(function (marker) {
@@ -22379,6 +22383,8 @@ async function renderRunTripMapPreview(prefetchedRoute = null) {
     );
 
    fitRunTripMapBounds(markerBounds);
+
+   isRunTripRoutePreviewLoading = false;
 
     return;
   }
@@ -22564,6 +22570,7 @@ latestRunTripRouteSummary = {
     return [point[0], point[1]];
   })
 };
+isRunTripRoutePreviewLoading = false;
 
         selectedRunTripDestination = resolvedDestination;
 
@@ -22574,6 +22581,8 @@ latestRunTripRouteSummary = {
     }
 
     latestRunTripRouteSummary = null;
+
+    isRunTripRoutePreviewLoading = false;
 
     runTripStatus.textContent =
       error.message || '실제 보행 경로를 불러오지 못했어요.';
@@ -23535,11 +23544,23 @@ createRunTripBtn.addEventListener(
     createRunTripBtn.disabled = true;
     createRunTripBtn.textContent = '계산 중';
 
-    if (!latestRunTripRouteSummary) {
-      await renderRunTripMapPreview();
-    }
+    if (
+  !latestRunTripRouteSummary &&
+  !isRunTripRoutePreviewLoading
+) {
+  await renderRunTripMapPreview();
+}
 
-    if (!latestRunTripRouteSummary) {
+if (
+  !latestRunTripRouteSummary &&
+  isRunTripRoutePreviewLoading
+) {
+  createRunTripBtn.disabled = false;
+  createRunTripBtn.textContent = '확인';
+  return;
+}
+
+if (!latestRunTripRouteSummary) {
       createRunTripBtn.disabled = false;
       createRunTripBtn.textContent = '확인';
 
