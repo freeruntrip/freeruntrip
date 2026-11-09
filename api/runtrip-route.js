@@ -97,67 +97,49 @@ function distanceBetweenCoordinates(first, second) {
 
   return 6371000 * 2 * Math.asin(Math.sqrt(Math.min(1, a)));
 }
-function hasInitialRouteLoop(coordinates) {
-  if (!Array.isArray(coordinates) || coordinates.length < 4) {
-    return false;
+function findInitialRouteLoopReturnIndex(
+  coordinates,
+  firstTarget
+) {
+  if (
+    !Array.isArray(coordinates) ||
+    coordinates.length < 4
+  ) {
+    return -1;
   }
 
   const start = coordinates[0];
+
+  const target =
+    Array.isArray(firstTarget)
+      ? firstTarget
+      : normalizeLatLng(
+          firstTarget?.lat,
+          firstTarget?.lng
+        );
+
+  const startToTargetDistance =
+    target
+      ? distanceBetweenCoordinates(
+          start,
+          target
+        )
+      : null;
 
   const ESCAPE_RADIUS_METERS = 60;
   const RETURN_RADIUS_METERS = 35;
   const MAX_SCAN_DISTANCE_METERS = 400;
 
-  let cumulativeDistance = 0;
-  let escapedStartArea = false;
+  // 너무 짧게 꺾였다가 돌아오는 정상 도로는
+  // 루프로 판정하지 않는다.
+  const MIN_LOOP_TRAVEL_METERS = 120;
 
-  for (let index = 1; index < coordinates.length; index += 1) {
-    const previous = coordinates[index - 1];
-    const current = coordinates[index];
-
-    cumulativeDistance +=
-      distanceBetweenCoordinates(previous, current);
-
-    const distanceFromStart =
-      distanceBetweenCoordinates(start, current);
-
-    if (
-      !escapedStartArea &&
-      distanceFromStart >= ESCAPE_RADIUS_METERS
-    ) {
-      escapedStartArea = true;
-    } else if (
-      escapedStartArea &&
-      distanceFromStart <= RETURN_RADIUS_METERS
-    ) {
-      return true;
-    }
-
-    if (
-      cumulativeDistance >=
-      MAX_SCAN_DISTANCE_METERS
-    ) {
-      break;
-    }
-  }
-
-  return false;
-}
-
-function findInitialLoopGuidePoints(coordinates) {
-  if (!Array.isArray(coordinates) || coordinates.length < 4) {
-    return [];
-  }
-
-  const start = coordinates[0];
-
-  const ESCAPE_RADIUS_METERS = 60;
-  const RETURN_RADIUS_METERS = 35;
-  const MAX_SCAN_DISTANCE_METERS = 400;
+  // 첫 경유지/목적지 쪽으로 이 정도 이상
+  // 가까워졌다면 정상적인 진행으로 본다.
+  const MIN_TARGET_PROGRESS_METERS = 20;
 
   let cumulativeDistance = 0;
   let escapedStartArea = false;
-  let returnIndex = -1;
 
   for (
     let index = 1;
@@ -181,15 +163,52 @@ function findInitialLoopGuidePoints(coordinates) {
 
     if (
       !escapedStartArea &&
-      distanceFromStart >= ESCAPE_RADIUS_METERS
+      distanceFromStart >=
+        ESCAPE_RADIUS_METERS
     ) {
       escapedStartArea = true;
     } else if (
       escapedStartArea &&
-      distanceFromStart <= RETURN_RADIUS_METERS
+      distanceFromStart <=
+        RETURN_RADIUS_METERS
     ) {
-      returnIndex = index;
-      break;
+      if (
+        cumulativeDistance <
+        MIN_LOOP_TRAVEL_METERS
+      ) {
+        continue;
+      }
+
+      if (
+        target &&
+        Number.isFinite(
+          startToTargetDistance
+        )
+      ) {
+        const currentToTargetDistance =
+          distanceBetweenCoordinates(
+            current,
+            target
+          );
+
+        const targetProgressMeters =
+          startToTargetDistance -
+          currentToTargetDistance;
+
+        /*
+          출발지 근처로 다시 왔더라도
+          첫 경유지/목적지 쪽으로 충분히
+          진전했다면 정상적인 도로 굴곡으로 본다.
+        */
+        if (
+          targetProgressMeters >=
+          MIN_TARGET_PROGRESS_METERS
+        ) {
+          continue;
+        }
+      }
+
+      return index;
     }
 
     if (
@@ -199,6 +218,38 @@ function findInitialLoopGuidePoints(coordinates) {
       break;
     }
   }
+
+  return -1;
+}
+
+function hasInitialRouteLoop(
+  coordinates,
+  firstTarget
+) {
+  return (
+    findInitialRouteLoopReturnIndex(
+      coordinates,
+      firstTarget
+    ) >= 0
+  );
+}
+
+function findInitialLoopGuidePoints(
+  coordinates,
+  firstTarget
+) {
+  if (
+    !Array.isArray(coordinates) ||
+    coordinates.length < 4
+  ) {
+    return [];
+  }
+
+  const returnIndex =
+    findInitialRouteLoopReturnIndex(
+      coordinates,
+      firstTarget
+    );
 
   if (returnIndex < 0) {
     return [];
@@ -228,11 +279,13 @@ function findInitialLoopGuidePoints(coordinates) {
       );
 
     while (
-      targetIndex < targetDistances.length &&
+      targetIndex <
+        targetDistances.length &&
       distanceAfterReturn >=
         targetDistances[targetIndex]
     ) {
-      const point = coordinates[index];
+      const point =
+        coordinates[index];
 
       guidePoints.push({
         lat: point[0],
@@ -700,6 +753,11 @@ async function requestWalkingRoute({
     ...waypoints,
     destination
   ];
+  
+  const firstTarget =
+  waypoints.length > 0
+    ? waypoints[0]
+    : destination;
 
   async function requestRoute(
     routePoints,
@@ -866,8 +924,9 @@ async function requestWalkingRoute({
         durationSeconds: route?.duration,
         initialLoop:
           hasInitialRouteLoop(
-            coordinates
-          )
+            coordinates,
+            firstTarget
+        )
       }
     );
 
@@ -884,27 +943,27 @@ async function requestWalkingRoute({
     );
 
   if (
-    !hasInitialRouteLoop(
-      primaryRoute.coordinates
-    )
-  ) {
-    return primaryRoute;
-  }
+  !hasInitialRouteLoop(
+    primaryRoute.coordinates,
+    firstTarget
+  )
+) {
+  return primaryRoute;
+}
 
   console.log(
     "FreeRunTrip initial route loop detected"
   );
   const guidePoints =
   findInitialLoopGuidePoints(
-    primaryRoute.coordinates
-  );
+  primaryRoute.coordinates,
+  firstTarget
+);
 
 if (guidePoints.length === 0) {
-  console.warn(
-    "FreeRunTrip loop guide point unavailable, using primary route fallback"
+  throw routeError(
+    "출발지 주변에서 정상적인 보행 경로를 확정하지 못했습니다."
   );
-
-  return primaryRoute;
 }
 
 for (const guidePoint of guidePoints) {
@@ -936,7 +995,8 @@ for (const guidePoint of guidePoints) {
 
     if (
       hasInitialRouteLoop(
-        retryRoute.coordinates
+        retryRoute.coordinates,
+       firstTarget
       )
     ) {
       console.log(
@@ -964,13 +1024,10 @@ for (const guidePoint of guidePoints) {
   }
 }
 
-console.warn(
-  "FreeRunTrip loop-free retry unavailable, using primary route fallback"
+throw routeError(
+  "출발지 주변에서 정상적인 보행 경로를 확정하지 못했습니다."
 );
-
-return primaryRoute;
 }
-
 
 function isUsableDestinationRoute(result, target) {
   const snappedDestination = result.snappedWaypoints.at(-1);
