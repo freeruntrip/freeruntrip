@@ -10360,13 +10360,19 @@ function createMapboxRunTripRoundedDisplayData(data, zoom) {
   const shiftedFeatures =
     sourceFeatures
       .map(function (feature) {
-        const direction =
-          Number(
-            feature?.properties
-              ?.routeOffsetDirection
-          ) < 0
-            ? -1
-            : 1;
+        const rawDirection =
+  Number(
+    feature?.properties
+      ?.routeOffsetDirection
+  );
+
+const direction =
+  Number.isFinite(rawDirection)
+    ? Math.max(
+        -1,
+        Math.min(1, rawDirection)
+      )
+    : 1;
 
         return {
           ...feature,
