@@ -144,53 +144,106 @@ function hasInitialRouteLoop(coordinates) {
   return false;
 }
 
-function createInitialGuidePoint(
-  origin,
-  target,
-  preferredDistanceMeters = 55
-) {
-  const start = normalizeLatLng(
-    origin?.lat,
-    origin?.lng
-  );
-
-  const end = normalizeLatLng(
-    target?.lat,
-    target?.lng
-  );
-
-  if (!start || !end) {
-    return null;
+function findInitialLoopGuidePoints(coordinates) {
+  if (!Array.isArray(coordinates) || coordinates.length < 4) {
+    return [];
   }
 
-  const directDistance =
-    distanceBetweenCoordinates(start, end);
+  const start = coordinates[0];
 
-  if (
-    !Number.isFinite(directDistance) ||
-    directDistance < 30
+  const ESCAPE_RADIUS_METERS = 60;
+  const RETURN_RADIUS_METERS = 35;
+  const MAX_SCAN_DISTANCE_METERS = 400;
+
+  let cumulativeDistance = 0;
+  let escapedStartArea = false;
+  let returnIndex = -1;
+
+  for (
+    let index = 1;
+    index < coordinates.length;
+    index += 1
   ) {
-    return null;
+    const previous = coordinates[index - 1];
+    const current = coordinates[index];
+
+    cumulativeDistance +=
+      distanceBetweenCoordinates(
+        previous,
+        current
+      );
+
+    const distanceFromStart =
+      distanceBetweenCoordinates(
+        start,
+        current
+      );
+
+    if (
+      !escapedStartArea &&
+      distanceFromStart >= ESCAPE_RADIUS_METERS
+    ) {
+      escapedStartArea = true;
+    } else if (
+      escapedStartArea &&
+      distanceFromStart <= RETURN_RADIUS_METERS
+    ) {
+      returnIndex = index;
+      break;
+    }
+
+    if (
+      cumulativeDistance >=
+      MAX_SCAN_DISTANCE_METERS
+    ) {
+      break;
+    }
   }
 
-  const guideDistance =
-    Math.min(
-      preferredDistanceMeters,
-      directDistance * 0.4
-    );
+  if (returnIndex < 0) {
+    return [];
+  }
 
-  const ratio =
-    guideDistance / directDistance;
+  const targetDistances = [
+    25,
+    50,
+    80
+  ];
 
-  return {
-    lat:
-      start[0] +
-      (end[0] - start[0]) * ratio,
+  const guidePoints = [];
 
-    lng:
-      start[1] +
-      (end[1] - start[1]) * ratio
-  };
+  let distanceAfterReturn = 0;
+  let targetIndex = 0;
+
+  for (
+    let index = returnIndex + 1;
+    index < coordinates.length &&
+    targetIndex < targetDistances.length;
+    index += 1
+  ) {
+    distanceAfterReturn +=
+      distanceBetweenCoordinates(
+        coordinates[index - 1],
+        coordinates[index]
+      );
+
+    while (
+      targetIndex < targetDistances.length &&
+      distanceAfterReturn >=
+        targetDistances[targetIndex]
+    ) {
+      const point = coordinates[index];
+
+      guidePoints.push({
+        lat: point[0],
+        lng: point[1]
+      });
+
+      targetIndex += 1;
+    }
+  }
+
+  return guidePoints;
 }
 function normalizeGoogleLocation(location) {
   return normalizeLatLng(location?.latitude, location?.longitude);
@@ -790,17 +843,24 @@ async function requestWalkingRoute({
       );
     }
 
+    const snappedInputPoints =
+  Array.isArray(waypointIndexes)
+    ? waypointIndexes
+        .map(index => routePoints[index])
+        .filter(Boolean)
+    : routePoints;
+
     const snappedWaypoints =
-      normalizeSnappedWaypoints(
+       normalizeSnappedWaypoints(
         data,
-        route,
-        routePoints
-      );
+    route,
+    snappedInputPoints
+  );
 
     console.log(
       "FreeRunTrip route snapping diagnostics",
       {
-        inputs: routePoints,
+        inputs: snappedInputPoints,
         snappedWaypoints,
         distanceMeters: route?.distance,
         durationSeconds: route?.duration,
@@ -834,24 +894,18 @@ async function requestWalkingRoute({
   console.log(
     "FreeRunTrip initial route loop detected"
   );
+  const guidePoints =
+  findInitialLoopGuidePoints(
+    primaryRoute.coordinates
+  );
 
-  const firstTarget =
-    waypoints.length > 0
-      ? waypoints[0]
-      : destination;
+if (guidePoints.length === 0) {
+  throw routeError(
+    "출발지 주변에서 루프 없는 보행 경로를 찾지 못했습니다."
+  );
+}
 
-  const guidePoint =
-    createInitialGuidePoint(
-      origin,
-      firstTarget
-    );
-
-  if (!guidePoint) {
-    throw routeError(
-      "출발지 주변에서 루프 없는 보행 경로를 찾지 못했습니다."
-    );
-  }
-
+for (const guidePoint of guidePoints) {
   const retryRoutePoints = [
     origin,
     guidePoint,
@@ -871,39 +925,46 @@ async function requestWalkingRoute({
     realWaypointIndexes.push(index);
   }
 
-  const retryRoute =
-    await requestRoute(
-      retryRoutePoints,
-      realWaypointIndexes
-    );
-
-  if (
-    hasInitialRouteLoop(
-      retryRoute.coordinates
-    )
-  ) {
-    throw routeError(
-      "출발지 주변에서 루프 없는 보행 경로를 찾지 못했습니다."
-    );
-  }
-
-  retryRoute.snappedWaypoints =
-    retryRoute.snappedWaypoints
-      .filter(
-        (_, index) => index !== 1
-      )
-      .map(
-        (waypoint, index) => ({
-          ...waypoint,
-          index
-        })
+  try {
+    const retryRoute =
+      await requestRoute(
+        retryRoutePoints,
+        realWaypointIndexes
       );
 
-  console.log(
-    "FreeRunTrip initial route loop removed"
-  );
+    if (
+      hasInitialRouteLoop(
+        retryRoute.coordinates
+      )
+    ) {
+      console.log(
+        "FreeRunTrip retry route still loops",
+        guidePoint
+      );
 
-  return retryRoute;
+      continue;
+    }
+
+    console.log(
+      "FreeRunTrip initial route loop removed",
+      guidePoint
+    );
+
+    return retryRoute;
+  } catch (error) {
+    console.log(
+      "FreeRunTrip loop retry failed",
+      {
+        guidePoint,
+        message: error?.message || ""
+      }
+    );
+  }
+}
+
+throw routeError(
+  "출발지 주변에서 루프 없는 보행 경로를 찾지 못했습니다."
+);
 }
 
 
