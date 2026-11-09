@@ -10347,28 +10347,138 @@ function offsetMapboxRunTripDisplayCoordinates(coordinates, offset, zoom) {
 }
 
 function createMapboxRunTripRoundedDisplayData(data, zoom) {
-  const offset = getMapboxRunTripRouteDisplayOffsetPixels(zoom);
+  const offset =
+    getMapboxRunTripRouteDisplayOffsetPixels(
+      zoom
+    );
+
+  const sourceFeatures =
+    Array.isArray(data?.features)
+      ? data.features
+      : [];
+
+  const shiftedFeatures =
+    sourceFeatures
+      .map(function (feature) {
+        const direction =
+          Number(
+            feature?.properties
+              ?.routeOffsetDirection
+          ) < 0
+            ? -1
+            : 1;
+
+        return {
+          ...feature,
+
+          geometry: {
+            type: 'LineString',
+
+            coordinates:
+              offsetMapboxRunTripDisplayCoordinates(
+                feature.geometry.coordinates,
+                offset * direction,
+                zoom
+              )
+          }
+        };
+      })
+      .filter(function (feature) {
+        return (
+          Array.isArray(
+            feature?.geometry?.coordinates
+          ) &&
+          feature.geometry.coordinates
+            .length >= 2
+        );
+      });
+
+  const connectedFeatures = [];
+
+  shiftedFeatures.forEach(
+    function (feature, index) {
+      if (index > 0) {
+        const previousFeature =
+          shiftedFeatures[index - 1];
+
+        const previousCoordinates =
+          previousFeature
+            ?.geometry
+            ?.coordinates;
+
+        const currentCoordinates =
+          feature
+            ?.geometry
+            ?.coordinates;
+
+        const previousEnd =
+          Array.isArray(previousCoordinates)
+            ? previousCoordinates[
+                previousCoordinates.length - 1
+              ]
+            : null;
+
+        const currentStart =
+          Array.isArray(currentCoordinates)
+            ? currentCoordinates[0]
+            : null;
+
+        if (
+          Array.isArray(previousEnd) &&
+          previousEnd.length >= 2 &&
+          Array.isArray(currentStart) &&
+          currentStart.length >= 2
+        ) {
+          const longitudeGap =
+            Math.abs(
+              Number(previousEnd[0]) -
+              Number(currentStart[0])
+            );
+
+          const latitudeGap =
+            Math.abs(
+              Number(previousEnd[1]) -
+              Number(currentStart[1])
+            );
+
+          if (
+            longitudeGap > 1e-10 ||
+            latitudeGap > 1e-10
+          ) {
+            connectedFeatures.push({
+              type: 'Feature',
+
+              properties: {
+                routeDisplayBridge: true
+              },
+
+              geometry: {
+                type: 'LineString',
+
+                coordinates: [
+                  [
+                    Number(previousEnd[0]),
+                    Number(previousEnd[1])
+                  ],
+
+                  [
+                    Number(currentStart[0]),
+                    Number(currentStart[1])
+                  ]
+                ]
+              }
+            });
+          }
+        }
+      }
+
+      connectedFeatures.push(feature);
+    }
+  );
 
   return {
     type: 'FeatureCollection',
-    features: data.features.map(function (feature) {
-      const direction =
-        Number(feature.properties.routeOffsetDirection) < 0 ? -1 : 1;
-
-      return {
-        ...feature,
-        geometry: {
-          type: 'LineString',
-          coordinates: offsetMapboxRunTripDisplayCoordinates(
-            feature.geometry.coordinates,
-            offset * direction,
-            zoom
-          )
-        }
-      };
-    }).filter(function (feature) {
-      return feature.geometry.coordinates.length >= 2;
-    })
+    features: connectedFeatures
   };
 }
 
