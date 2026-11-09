@@ -256,10 +256,16 @@ function findInitialLoopGuidePoints(
   }
 
   const targetDistances = [
-    25,
-    50,
-    80
-  ];
+  10,
+  20,
+  35,
+  50,
+  70,
+  90,
+  120,
+  160,
+  220
+];
 
   const guidePoints = [];
 
@@ -753,7 +759,6 @@ async function requestWalkingRoute({
     ...waypoints,
     destination
   ];
-  
   const firstTarget =
   waypoints.length > 0
     ? waypoints[0]
@@ -880,20 +885,47 @@ async function requestWalkingRoute({
         : []
     );
 
-    const route =
-      Array.isArray(data?.routes)
-        ? data.routes[0]
-        : null;
+    const routeCandidates =
+  Array.isArray(data?.routes)
+    ? data.routes
+        .map(function (candidate) {
+          const rawCoordinates =
+            candidate?.geometry?.coordinates;
 
-    const rawCoordinates =
-      route?.geometry?.coordinates;
+          const candidateCoordinates =
+            Array.isArray(rawCoordinates)
+              ? rawCoordinates
+                  .map(normalizeLatLngFromMapbox)
+                  .filter(Boolean)
+              : [];
 
-    const coordinates =
-      Array.isArray(rawCoordinates)
-        ? rawCoordinates
-            .map(normalizeLatLngFromMapbox)
-            .filter(Boolean)
-        : [];
+          return {
+            route: candidate,
+            coordinates: candidateCoordinates
+          };
+        })
+        .filter(function (candidate) {
+          return candidate.coordinates.length >= 2;
+        })
+    : [];
+
+const selectedCandidate =
+  routeCandidates.find(function (candidate) {
+    return !hasInitialRouteLoop(
+      candidate.coordinates,
+      firstTarget
+    );
+  }) ||
+  routeCandidates[0] ||
+  null;
+
+const route =
+  selectedCandidate?.route ||
+  null;
+
+const coordinates =
+  selectedCandidate?.coordinates ||
+  [];
 
     if (coordinates.length < 2) {
       throw routeError(
