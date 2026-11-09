@@ -559,7 +559,7 @@ async function requestWalkingRoute({
   );
 
   mapboxUrl.searchParams.set("access_token", mapboxAccessToken);
-  mapboxUrl.searchParams.set("alternatives", "false");
+  mapboxUrl.searchParams.set("alternatives", "true");
   mapboxUrl.searchParams.set("steps", "true");
   mapboxUrl.searchParams.set("voice_instructions", "true");
   mapboxUrl.searchParams.set("banner_instructions", "true");
@@ -589,6 +589,17 @@ async function requestWalkingRoute({
       mapboxResponse.status
     );
   }
+
+ console.log(
+  "FreeRunTrip Mapbox alternatives",
+  Array.isArray(data?.routes)
+    ? data.routes.map((route, index) => ({
+        index,
+        distanceMeters: route.distance,
+        durationSeconds: route.duration
+      }))
+    : []
+); 
 
   const route = Array.isArray(data?.routes) ? data.routes[0] : null;
   const rawCoordinates = route?.geometry?.coordinates;
