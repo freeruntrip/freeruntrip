@@ -97,48 +97,100 @@ function distanceBetweenCoordinates(first, second) {
 
   return 6371000 * 2 * Math.asin(Math.sqrt(Math.min(1, a)));
 }
-function bearingBetweenCoordinates(first, second) {
-  if (
-    !Array.isArray(first) ||
-    !Array.isArray(second) ||
-    first.length < 2 ||
-    second.length < 2
-  ) {
-    return null;
+function hasInitialRouteLoop(coordinates) {
+  if (!Array.isArray(coordinates) || coordinates.length < 4) {
+    return false;
   }
 
-  const lat1 = Number(first[0]) * Math.PI / 180;
-  const lat2 = Number(second[0]) * Math.PI / 180;
-  const lngDelta =
-    (Number(second[1]) - Number(first[1])) *
-    Math.PI / 180;
+  const start = coordinates[0];
 
-  if (
-    !Number.isFinite(lat1) ||
-    !Number.isFinite(lat2) ||
-    !Number.isFinite(lngDelta)
-  ) {
-    return null;
+  const ESCAPE_RADIUS_METERS = 60;
+  const RETURN_RADIUS_METERS = 35;
+  const MAX_SCAN_DISTANCE_METERS = 400;
+
+  let cumulativeDistance = 0;
+  let escapedStartArea = false;
+
+  for (let index = 1; index < coordinates.length; index += 1) {
+    const previous = coordinates[index - 1];
+    const current = coordinates[index];
+
+    cumulativeDistance +=
+      distanceBetweenCoordinates(previous, current);
+
+    const distanceFromStart =
+      distanceBetweenCoordinates(start, current);
+
+    if (
+      !escapedStartArea &&
+      distanceFromStart >= ESCAPE_RADIUS_METERS
+    ) {
+      escapedStartArea = true;
+    } else if (
+      escapedStartArea &&
+      distanceFromStart <= RETURN_RADIUS_METERS
+    ) {
+      return true;
+    }
+
+    if (
+      cumulativeDistance >=
+      MAX_SCAN_DISTANCE_METERS
+    ) {
+      break;
+    }
   }
 
-  const y =
-    Math.sin(lngDelta) *
-    Math.cos(lat2);
+  return false;
+}
 
-  const x =
-    Math.cos(lat1) *
-      Math.sin(lat2) -
-    Math.sin(lat1) *
-      Math.cos(lat2) *
-      Math.cos(lngDelta);
-
-  const degrees =
-    Math.atan2(y, x) *
-    180 / Math.PI;
-
-  return Math.round(
-    (degrees + 360) % 360
+function createInitialGuidePoint(
+  origin,
+  target,
+  preferredDistanceMeters = 55
+) {
+  const start = normalizeLatLng(
+    origin?.lat,
+    origin?.lng
   );
+
+  const end = normalizeLatLng(
+    target?.lat,
+    target?.lng
+  );
+
+  if (!start || !end) {
+    return null;
+  }
+
+  const directDistance =
+    distanceBetweenCoordinates(start, end);
+
+  if (
+    !Number.isFinite(directDistance) ||
+    directDistance < 30
+  ) {
+    return null;
+  }
+
+  const guideDistance =
+    Math.min(
+      preferredDistanceMeters,
+      directDistance * 0.4
+    );
+
+  const ratio =
+    guideDistance / directDistance;
+
+  return {
+    lat:
+      start[0] +
+      (end[0] - start[0]) * ratio,
+
+    lng:
+      start[1] +
+      (end[1] - start[1]) * ratio
+  };
 }
 function normalizeGoogleLocation(location) {
   return normalizeLatLng(location?.latitude, location?.longitude);
@@ -590,151 +642,268 @@ async function requestWalkingRoute({
   language,
   mapboxAccessToken
 }) {
-  const routePoints = [
-  origin,
-  ...waypoints,
-  destination
-];
-
-const originLocation =
-  normalizeLatLng(
-    origin.lat,
-    origin.lng
-  );
-
-const firstTargetPoint =
-  waypoints.length > 0
-    ? waypoints[0]
-    : destination;
-
-const firstTargetLocation =
-  normalizeLatLng(
-    firstTargetPoint.lat,
-    firstTargetPoint.lng
-  );
-
-const initialBearing =
-  originLocation && firstTargetLocation
-    ? bearingBetweenCoordinates(
-        originLocation,
-        firstTargetLocation
-      )
-    : null;
-  const coordinatePath = buildMapboxCoordinates(
+  const userRoutePoints = [
     origin,
-    destination,
-    waypoints
-  );
+    ...waypoints,
+    destination
+  ];
 
-  const mapboxUrl = new URL(
-    `${MAPBOX_DIRECTIONS_BASE_URL}/${coordinatePath}`
-  );
+  async function requestRoute(
+    routePoints,
+    waypointIndexes = null
+  ) {
+    const coordinatePath =
+      routePoints
+        .map(
+          point =>
+            `${Number(point.lng)},${Number(point.lat)}`
+        )
+        .join(";");
 
-  mapboxUrl.searchParams.set("access_token", mapboxAccessToken);
-  mapboxUrl.searchParams.set("alternatives", "true");
-  mapboxUrl.searchParams.set("waypoints_per_route", "true");
-  if (initialBearing !== null) {
-  const bearings =
-    routePoints.map(function (_, index) {
-      return index === 0
-        ? `${initialBearing},90`
-        : "";
-    });
+    const mapboxUrl = new URL(
+      `${MAPBOX_DIRECTIONS_BASE_URL}/${coordinatePath}`
+    );
 
-  mapboxUrl.searchParams.set(
-    "bearings",
-    bearings.join(";")
-  );
-}
-  mapboxUrl.searchParams.set("steps", "true");
-  mapboxUrl.searchParams.set("voice_instructions", "true");
-  mapboxUrl.searchParams.set("banner_instructions", "true");
-  mapboxUrl.searchParams.set("voice_units", "metric");
-  mapboxUrl.searchParams.set("geometries", "geojson");
-  mapboxUrl.searchParams.set("overview", "full");
-  mapboxUrl.searchParams.set(
-    "language",
-    normalizeMapboxLanguage(language)
-  );
-  mapboxUrl.searchParams.set("roundabout_exits", "false");
+    mapboxUrl.searchParams.set(
+      "access_token",
+      mapboxAccessToken
+    );
 
-  const mapboxResponse = await fetch(mapboxUrl, {
-    method: "GET",
-    headers: {
-      Accept: "application/json"
+    mapboxUrl.searchParams.set(
+      "alternatives",
+      "true"
+    );
+
+    mapboxUrl.searchParams.set(
+      "waypoints_per_route",
+      "true"
+    );
+
+    if (
+      Array.isArray(waypointIndexes) &&
+      waypointIndexes.length >= 2
+    ) {
+      mapboxUrl.searchParams.set(
+        "waypoints",
+        waypointIndexes.join(";")
+      );
     }
-  });
 
-  const data = await mapboxResponse.json().catch(() => null);
+    mapboxUrl.searchParams.set(
+      "steps",
+      "true"
+    );
 
-  if (!mapboxResponse.ok || data?.code !== "Ok") {
+    mapboxUrl.searchParams.set(
+      "voice_instructions",
+      "true"
+    );
+
+    mapboxUrl.searchParams.set(
+      "banner_instructions",
+      "true"
+    );
+
+    mapboxUrl.searchParams.set(
+      "voice_units",
+      "metric"
+    );
+
+    mapboxUrl.searchParams.set(
+      "geometries",
+      "geojson"
+    );
+
+    mapboxUrl.searchParams.set(
+      "overview",
+      "full"
+    );
+
+    mapboxUrl.searchParams.set(
+      "language",
+      normalizeMapboxLanguage(language)
+    );
+
+    mapboxUrl.searchParams.set(
+      "roundabout_exits",
+      "false"
+    );
+
+    const mapboxResponse =
+      await fetch(mapboxUrl, {
+        method: "GET",
+        headers: {
+          Accept: "application/json"
+        }
+      });
+
+    const data =
+      await mapboxResponse
+        .json()
+        .catch(() => null);
+
+    if (
+      !mapboxResponse.ok ||
+      data?.code !== "Ok"
+    ) {
+      throw routeError(
+        typeof data?.message === "string"
+          ? data.message
+          : "Mapbox 보행 경로를 불러오지 못했습니다.",
+        mapboxResponse.status
+      );
+    }
+
+    console.log(
+      "FreeRunTrip Mapbox alternatives",
+      Array.isArray(data?.routes)
+        ? data.routes.map(
+            (candidate, index) => ({
+              index,
+              distanceMeters:
+                candidate.distance,
+              durationSeconds:
+                candidate.duration
+            })
+          )
+        : []
+    );
+
+    const route =
+      Array.isArray(data?.routes)
+        ? data.routes[0]
+        : null;
+
+    const rawCoordinates =
+      route?.geometry?.coordinates;
+
+    const coordinates =
+      Array.isArray(rawCoordinates)
+        ? rawCoordinates
+            .map(normalizeLatLngFromMapbox)
+            .filter(Boolean)
+        : [];
+
+    if (coordinates.length < 2) {
+      throw routeError(
+        "Mapbox 응답에서 경로 좌표를 찾지 못했습니다."
+      );
+    }
+
+    const snappedWaypoints =
+      normalizeSnappedWaypoints(
+        data,
+        route,
+        routePoints
+      );
+
+    console.log(
+      "FreeRunTrip route snapping diagnostics",
+      {
+        inputs: routePoints,
+        snappedWaypoints,
+        distanceMeters: route?.distance,
+        durationSeconds: route?.duration,
+        initialLoop:
+          hasInitialRouteLoop(
+            coordinates
+          )
+      }
+    );
+
+    return {
+      route,
+      coordinates,
+      snappedWaypoints
+    };
+  }
+
+  const primaryRoute =
+    await requestRoute(
+      userRoutePoints
+    );
+
+  if (
+    !hasInitialRouteLoop(
+      primaryRoute.coordinates
+    )
+  ) {
+    return primaryRoute;
+  }
+
+  console.log(
+    "FreeRunTrip initial route loop detected"
+  );
+
+  const firstTarget =
+    waypoints.length > 0
+      ? waypoints[0]
+      : destination;
+
+  const guidePoint =
+    createInitialGuidePoint(
+      origin,
+      firstTarget
+    );
+
+  if (!guidePoint) {
     throw routeError(
-      typeof data?.message === "string"
-        ? data.message
-        : "Mapbox 보행 경로를 불러오지 못했습니다.",
-      mapboxResponse.status
+      "출발지 주변에서 루프 없는 보행 경로를 찾지 못했습니다."
     );
   }
 
- console.log(
-  "FreeRunTrip Mapbox alternatives",
-  Array.isArray(data?.routes)
-    ? data.routes.map((route, index) => ({
-        index,
-        distanceMeters: route.distance,
-        durationSeconds: route.duration
-      }))
-    : []
-); 
+  const retryRoutePoints = [
+    origin,
+    guidePoint,
+    ...waypoints,
+    destination
+  ];
 
-  const route = Array.isArray(data?.routes) ? data.routes[0] : null;
-  const rawCoordinates = route?.geometry?.coordinates;
+  const realWaypointIndexes = [
+    0
+  ];
 
-  const coordinates = Array.isArray(rawCoordinates)
-    ? rawCoordinates.map(normalizeLatLngFromMapbox)
-    : [];
+  for (
+    let index = 2;
+    index < retryRoutePoints.length;
+    index += 1
+  ) {
+    realWaypointIndexes.push(index);
+  }
+
+  const retryRoute =
+    await requestRoute(
+      retryRoutePoints,
+      realWaypointIndexes
+    );
 
   if (
-  coordinates.length < 2 ||
-  coordinates.some(point => !point)
-) {
-  throw routeError(
-    "Mapbox 응답에서 경로 좌표를 찾지 못했습니다."
-  );
-}
-
-const diagnosticInputs = [
-  origin,
-  ...waypoints,
-  destination
-];
-
-const diagnosticSnappedWaypoints =
-  normalizeSnappedWaypoints(
-    data,
-    route,
-    diagnosticInputs
-  );
-
-console.log(
-  "FreeRunTrip route snapping diagnostics",
-  {
-    inputs: diagnosticInputs,
-    snappedWaypoints: diagnosticSnappedWaypoints,
-    distanceMeters: route?.distance,
-    durationSeconds: route?.duration
+    hasInitialRouteLoop(
+      retryRoute.coordinates
+    )
+  ) {
+    throw routeError(
+      "출발지 주변에서 루프 없는 보행 경로를 찾지 못했습니다."
+    );
   }
-);
 
-return {
-  route,
-  coordinates,
-  snappedWaypoints: normalizeSnappedWaypoints(
-    data,
-    route,
-    [origin, ...waypoints, destination]
-  )
-};
+  retryRoute.snappedWaypoints =
+    retryRoute.snappedWaypoints
+      .filter(
+        (_, index) => index !== 1
+      )
+      .map(
+        (waypoint, index) => ({
+          ...waypoint,
+          index
+        })
+      );
+
+  console.log(
+    "FreeRunTrip initial route loop removed"
+  );
+
+  return retryRoute;
 }
 
 
