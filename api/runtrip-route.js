@@ -900,9 +900,11 @@ async function requestWalkingRoute({
   );
 
 if (guidePoints.length === 0) {
-  throw routeError(
-    "출발지 주변에서 루프 없는 보행 경로를 찾지 못했습니다."
+  console.warn(
+    "FreeRunTrip loop guide point unavailable, using primary route fallback"
   );
+
+  return primaryRoute;
 }
 
 for (const guidePoint of guidePoints) {
@@ -962,9 +964,11 @@ for (const guidePoint of guidePoints) {
   }
 }
 
-throw routeError(
-  "출발지 주변에서 루프 없는 보행 경로를 찾지 못했습니다."
+console.warn(
+  "FreeRunTrip loop-free retry unavailable, using primary route fallback"
 );
+
+return primaryRoute;
 }
 
 
