@@ -450,11 +450,14 @@ function updateRunningFollowState() {
     return;
   }
 
-  runningFollowStateBtn.textContent = paused
-    ? '따라가기 멈춤'
+  const label = paused
+    ? '러닝 일시정지 중'
     : isRunningMapFollowing
-      ? '따라가기 ON'
-      : '따라가기 OFF';
+      ? '현재 위치 따라가는 중'
+      : '현재 위치로 이동하고 따라가기';
+
+  runningFollowStateBtn.setAttribute('aria-label', label);
+  runningFollowStateBtn.title = label;
 
   runningFollowStateBtn.setAttribute(
     'aria-pressed',
@@ -462,7 +465,12 @@ function updateRunningFollowState() {
   );
 
   runningFollowStateBtn.disabled = paused;
-  runningFollowStateBtn.classList.toggle('is-paused', paused);
+
+  runningFollowStateBtn.classList.toggle(
+    'is-paused',
+    paused
+  );
+
   runningFollowStateBtn.classList.toggle(
     'is-off',
     !paused && !isRunningMapFollowing
@@ -6841,8 +6849,7 @@ runningFollowStateBtn.addEventListener(
       return;
     }
 
-    isRunningMapFollowing =
-      !isRunningMapFollowing;
+        isRunningMapFollowing = true;
 
     if (
       isRunningMapFollowing &&

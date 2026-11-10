@@ -12932,3 +12932,63 @@ body:has(#frtFollowDialog.frt-following-page[open]) {
   min-width: 0;
   min-height: 50px;
 }
+
+/* 일반 러닝: 상단 바 대신 현재 위치 버튼 */
+#runningGpsStatus[hidden] {
+  display: none !important;
+}
+
+.running-follow-state.running-location-btn {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  right: 12px;
+  z-index: 3;
+
+  display: grid;
+  place-items: center;
+
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+
+  border-radius: 50%;
+  background: var(--freeruntrip-execution-bg);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.2);
+
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.running-location-btn svg {
+  pointer-events: none;
+}
+
+.running-location-btn:focus-visible {
+  outline: 2px solid #86efac;
+  outline-offset: 3px;
+}
+/* 현재 위치 버튼의 과녁 아이콘 중앙 정렬 */
+#runningFollowStateBtn.running-location-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  line-height: 1;
+}
+
+#runningFollowStateBtn.running-location-btn svg {
+  display: block;
+  position: static;
+  flex: 0 0 24px;
+
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  transform: none;
+}
