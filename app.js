@@ -12314,26 +12314,44 @@ runTripDashboard.id = 'runTripDashboard';
 runTripDashboard.className = 'runtrip-dashboard hidden';
 
 runTripDashboard.innerHTML = `
-  <div class="runtrip-dashboard-top">
-    <div>
-      <span class="runtrip-dashboard-badge">
-        RUNTRIP ACTIVE
-      </span>
+    <div class="runtrip-dashboard-top">
+    <div id="runTripDashboardBackSlot"></div>
 
-      <strong id="runTripDashboardGps">
-        GPS 연결 준비
-      </strong>
-    </div>
+    <strong id="runTripDashboardGps" hidden>
+      GPS 연결 준비
+    </strong>
 
     <button
       id="runTripDashboardFollowState"
       class="runtrip-dashboard-follow-state"
       type="button"
+      aria-label="현재 위치로 이동하고 따라가기"
+      title="현재 위치로 이동하고 따라가기"
       aria-pressed="true"
     >
-      따라가기 ON
+      <svg
+        viewBox="0 0 24 24"
+        width="24"
+        height="24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle cx="12" cy="12" r="7" />
+        <circle
+          cx="12"
+          cy="12"
+          r="2"
+          fill="currentColor"
+          stroke="none"
+        />
+        <path d="M12 2v3m0 14v3M2 12h3m14 0h3" />
+      </svg>
     </button>
   </div>
+
 
   <div class="runtrip-dashboard-timer-card">
     <span>경과 시간</span>
@@ -12419,6 +12437,23 @@ runTripEditorHeader.insertAdjacentElement(
   runTripDashboard
 );
 
+// 기존 뒤로가기 버튼을 러닝 정보창 상단으로 이동
+const runTripDashboardBackSlot = document.getElementById(
+  'runTripDashboardBackSlot'
+);
+
+const runTripNavigationBackButton = document.getElementById(
+  'runTripShowNavigation'
+);
+
+if (
+  runTripDashboardBackSlot &&
+  runTripNavigationBackButton
+) {
+  runTripDashboardBackSlot.appendChild(
+    runTripNavigationBackButton
+  );
+}
 const runTripDashboardTimer = document.getElementById(
   'runTripDashboardTimer'
 );
@@ -18192,12 +18227,17 @@ runTripDashboardCadence.textContent =
         ? 'GPS 연결됨'
         : 'GPS 위치 확인 중';
 
-  runTripDashboardFollowState.textContent =
-    isRunTripPaused
-      ? '따라가기 멈춤'
-      : isRunTripMapFollowing
-        ? '따라가기 ON'
-        : '따라가기 OFF';
+    const runTripFollowLabel = isRunTripPaused
+    ? '일시정지 중'
+    : '현재 위치로 이동하고 따라가기';
+
+  runTripDashboardFollowState.setAttribute(
+    'aria-label',
+    runTripFollowLabel
+  );
+
+  runTripDashboardFollowState.title =
+    runTripFollowLabel;
 
   runTripDashboardFollowState.setAttribute(
     'aria-pressed',
@@ -19404,8 +19444,12 @@ function freezeRunTripAtArrival(savedRecord) {
   runTripDashboardGps.textContent =
     '기록 완료';
 
-  runTripDashboardFollowState.textContent =
-    '도착 완료';
+    runTripDashboardFollowState.setAttribute(
+    'aria-label',
+    '도착 완료'
+  );
+
+  runTripDashboardFollowState.title = '도착 완료';
 
   runTripDashboardFollowState.disabled = true;
   runTripDashboardFollowState.classList.add(
@@ -23683,12 +23727,8 @@ runTripDashboardFollowState.addEventListener(
       return;
     }
 
-    /*
-      Follow 버튼을 누를 때마다
-      ON ↔ OFF 상태를 전환한다.
-    */
-    isRunTripMapFollowing =
-      !isRunTripMapFollowing;
+    // 과녁을 누르면 현재 위치로 복귀하고 따라가기 재개
+    isRunTripMapFollowing = true;
 
     /*
       Follow가 다시 ON이 된 순간:

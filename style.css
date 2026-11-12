@@ -13054,3 +13054,66 @@ body:has(#frtFollowDialog.frt-following-page[open]) {
 #runTripShowNavigation.runtrip-back-icon {
   color: #fff;
 }
+/* RunTrip 정보창: 뒤로가기와 현재 위치 버튼 */
+#runTripDashboardGps[hidden] {
+  display: none !important;
+}
+
+#runTripDashboard .runtrip-dashboard-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+
+  box-sizing: border-box;
+  height: 44px;
+  min-height: 0;
+  margin: 0;
+  padding: 0 8px;
+}
+
+#runTripDashboardBackSlot {
+  display: flex;
+  align-items: center;
+}
+
+#runTripDashboard #runTripShowNavigation.runtrip-back-icon {
+  margin: 0;
+  color: #fff;
+}
+
+#runTripDashboardFollowState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+
+  box-sizing: border-box;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  margin: 0;
+  padding: 0;
+
+  border-radius: 50%;
+  line-height: 1;
+  touch-action: manipulation;
+}
+
+#runTripDashboardFollowState svg {
+  display: block;
+  position: static;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  transform: none;
+  pointer-events: none;
+}
+
+#runTripDashboardFollowState:focus-visible {
+  outline: 2px solid #86efac;
+  outline-offset: 3px;
+}
