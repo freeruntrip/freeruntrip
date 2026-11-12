@@ -12171,24 +12171,42 @@ body:has(#frtFollowDialog.frt-following-page[open]) {
 
 /* RunTrip 장소 정보 */
 #recordDetail .detail-runtrip-info {
-  background: #fffbef;
-  border-color: #eee3bf;
-}
-
-#recordDetail .detail-runtrip-info-heading h3,
-#recordDetail .detail-runtrip-route-item strong,
-#recordDetail .detail-runtrip-waypoint-name {
-  color: #172033;
+  background: #f5f7fa;
+  border-color: #dce4ef;
 }
 
 #recordDetail .detail-runtrip-info-heading .card-label,
+#recordDetail .detail-runtrip-info-heading h3 {
+  color: #203451;
+}
+
+#recordDetail .detail-runtrip-route-list {
+  background: #ffffff;
+  border-color: #dce4ef;
+}
+
+#recordDetail .detail-runtrip-route-item {
+  background: #ffffff;
+}
+
+#recordDetail .detail-runtrip-route-item
++ .detail-runtrip-route-item {
+  border-top-color: #dce4ef;
+}
+
+#recordDetail .detail-runtrip-route-item small,
 #recordDetail .detail-runtrip-waypoints > p {
-  color: #805b08;
+  color: #718096;
+}
+
+#recordDetail .detail-runtrip-route-item strong,
+#recordDetail .detail-runtrip-waypoint-name {
+  color: #203451;
 }
 
 #recordDetail .detail-runtrip-waypoints {
-  background: #fff7df;
-  border-color: #eee3bf;
+  background: #edf2f7;
+  border-color: #dce4ef;
 }
 /* ========================================
    기록 상세 상단: 기록 목록과 디자인 통일
@@ -12991,4 +13009,48 @@ body:has(#frtFollowDialog.frt-following-page[open]) {
   margin: 0;
   padding: 0;
   transform: none;
+}
+/* RunTrip 화면 전환: 공통 꺾쇠 버튼 */
+#runTripShowRecord.runtrip-back-icon,
+#runTripShowNavigation.runtrip-back-icon {
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-start;
+
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+
+  margin: 0;
+  padding: 8px;
+
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #000;
+  box-shadow: none;
+
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+#runTripShowRecord.runtrip-back-icon svg,
+#runTripShowNavigation.runtrip-back-icon svg {
+  display: block;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  pointer-events: none;
+}
+
+.runtrip-following #runTripShowNavigation.runtrip-back-icon {
+  margin-bottom: 6px;
+}
+/* 어두운 런트립 정보창: 뒤로가기 아이콘 흰색 */
+#runTripShowNavigation.runtrip-back-icon {
+  color: #fff;
 }
