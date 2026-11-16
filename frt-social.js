@@ -2602,16 +2602,8 @@
 
         pullDistance = Math.max(0, dy);
 
-        pullHint.style.height =
-          Math.min(64, pullDistance * 0.5) + 'px';
-
-        const text = pullDistance >= pullThreshold
-          ? '놓으면 새로고침'
-          : '아래로 당겨 새로고침';
-
-        if (pullHint.textContent !== text) {
-          pullHint.textContent = text;
-        }
+        pullHint.style.height = '0px';
+        pullHint.textContent = '';
       }, { passive: false });
 
       pullScreen.addEventListener('touchend', async () => {
@@ -2625,8 +2617,8 @@
         if (!shouldRefresh) return;
 
         pullRefreshing = true;
-        pullHint.style.height = '44px';
-        pullHint.textContent = '새로고침 중…';
+        pullHint.style.height = '0px';
+        pullHint.textContent = '';
 
         try {
           await refresh();
