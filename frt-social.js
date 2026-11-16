@@ -9,6 +9,201 @@
   const shownCounts = new Map();
   let root;
   let busy = false;
+    let stopFeedSeen = () => {};
+
+  function readFeedSeen(owner) {
+    if (shownCounts.has(owner)) return shownCounts.get(owner);
+
+    let ids = [];
+
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem('frt-feed-seen-v1:' + owner) || '[]'
+      );
+
+      if (Array.isArray(saved)) {
+        ids = saved.filter(id => typeof id === 'string').slice(-2000);
+      }
+    } catch (error) {
+      console.warn('홈피드 열람 기록 읽기 실패:', error);
+    }
+
+    const seen = new Set(ids);
+    shownCounts.set(owner, seen);
+    return seen;
+  }
+
+  function saveFeedSeen(owner, seen, postId) {
+    const id = String(postId);
+    if (seen.has(id)) return;
+
+    seen.add(id);
+
+    // 최근 열람한 게시물 최대 2,000개 보관
+    while (seen.size > 2000) {
+      seen.delete(seen.values().next().value);
+    }
+
+    try {
+      localStorage.setItem(
+        'frt-feed-seen-v1:' + owner,
+        JSON.stringify([...seen])
+      );
+    } catch (error) {
+      // 저장 공간이 부족해도 현재 화면에서는 계속 활용
+      console.warn('홈피드 열람 기록 저장 실패:', error);
+    }
+  }
+
+  function selectRecommendedPosts(posts, seen) {
+    // 입력은 서버에서 최신순으로 정렬되어 있다.
+    const unique = [
+      ...new Map(posts.map(post => [String(post.id), post])).values()
+    ];
+
+    const total = Math.min(20, unique.length);
+    const recent = unique.slice(0, Math.round(total * 0.7));
+    const used = new Set(recent.map(post => String(post.id)));
+
+    const unseen = unique.filter(post =>
+      !used.has(String(post.id)) &&
+      !seen.has(String(post.id))
+    );
+
+    // 아직 안 본 후보를 무작위로 섞는다.
+    for (let i = unseen.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [unseen[i], unseen[j]] = [unseen[j], unseen[i]];
+    }
+
+    const discovery = unseen.slice(0, total - recent.length);
+    discovery.forEach(post => used.add(String(post.id)));
+
+    // 안 본 게시물이 부족하면 남은 최신 게시물로 채운다.
+    for (const post of unique) {
+      if (recent.length + discovery.length >= total) break;
+
+      if (!used.has(String(post.id))) {
+        recent.push(post);
+        used.add(String(post.id));
+      }
+    }
+
+    // 안 본 게시물을 최신 게시물 사이에 고르게 배치
+    const result = [];
+    const discoveryCount = discovery.length;
+
+    for (let i = 0; i < total; i++) {
+      const useDiscovery =
+        Math.floor((i + 1) * discoveryCount / total) >
+        Math.floor(i * discoveryCount / total);
+
+      result.push(
+        useDiscovery ? discovery.shift() : recent.shift()
+      );
+    }
+
+    return result;
+  }
+
+  function observeFeedSeen(posts, cards, owner, token) {
+    stopFeedSeen();
+
+    if (!('IntersectionObserver' in window)) return;
+
+    const seen = readFeedSeen(owner);
+    const timers = new Map();
+    const targets = new Map();
+    const visible = new Set();
+
+    const active = () =>
+      token === generation &&
+      !document.hidden &&
+      !document.getElementById('homeScreen')
+        ?.classList.contains('hidden') &&
+      !document.body.classList.contains('frt-search-page-open');
+
+    function cancel(target) {
+      clearTimeout(timers.get(target));
+      timers.delete(target);
+    }
+
+    const observer = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        const target = entry.target;
+
+        cancel(target);
+        visible.delete(target);
+
+        if (!entry.isIntersecting || entry.intersectionRatio < 0.25) {
+          continue;
+        }
+
+        visible.add(target);
+        if (!active()) continue;
+
+        timers.set(target, setTimeout(() => {
+          timers.delete(target);
+
+          if (!active() || !visible.has(target) || !target.isConnected) {
+            return;
+          }
+
+          // 고정 헤더나 다른 화면에 가려진 경우 제외
+          const rect = target.getBoundingClientRect();
+          const left = Math.max(0, rect.left);
+          const right = Math.min(window.innerWidth, rect.right);
+          const top = Math.max(0, rect.top);
+          const bottom = Math.min(window.innerHeight, rect.bottom);
+
+          if (right <= left || bottom <= top) return;
+
+          const hit = document.elementFromPoint(
+            (left + right) / 2,
+            (top + bottom) / 2
+          );
+
+          if (hit !== target && !target.contains(hit)) return;
+
+          saveFeedSeen(owner, seen, targets.get(target));
+          observer.unobserve(target);
+          visible.delete(target);
+        }, 1000));
+      }
+    }, { threshold: [0, 0.25] });
+
+    cards.forEach((card, index) => {
+      // 프로필 사진이 아닌 게시물 사진을 관찰
+      const image = card.querySelector('img.frt-post-media');
+
+      if (!image || seen.has(String(posts[index].id))) return;
+
+      targets.set(image, posts[index].id);
+      observer.observe(image);
+    });
+
+    function onVisibilityChange() {
+      for (const target of timers.keys()) cancel(target);
+
+      // 탭으로 돌아오면 1초를 새로 측정
+      for (const target of targets.keys()) {
+        observer.unobserve(target);
+        observer.observe(target);
+      }
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    stopFeedSeen = () => {
+      observer.disconnect();
+      for (const target of timers.keys()) cancel(target);
+      visible.clear();
+      document.removeEventListener(
+        'visibilitychange',
+        onVisibilityChange
+      );
+    };
+  }
 
   const el = (tag, text, cls) => {
     const node = document.createElement(tag);
@@ -490,6 +685,8 @@
   async function refresh() {
     if (!root) return;
 
+    stopFeedSeen();
+
     const token = ++generation;
     const selectedScope = scope;
     const list = root.querySelector('.frt-social-list');
@@ -535,7 +732,7 @@
           list.replaceChildren(
             el(
               'p',
-              '아직 팔로우한 사용자가 없어요. 추천 피드에서 관심 있는 사용자를 찾아보세요.'
+              '아직 팔로우한 사용자가 없어요. 둘러보기에서 관심 있는 사용자를 찾아보세요.'
             )
           );
           return;
@@ -550,83 +747,11 @@
 
       if (token !== generation) return;
 
-      if (selectedScope === 'recommended') {
-        const now = Date.now();
-
-        const candidates = await Promise.all(
-          posts.map(async post => {
-            const [likes, commentsResult] = await Promise.all([
-              client
-                .from('frt_social_likes')
-                .select('*', { count: 'exact', head: true })
-                .eq('post_id', post.id),
-
-              client
-                .from('frt_social_comments')
-                .select('*', { count: 'exact', head: true })
-                .eq('post_id', post.id)
-            ]);
-
-            checked(likes);
-            checked(commentsResult);
-
-            const ageHours = Math.max(
-              0,
-              (now - new Date(post.created_at).getTime()) /
-                3600000
-            );
-
-            const freshness = 1 / (1 + ageHours / 24);
-            const reactions =
-              (likes.count || 0) +
-              (commentsResult.count || 0) * 2;
-
-            const reactionScore =
-              Math.min(Math.log1p(reactions), 3) * 0.2;
-
-            const shown = shownCounts.get(post.id) || 0;
-
-            return {
-              post,
-              score: freshness + reactionScore - shown * 0.15
-            };
-          })
+            if (selectedScope === 'recommended') {
+        posts = selectRecommendedPosts(
+          posts,
+          readFeedSeen(current.id)
         );
-
-        if (token !== generation) return;
-
-        const authorCounts = new Map();
-        const selected = [];
-
-        while (candidates.length && selected.length < 20) {
-          let bestIndex = 0;
-          let bestScore = -Infinity;
-
-          candidates.forEach((candidate, index) => {
-            const authorCount =
-              authorCounts.get(candidate.post.user_id) || 0;
-
-            const score =
-              candidate.score - authorCount * 0.6;
-
-            if (score > bestScore) {
-              bestScore = score;
-              bestIndex = index;
-            }
-          });
-
-          const chosen =
-            candidates.splice(bestIndex, 1)[0].post;
-
-          selected.push(chosen);
-
-          authorCounts.set(
-            chosen.user_id,
-            (authorCounts.get(chosen.user_id) || 0) + 1
-          );
-        }
-
-        posts = selected;
       }
 
       const authors = await names(
@@ -654,25 +779,9 @@
         );
       }
 
-      if (selectedScope === 'recommended') {
-        posts.forEach(post => {
-          shownCounts.set(
-            post.id,
-            (shownCounts.get(post.id) || 0) + 1
-          );
-        });
-      }
+      // 추천과 팔로잉에서 실제로 본 게시물을 함께 기록
+      observeFeedSeen(posts, cards, current.id, token);
 
-      if (cards.length === 20) {
-        list.append(
-          el(
-            'p',
-            selectedScope === 'following'
-              ? '최근 게시물 20개를 표시해요.'
-              : '최근 공개 게시물 중 추천 게시물 20개를 표시해요.'
-          )
-        );
-      }
     } catch (error) {
       if (token === generation) {
         list.replaceChildren(el('p', message(error)));
@@ -2334,7 +2443,7 @@
     const nav = el('nav');
     nav.setAttribute('aria-label', '게시물 보기');
 
-    const recommended = button('추천', () => {
+    const recommended = button('둘러보기', () => {
       scope = 'recommended';
       update();
     });
@@ -2369,6 +2478,171 @@
     );
 
     anchor.replaceChildren(root);
+
+    // 홈피드: 아래로 당겨 새로고침
+    const pullScreen = document.getElementById('homeScreen');
+    const pullHint = el('div', '', 'frt-feed-pull-hint');
+
+    pullHint.setAttribute('role', 'status');
+    pullHint.setAttribute('aria-live', 'polite');
+    pullHint.style.cssText = `
+      height: 0;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      color: #64748b;
+      background: #f8fafc;
+      font-size: 13px;
+      pointer-events: none;
+    `;
+
+    root.prepend(pullHint);
+
+    let pullStart = null;
+    let pullDistance = 0;
+    let pullLocked = false;
+    let pullRefreshing = false;
+
+    const pullThreshold = 80;
+
+    function feedAtTop() {
+      return (document.scrollingElement?.scrollTop || 0) <= 1;
+    }
+
+    function canPullFeed() {
+      return (
+        pullScreen &&
+        !pullScreen.classList.contains('hidden') &&
+        !document.body.classList.contains('frt-search-page-open') &&
+        !pullRefreshing &&
+        feedAtTop()
+      );
+    }
+
+    function resetPull() {
+      pullStart = null;
+      pullDistance = 0;
+      pullLocked = false;
+
+      if (!pullRefreshing) {
+        pullHint.style.height = '0px';
+        pullHint.textContent = '';
+      }
+    }
+
+    if (pullScreen) {
+      pullScreen.addEventListener('touchstart', event => {
+        resetPull();
+
+        if (
+          event.touches.length !== 1 ||
+          !canPullFeed() ||
+          event.target.closest(
+            'button, a, input, textarea, select, [contenteditable]'
+          )
+        ) {
+          return;
+        }
+
+        const touch = event.touches[0];
+
+        pullStart = {
+          x: touch.clientX,
+          y: touch.clientY
+        };
+      }, { passive: true });
+
+      pullScreen.addEventListener('touchmove', event => {
+        if (!pullStart) return;
+
+        if (event.touches.length !== 1 || !canPullFeed()) {
+          resetPull();
+          return;
+        }
+
+        const touch = event.touches[0];
+        const dx = touch.clientX - pullStart.x;
+        const dy = touch.clientY - pullStart.y;
+
+        if (!pullLocked) {
+          // 가로 이동은 기존 제스처에 맡긴다.
+          if (Math.abs(dx) > 8 && Math.abs(dx) >= Math.abs(dy)) {
+            resetPull();
+            return;
+          }
+
+          if (dy < -8) {
+            resetPull();
+            return;
+          }
+
+          if (dy <= 0 || Math.abs(dx) >= dy) return;
+
+          if (!event.cancelable) {
+            resetPull();
+            return;
+          }
+
+          // 브라우저 전체 새로고침 대신 피드 당김으로 처리
+          event.preventDefault();
+
+          if (dy < 8) return;
+
+          pullLocked = true;
+        } else {
+          if (!event.cancelable) {
+            resetPull();
+            return;
+          }
+
+          event.preventDefault();
+        }
+
+        pullDistance = Math.max(0, dy);
+
+        pullHint.style.height =
+          Math.min(64, pullDistance * 0.5) + 'px';
+
+        const text = pullDistance >= pullThreshold
+          ? '놓으면 새로고침'
+          : '아래로 당겨 새로고침';
+
+        if (pullHint.textContent !== text) {
+          pullHint.textContent = text;
+        }
+      }, { passive: false });
+
+      pullScreen.addEventListener('touchend', async () => {
+        const shouldRefresh =
+          pullLocked &&
+          pullDistance >= pullThreshold &&
+          canPullFeed();
+
+        resetPull();
+
+        if (!shouldRefresh) return;
+
+        pullRefreshing = true;
+        pullHint.style.height = '44px';
+        pullHint.textContent = '새로고침 중…';
+
+        try {
+          await refresh();
+        } finally {
+          pullRefreshing = false;
+          resetPull();
+        }
+      }, { passive: true });
+
+      pullScreen.addEventListener(
+        'touchcancel',
+        resetPull,
+        { passive: true }
+      );
+    }
+
     update();
     // Defer Supabase queries outside its auth callback.
         let feedAccountId;
