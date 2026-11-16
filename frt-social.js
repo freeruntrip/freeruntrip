@@ -2498,6 +2498,40 @@
       pointer-events: none;
     `;
 
+        const pullSpinnerStyle = el('style');
+    pullSpinnerStyle.textContent = `
+      .frt-feed-spinner {
+        display: block;
+        width: 20px;
+        height: 20px;
+        box-sizing: border-box;
+        border: 2px solid #dce5e9;
+        border-top-color: #087f8c;
+        border-radius: 50%;
+      }
+
+      .frt-feed-spinner.is-refreshing {
+        animation: frt-feed-spin 0.75s linear infinite;
+      }
+
+      @keyframes frt-feed-spin {
+        to { transform: rotate(360deg); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .frt-feed-spinner.is-refreshing {
+          animation: none;
+        }
+      }
+    `;
+
+    document.head.append(pullSpinnerStyle);
+
+    const pullSpinner = el('span', undefined, 'frt-feed-spinner');
+    pullSpinner.setAttribute('aria-hidden', 'true');
+
+    pullHint.replaceChildren(pullSpinner);
+    pullHint.style.background = 'transparent';
     root.prepend(pullHint);
 
     let pullStart = null;
@@ -2521,14 +2555,16 @@
       );
     }
 
-    function resetPull() {
+        function resetPull() {
       pullStart = null;
       pullDistance = 0;
       pullLocked = false;
 
       if (!pullRefreshing) {
         pullHint.style.height = '0px';
-        pullHint.textContent = '';
+        pullHint.removeAttribute('aria-label');
+        pullSpinner.classList.remove('is-refreshing');
+        pullSpinner.style.transform = '';
       }
     }
 
@@ -2602,8 +2638,11 @@
 
         pullDistance = Math.max(0, dy);
 
-        pullHint.style.height = '0px';
-        pullHint.textContent = '';
+        pullHint.style.height =
+          Math.min(44, pullDistance * 0.5) + 'px';
+
+        pullSpinner.style.transform =
+          `rotate(${Math.min(pullDistance, 160) * 3}deg)`;
       }, { passive: false });
 
       pullScreen.addEventListener('touchend', async () => {
@@ -2617,8 +2656,10 @@
         if (!shouldRefresh) return;
 
         pullRefreshing = true;
-        pullHint.style.height = '0px';
-        pullHint.textContent = '';
+        pullHint.style.height = '44px';
+        pullHint.setAttribute('aria-label', '새로고침 중');
+        pullSpinner.style.transform = '';
+        pullSpinner.classList.add('is-refreshing');
 
         try {
           await refresh();
