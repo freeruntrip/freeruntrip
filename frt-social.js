@@ -1543,7 +1543,7 @@
     const list = el('div', undefined, 'frt-profile-post-grid');
     const recent = el('div', undefined, 'recent-feed');
 
-    recent.append(el('h3', 'Recent Runs'), list);
+    recent.append(list);
 
     const ad = el(
       'aside',
