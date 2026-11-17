@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>FreeRunTrip 오프닝 확인</title>
+  <link rel="preload" as="image" href="frt-opening-logo.webp">
+  <link rel="stylesheet" href="frt-opening.css">
+  <style>
+    body { margin: 0; padding: 32px 20px; background: #fff; color: #000; font: 16px/1.65 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    main { max-width: 520px; margin: 0 auto; }
+    h1 { font-size: 24px; font-weight: 600; letter-spacing: -.03em; }
+    p { color: #526166; }
+    button { font: inherit; background: #000; color: #fff; padding: 12px 18px; border: 0; border-radius: 12px; min-height: 44px; }
+    output { display: block; margin-top: 16px; font-size: 14px; color: #526166; }
+  </style>
+</head>
+<body>
+  <script src="frt-opening-audio.js"></script>
+  <script src="frt-opening.js" data-auto-start="false" data-sound-src=""></script>
+  <main>
+    <h1>FreeRunTrip 오프닝</h1>
+    <p>흰색 배경 · 검정색 글자로고 · 약 2초</p>
+    <button id="playOpening" type="button">소리와 함께 재생</button>
+    <output id="openingStatus" aria-live="polite">현재 승인된 효과음으로 재생합니다.</output>
+  </main>
+  <script>
+    document.getElementById('playOpening').addEventListener('click', function () {
+      var started = window.FrtOpening && window.FrtOpening.playPreview();
+      document.getElementById('openingStatus').textContent = started
+        ? '오프닝이 끝나면 이 화면으로 돌아옵니다.'
+        : '진행 중인 RunTrip 복구 상태가 있거나 재생 준비가 되지 않았습니다. 다른 브라우저에서 확인해 주세요.';
+    });
+  </script>
+</body>
+</html>
