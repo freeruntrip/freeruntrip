@@ -971,6 +971,7 @@ const runPhotoFileName = document.getElementById('runPhotoFileName');
 const runMemoInput = document.getElementById('runMemoInput');
 const runMemoCount = document.getElementById('runMemoCount');
 let pendingRunPhoto = '';
+let pendingRunTripMoodContext = null;
 let isPhotoProcessing = false;
 let detailMap = null;
 let detailRouteLines = [];
@@ -3533,7 +3534,7 @@ function announceRunTripEnd() {
   return playFreeRunTripRegisteredAudioSequence(
     [
       'runtrip-end-voice',
-      'runtrip-end-mood-voice'
+      'running-end-mood-voice'
     ],
     {
       gapMs: 100
@@ -3556,7 +3557,7 @@ function announceRunTripDestinationThenEnd() {
     [
       'runtrip-destination-voice',
       'runtrip-end-voice',
-      'runtrip-end-mood-voice'
+      'running-end-mood-voice'
     ],
     {
       gapMs: 100
@@ -6903,6 +6904,37 @@ freeRunTripMapboxMainMap.on(
     updateRunningFollowState();
   }
 );
+function showActivityPaceMoodModal() {
+  const isRunTrip =
+    Boolean(pendingRunTripMoodContext);
+
+  const hasArrived =
+    isRunTrip &&
+    pendingRunTripMoodContext.arrived;
+
+  backFromPaceMoodBtn.textContent = isRunTrip
+    ? '런트립 계속하기'
+    : '러닝 계속하기';
+
+  backFromPaceMoodBtn.classList.toggle(
+    'hidden',
+    hasArrived
+  );
+
+  saveRunWithMoodBtn.style.gridColumn =
+    hasArrived ? '1 / -1' : '';
+
+  document
+    .querySelectorAll('.pace-mood-option')
+    .forEach(function (button) {
+      button.classList.toggle(
+        'active',
+        button.dataset.mood === selectedPaceMood
+      );
+    });
+
+  paceMoodModal.classList.remove('hidden');
+}
 function connectReliableSafariTap(button) {
   if (!button) {
     return;
@@ -6955,13 +6987,37 @@ stopBtn.addEventListener('click', function () {
     console.log('watchId 종료:', watchId);
   }
 
-  watchId = null;
+    watchId = null;
 
-  paceMoodModal.classList.remove('hidden');
+  pendingRunTripMoodContext = null;
+  showActivityPaceMoodModal();
 });
 backFromPaceMoodBtn.addEventListener(
   'click',
   function () {
+    if (paceMoodModal.classList.contains('hidden')) {
+      return;
+    }
+
+    if (pendingRunTripMoodContext) {
+      if (pendingRunTripMoodContext.arrived) {
+        return;
+      }
+
+      pendingRunTripMoodContext = null;
+
+      paceMoodModal.classList.add('hidden');
+      cancelFreeRunTripVoiceGuidance();
+
+      hasRunTripArrivalNotified = false;
+      runTripDestinationArrivalHits = 0;
+
+      saveActiveRunTripState();
+      pauseRunTripBtn.click();
+
+      return;
+    }
+
     paceMoodModal.classList.add('hidden');
 
     // 종료 음성이 재생 중이라면 멈추고
@@ -6972,6 +7028,24 @@ backFromPaceMoodBtn.addEventListener(
   }
 );
 saveRunWithMoodBtn.addEventListener('click', function () {
+  if (
+    paceMoodModal.classList.contains('hidden') ||
+    saveRunWithMoodBtn.disabled
+  ) {
+    return;
+  }
+
+  if (
+    pendingRunTripMoodContext &&
+    isPhotoProcessing
+  ) {
+    alert(
+      '사진을 저장하고 있어요. 잠시 후 다시 저장해 주세요.'
+    );
+
+    return;
+  }
+
   const activeMoodButton = document.querySelector('.pace-mood-option.active');
 
   if (activeMoodButton) {
@@ -6988,6 +7062,35 @@ saveRunWithMoodBtn.addEventListener('click', function () {
     error
   );
 }
+  }
+
+  if (pendingRunTripMoodContext) {
+    const completionContext =
+      pendingRunTripMoodContext;
+
+    saveRunWithMoodBtn.disabled = true;
+
+    try {
+      const savedRecord =
+        completeRunTrip(completionContext);
+
+      if (!savedRecord) {
+        return;
+      }
+
+      pendingRunTripMoodContext = null;
+      paceMoodModal.classList.add('hidden');
+
+      if (completionContext.arrived) {
+        showRunTripArrivalNotice({
+          announce: false
+        });
+      }
+    } finally {
+      saveRunWithMoodBtn.disabled = false;
+    }
+
+    return;
   }
 
 const savedRunRecord =
@@ -16409,7 +16512,7 @@ function showRunTripCheckpointNotice(options = {}) {
     announceRunTripWaypointArrival(
       waypointNumber
     );
-  } else {
+  } else if (options.announce !== false) {
     announceRunTripDestinationThenEnd();
   }
 
@@ -16680,13 +16783,20 @@ function createRunTripRecoveryState() {
         ) || 0
       ),
 
-    isPaused:
+        isPaused:
       Boolean(
         isRunTripPaused
-     ),
+      ),
+
+    pendingMood: pendingRunTripMoodContext
+      ? {
+          ...pendingRunTripMoodContext,
+          mood: selectedPaceMood
+        }
+      : null,
 
     arrivalNotified:
-       Boolean(
+      Boolean(
         hasRunTripArrivalNotified
       ),
 
@@ -17613,7 +17723,10 @@ if (
 
   isRunTripConfirmed = true;
 
-currentAppPage = 'runtrip';
+  homeScreen.classList.add('hidden');
+  runTripPanel.classList.remove('hidden');
+
+  currentAppPage = 'runtrip';
 
 updateBottomNavigationActiveState(
   'runtrip'
@@ -17689,6 +17802,10 @@ if (freeRunTripMapboxMainMap) {
         restoredBounds
       );
     }
+  );
+
+  restorePendingRunTripMood(
+    savedState.pendingMood
   );
 
   saveActiveRunTripState();
@@ -17917,7 +18034,7 @@ function getRunTripArrivalTargetLatLng() {
   );
 }
 
-function showRunTripArrivalNotice() {
+function showRunTripArrivalNotice(options = {}) {
   const draft = getRunTripDraft();
 
   showRunTripCheckpointNotice({
@@ -17927,7 +18044,8 @@ function showRunTripArrivalNotice() {
         draft.destination
       ) || '도착지',
     targetLatLng:
-      getRunTripArrivalTargetLatLng()
+      getRunTripArrivalTargetLatLng(),
+    announce: options.announce !== false
   });
 }
 
@@ -18036,14 +18154,8 @@ function checkRunTripArrival(
   runTripRouteVoiceController.suspend('destination-arrival');
 
 /*
-  자동 도착 판정은 geolocation watchPosition 콜백 안에서 실행된다.
-
-  iPhone Safari 야외테스트에서 이 콜백 안에서 바로
-  RunTrip 기록을 저장하면 자동 종료에서만 저장 실패가 발생했고,
-  같은 RunTrip을 수동 종료하면 정상 저장됐다.
-
-  따라서 자동 종료 저장을 현재 GPS 콜백의 다음 이벤트로 넘긴다.
-  저장 성공 후에만 도착 UI와 종료 음성을 표시한다.
+  자동 도착 처리는 현재 GPS 콜백의 다음 이벤트에서 실행한다.
+  무드 선택 후 저장에 성공하면 도착 사진/기록 확인으로 이어진다.
 */
 window.setTimeout(function () {
   if (
@@ -18054,25 +18166,18 @@ window.setTimeout(function () {
     return;
   }
 
-  cancelFreeRunTripVoiceGuidance();
-
-  const savedRecord =
-    completeRunTrip({
+  const openedMoodSelection =
+    requestRunTripPaceMood({
       arrived: true
     });
 
-  if (!savedRecord) {
-    /*
-      저장 실패 시 다음 GPS 샘플에서
-      자동 종료를 다시 시도할 수 있도록 한다.
-    */
+  if (!openedMoodSelection) {
+    // 화면을 열지 못하면 다음 GPS 샘플에서 다시 시도한다.
     hasRunTripArrivalNotified = false;
     runTripDestinationArrivalHits = 0;
 
     return;
   }
-
-  showRunTripArrivalNotice();
 }, 0);
 }
 
@@ -19005,6 +19110,7 @@ async function startRunTripFollowing() {
 
   resetRunTripDashboard();
 
+  pendingRunTripMoodContext = null;
   runTripStartTime = new Date();
 
   runTripActualRouteCoordinates = [];
@@ -19069,12 +19175,19 @@ async function startRunTripFollowing() {
 
   saveActiveRunTripState();
 }
-function saveRunTripRecord() {
+function saveRunTripRecord(options = {}) {
   if (!runTripStartTime) {
     return null;
   }
 
-  const runTripEndTime = new Date();
+  const requestedEndTime = new Date(
+    options.endedAt || Date.now()
+  );
+
+  const runTripEndTime =
+    Number.isFinite(requestedEndTime.getTime())
+      ? requestedEndTime
+      : new Date();
 
   addGpsDiagnostic(runTripGpsDiagnosticLog, {
     accepted: true,
@@ -19200,7 +19313,7 @@ pace:
       ),
 
     emotionalPace:
-      'RunTrip Journey',
+      getEmotionalPaceLabel(),
 
     originName:
       getRunTripSavedOriginName(
@@ -19535,6 +19648,118 @@ function openCompletedRunTripRecord() {
   completedRunTripRecordId = null;
 }
 
+function requestRunTripPaceMood(options = {}) {
+  if (
+    isRunTripCompletionInProgress ||
+    !isRunTripFollowing ||
+    !runTripStartTime
+  ) {
+    return false;
+  }
+
+  if (pendingRunTripMoodContext) {
+    showActivityPaceMoodModal();
+    return true;
+  }
+
+  pendingRunTripMoodContext = {
+    arrived: options.arrived === true,
+    endedAt: new Date().toISOString(),
+    lastPosition: runTripLastValidPosition
+      ? { ...runTripLastValidPosition }
+      : null
+  };
+
+  // 저장에 성공할 때까지 시간·거리·경로·사진을 유지한다.
+  isRunTripPaused = true;
+
+  runTripRouteVoiceController.suspend('ending');
+  cancelFreeRunTripVoiceGuidance();
+  stopRunTripHeadingTracking();
+
+  clearInterval(runTripTimerInterval);
+  runTripTimerInterval = null;
+
+  if (
+    runTripFollowWatchId !== null &&
+    runTripFollowWatchId !== undefined
+  ) {
+    navigator.geolocation.clearWatch(
+      runTripFollowWatchId
+    );
+  }
+
+  runTripFollowWatchId = null;
+  runTripActiveRouteSegment = null;
+  runTripActualRouteLine = null;
+
+  removeRunTripCheckpointNotice();
+  hideRunTripNavigationBanners();
+  hideRunTripOffRouteBanner();
+
+  setRunTripTopBannerMode('record');
+  updateRunTripDashboard();
+  saveActiveRunTripState();
+  showActivityPaceMoodModal();
+
+  if (pendingRunTripMoodContext.arrived) {
+    announceRunTripDestinationThenEnd();
+  } else {
+    announceRunTripEnd();
+  }
+
+  return true;
+}
+function restorePendingRunTripMood(savedMood) {
+  pendingRunTripMoodContext = null;
+
+  if (!savedMood || !savedMood.endedAt) {
+    return;
+  }
+
+  const endedAt = new Date(savedMood.endedAt);
+
+  if (!Number.isFinite(endedAt.getTime())) {
+    return;
+  }
+
+  const lastPosition = savedMood.lastPosition;
+
+  const hasLastPosition =
+    lastPosition &&
+    Number.isFinite(lastPosition.latitude) &&
+    Number.isFinite(lastPosition.longitude);
+
+  pendingRunTripMoodContext = {
+    arrived: savedMood.arrived === true,
+    endedAt: endedAt.toISOString(),
+    lastPosition: hasLastPosition
+      ? { ...lastPosition }
+      : null
+  };
+
+  if (hasLastPosition) {
+    runTripLastValidPosition = {
+      ...lastPosition
+    };
+  }
+
+  const hasSavedMood = Array.from(
+    document.querySelectorAll('.pace-mood-option')
+  ).some(function (button) {
+    return button.dataset.mood === savedMood.mood;
+  });
+
+  if (hasSavedMood) {
+    selectedPaceMood = savedMood.mood;
+  }
+
+  hasRunTripArrivalNotified =
+    pendingRunTripMoodContext.arrived;
+
+  isRunTripPaused = true;
+  showActivityPaceMoodModal();
+}
 function completeRunTrip(
   options = {}
 ) {
@@ -19582,7 +19807,7 @@ function completeRunTrip(
   }
 
   const savedRecord =
-    saveRunTripRecord();
+    saveRunTripRecord(options);
 
   if (!savedRecord) {
     if (
@@ -19604,7 +19829,7 @@ function completeRunTrip(
     isRunTripCompletionInProgress = false;
 
     alert(
-      'RUNTRIP 기록을 저장하지 못했어요. 기록은 그대로 유지하고 있으니 다시 종료해 주세요.'
+      'RUNTRIP 기록을 저장하지 못했어요. 기록은 그대로 유지하고 있으니 다시 저장해 주세요.'
     );
 
     return null;
@@ -23455,25 +23680,39 @@ backFromMonthlyReportBtn.addEventListener(
     openAppPage('records');
   }
 );
-const paceMoodOptions = document.querySelectorAll('.pace-mood-option');
+const paceMoodOptions =
+  document.querySelectorAll('.pace-mood-option');
 
 paceMoodOptions.forEach(function (button) {
   button.addEventListener('click', function () {
-
     paceMoodOptions.forEach(function (btn) {
-  btn.classList.remove('active');
-});
+      btn.classList.remove('active');
+    });
 
-button.classList.add('active');
+    button.classList.add('active');
 
     selectedPaceMood = button.dataset.mood;
 
-    localStorage.setItem(
-      'selectedPaceMood',
+    try {
+      localStorage.setItem(
+        'selectedPaceMood',
+        selectedPaceMood
+      );
+    } catch (error) {
+      console.warn(
+        'Pace Mood 설정 저장 실패:',
+        error
+      );
+    }
+
+    if (pendingRunTripMoodContext) {
+      saveActiveRunTripState();
+    }
+
+    console.log(
+      '선택된 Pace Mood:',
       selectedPaceMood
     );
-
-    console.log('선택된 Pace Mood:', selectedPaceMood);
   });
 });
 if (runTripBtn) runTripBtn.addEventListener('click', function () {
@@ -23951,24 +24190,26 @@ freeRunTripMapboxMainMap.on(
 endRunTripBtn.addEventListener(
   'click',
   function () {
+    if (
+      !isRunTripFollowing ||
+      !runTripStartTime ||
+      pendingRunTripMoodContext ||
+      isRunTripCompletionInProgress
+    ) {
+      return;
+    }
+
     const shouldEnd = window.confirm(
-      '현재 RUNTRIP을 종료하고 기록을 저장할까요?'
+      '현재 RUNTRIP을 종료할까요?'
     );
 
     if (!shouldEnd) {
       return;
     }
 
-    cancelFreeRunTripVoiceGuidance();
-
-    const savedRunTripRecord =
-      completeRunTrip({
-        arrived: false
-      });
-
-    if (savedRunTripRecord) {
-      announceRunTripEnd();
-    }
+    requestRunTripPaceMood({
+      arrived: false
+    });
   }
 );
 updateRunTripCreateButton();
