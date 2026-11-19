@@ -4613,6 +4613,7 @@ function initializeMapboxDetailMap() {
 
       pitch: 0,
       bearing: 0,
+      interactive: false,
 
       attributionControl: true
     });
@@ -5196,10 +5197,15 @@ function showMapboxDetailMap(record) {
       );
 
       if (!bounds.isEmpty()) {
-        mapboxDetailMap.fitBounds(
+                mapboxDetailMap.fitBounds(
           bounds,
           {
-            padding: 24,
+            padding: {
+              top: 64,
+              bottom: 40,
+              left: 48,
+              right: 48
+            },
             maxZoom: 17,
             duration: 0
           }
@@ -26928,6 +26934,7 @@ async function frtOpenContentEditor() {
     y: 0.3,
     scale: 1
   };
+  frtContentState.statsMoodOnly = false;
   frtContentState.statsBounds = null;
   frtContentState.statsDrag = null;
   frtContentState.selectedElement = 'stats';
@@ -27169,17 +27176,19 @@ function frtDrawContentPreview() {
     String(record.duration || '').trim() ||
     '시간 정보 없음';
 
-  const lines = [
+    const moodLine = {
+    text: moodText,
+    size: baseSize * 0.044,
+    y: centerY
+  };
+
+  const lines = frtContentState.statsMoodOnly ? [moodLine] : [
     {
       text: distanceText,
       size: baseSize * 0.07,
       y: centerY - lineGap
     },
-    {
-      text: moodText,
-      size: baseSize * 0.044,
-      y: centerY
-    },
+    moodLine,
     {
       text: durationText,
       size: baseSize * 0.06,
@@ -27714,7 +27723,7 @@ if (frtGestureCanvas) {
       drag = {
          session: frtContentState.session,
          points: new Map(),
-         logoTap: element === 'logo',
+         tapEligible: element === 'logo' || element === 'stats',
          tapStartedAt: performance.now(),
          tapStartX: event.clientX,
          tapStartY: event.clientY
@@ -27728,9 +27737,9 @@ if (frtGestureCanvas) {
     }
 
     event.preventDefault();
-    // 두 번째 손가락이 닿으면 색상 전환을 취소한다.
+    // 두 번째 손가락이 닿으면 탭 동작을 취소한다.
     if (drag.points.size > 0) {
-      drag.logoTap = false;
+      drag.tapEligible = false;
     }
     drag.points.set(event.pointerId, point);
     frtGestureCanvas.setPointerCapture(event.pointerId);
@@ -27761,15 +27770,22 @@ if (frtGestureCanvas) {
     }
 
     event.preventDefault();
-    // 화면 기준 8px 이상 움직이면 드래그로 판단한다.
+        // 시작점에서 8px를 넘게 움직이면 드래그로 처리한다.
     if (
       Math.hypot(
-         event.clientX - drag.tapStartX,
-         event.clientY - drag.tapStartY
+        event.clientX - drag.tapStartX,
+        event.clientY - drag.tapStartY
       ) > 8
-) {
-  drag.logoTap = false;
-}
+    ) {
+      drag.tapEligible = false;
+    } else if (
+      drag.tapEligible &&
+      frtContentState.selectedElement === 'stats'
+    ) {
+      // 짧게 탭하는 동안 기록 문구가 손끝을 따라 밀리지 않게 한다.
+      return;
+    }
+
     drag.points.set(event.pointerId, point);
 
     const points = Array.from(drag.points.values());
@@ -27835,25 +27851,29 @@ if (frtGestureCanvas) {
       return;
     }
 
-    const toggleLogoText =
-  event.type === 'pointerup' &&
-  drag.logoTap &&
-  drag.points.size === 1 &&
-  drag.session === frtContentState.session &&
-  !frtContentState.saving &&
-  !frtContentState.publishing &&
-  performance.now() - drag.tapStartedAt <= 350 &&
-  Math.hypot(
-    event.clientX - drag.tapStartX,
-    event.clientY - drag.tapStartY
-  ) <= 8;
+        const isTap =
+      event.type === 'pointerup' &&
+      drag.tapEligible &&
+      drag.points.size === 1 &&
+      frtContentIsCurrent(drag.session) &&
+      !frtContentState.saving &&
+      !frtContentState.publishing &&
+      performance.now() - drag.tapStartedAt <= 350 &&
+      Math.hypot(
+        event.clientX - drag.tapStartX,
+        event.clientY - drag.tapStartY
+      ) <= 8;
 
-if (toggleLogoText) {
-  frtContentState.logoTextWhite =
-    !frtContentState.logoTextWhite;
+    if (isTap) {
+      if (frtContentState.selectedElement === 'stats') {
+        frtContentState.statsMoodOnly = !frtContentState.statsMoodOnly;
+      } else {
+        frtContentState.logoTextWhite = !frtContentState.logoTextWhite;
+      }
 
-  frtDrawContentPreview();
-}
+      frtDrawContentPreview();
+    }
+
     drag.points.delete(event.pointerId);
 
     if (frtGestureCanvas.hasPointerCapture(event.pointerId)) {
