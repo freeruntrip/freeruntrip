@@ -4218,24 +4218,19 @@ option {
 }
 
 .app-nav-button {
-  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
+  min-width: 0;
   padding: 5px 2px;
 
   border: none;
   border-radius: 15px;
-
   background: transparent;
-  color: #94a3b8;
-
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
+  color: #304765;
 
   font-family: inherit;
-
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
@@ -4244,32 +4239,28 @@ option {
   display: grid;
   place-items: center;
 
-  min-height: 18px;
+  width: 24px;
+  height: 24px;
 
-  font-size: 17px;
+  font-size: 23px;
   font-weight: 900;
   line-height: 1;
 }
 
-.app-nav-label {
-  overflow: hidden;
+.app-nav-button[data-page-target="running"] .app-nav-icon {
+  width: 30px;
+  height: 30px;
+  transform: scaleX(-1);
+}
 
-  max-width: 100%;
-
-  font-size: 8px;
-  font-weight: 900;
-
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.app-nav-button[data-page-target="runtrip"] .app-nav-icon {
+  width: 27px;
+  height: 27px;
 }
 
 .app-nav-button.active {
   background: #e0f2fe;
-  color: #0369a1;
-}
-
-.app-nav-button.app-nav-runtrip .app-nav-icon {
-  color: #f59e0b;
+  color: #172e50;
 }
 
 .app-nav-button:active {
@@ -4318,14 +4309,6 @@ option {
     min-height: 63px;
 
     padding: 6px;
-  }
-
-  .app-nav-icon {
-    font-size: 16px;
-  }
-
-  .app-nav-label {
-    font-size: 7px;
   }
 }
 /* ========================================
@@ -13116,4 +13099,43 @@ body:has(#frtFollowDialog.frt-following-page[open]) {
 #runTripDashboardFollowState:focus-visible {
   outline: 2px solid #86efac;
   outline-offset: 3px;
+}
+/* 일반 러닝 중 정보창, 따라가기 버튼, 하단 조작 버튼 배치 */
+#runningMapView {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto auto 1fr;
+  row-gap: 8px;
+
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: 10px;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+  padding-left: 10px;
+
+  pointer-events: none;
+}
+
+#runningMapView .running-execution-stack {
+  display: contents;
+  pointer-events: none;
+}
+
+#runningMapView .running-map-bottom-panel {
+  grid-column: 1;
+  grid-row: 1;
+  pointer-events: auto;
+}
+
+#runningMapView #runningFollowStateBtn {
+  position: static;
+  grid-column: 1;
+  grid-row: 3;
+  justify-self: end;
+  pointer-events: auto;
+}
+
+#runningMapView .running-map-actions {
+  grid-column: 1;
+  grid-row: 2;
+  pointer-events: auto;
 }

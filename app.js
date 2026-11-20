@@ -559,19 +559,11 @@ function getVisibleMapVerticalOffset(
 }
 
 function getRunningMapVerticalOffset() {
-  const statusRow = document.querySelector(
-    '.running-map-status-row'
+  const actionButtons = document.querySelector(
+    '#runningMapView .running-map-actions'
   );
 
-  const executionStack = document.querySelector(
-    '.running-execution-stack'
-  );
-
-  return getVisibleMapVerticalOffset(
-    statusRow,
-    executionStack,
-    12
-  );
+  return getVisibleMapVerticalOffset(actionButtons, null, 12);
 }
 
 function centerRunningMapOnPosition(latLng, options = {}) {
