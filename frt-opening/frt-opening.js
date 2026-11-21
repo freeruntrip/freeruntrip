@@ -14,7 +14,7 @@
   var volume = Number(attrs.soundVolume);
   if (!Number.isFinite(volume)) volume = 1;
   volume = Math.min(1, Math.max(0, volume));
-  var duration = 2000;
+  var duration = 7000;
   var sessionKey = 'frtOpeningSeenV1';
   var recoveryPrefix = 'freeRunTripActiveRunTripV1:';
   var active = null;

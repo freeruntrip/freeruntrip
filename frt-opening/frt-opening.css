@@ -13,7 +13,7 @@
   isolation: isolate;
   background: #ffffff;
   color: #000000;
-  animation: frt-opening-lifetime 2s linear both;
+  animation: frt-opening-lifetime 0.32s linear 6.68s both;
 }
 #frtOpening .frt-opening__lockup {
   position: relative;
@@ -68,31 +68,60 @@
 #frtOpening.frt-opening--image-failed .frt-opening__emblem,
 #frtOpening.frt-opening--image-failed .frt-opening__wordmark { display: none; }
 @keyframes frt-opening-lifetime {
-  0%, 84% { opacity: 1; visibility: visible; pointer-events: auto; }
-  100% { opacity: 0; visibility: hidden; pointer-events: none; }
+  0% {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
 }
+
 @keyframes frt-opening-mark-in {
-  0% { opacity: 0; transform: translateY(9px) scale(.96); }
-  12% { opacity: .4; }
-  34%, 76% { opacity: 1; transform: translateY(0) scale(1); }
-  100% { opacity: 0; transform: translateY(0) scale(1.015); }
+  0% {
+    opacity: 0;
+    transform: translateY(9px) scale(.96);
+  }
+  12% {
+    opacity: .4;
+  }
+  34%, 100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
+
 @keyframes frt-opening-type-in {
-  0%, 18% { opacity: 0; transform: translateY(5px); }
-  47%, 78% { opacity: 1; transform: translateY(0); }
-  100% { opacity: 0; transform: translateY(0); }
+  0%, 18% {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  47%, 100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
+
 @keyframes frt-opening-halo-in {
   0%, 100% { opacity: 0; }
   38%, 65% { opacity: 1; }
 }
+
 @media (prefers-reduced-motion: reduce) {
   #frtOpening .frt-opening__emblem,
-  #frtOpening .frt-opening__wordmark { animation-name: frt-opening-soft-in; }
-  #frtOpening .frt-opening__glow { animation: none; }
+  #frtOpening .frt-opening__wordmark {
+    animation-name: frt-opening-soft-in;
+  }
+
+  #frtOpening .frt-opening__glow {
+    animation: none;
+  }
+
   @keyframes frt-opening-soft-in {
     0% { opacity: 0; }
-    15%, 80% { opacity: 1; }
-    100% { opacity: 0; }
+    15%, 100% { opacity: 1; }
   }
 }
