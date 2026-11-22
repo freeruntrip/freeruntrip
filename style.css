@@ -10767,9 +10767,138 @@ body {
 #profileFeedScreen > .profile-feed-header > #backFromProfileFeedBtn {
   display: none;
 }
-/* 프로필 게시물의 '사진 격자로' 버튼과 해당 줄 숨김 */
+/* 확대 게시물: 상단 뒤로가기 */
 #profileFeedScreen .frt-profile-list-bar {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 1400;
+
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  align-items: center;
+
+  box-sizing: border-box;
+  width: min(100%, var(--app-mobile-width));
+  height: calc(52px + env(safe-area-inset-top, 0px));
+
+  margin: 0;
+  padding: env(safe-area-inset-top, 0px) 8px 0;
+  transform: translateX(-50%);
+
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+  color: #172033;
+}
+
+#profileFeedScreen .frt-profile-list-bar > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 44px;
+  height: 44px;
+  padding: 0;
+
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  box-shadow: none;
+}
+
+#profileFeedScreen .frt-profile-list-bar > strong {
+  text-align: center;
+  font-size: 18px;
+}
+
+/* 확대 사진: 좌우 여백과 모서리 둥글림 제거 */
+#profileRecentRuns.frt-profile-expanded,
+#frtPublicProfile .frt-profile-post-grid.frt-profile-expanded {
+  width: calc(100% + 40px);
+  margin-left: -20px;
+  margin-right: -20px;
+}
+
+#profileRecentRuns.frt-profile-expanded > .recent-run-card,
+#frtPublicProfile .frt-profile-post-grid.frt-profile-expanded
+  > .recent-run-card {
+  border-radius: 0;
+  scroll-margin-top: calc(52px + env(safe-area-inset-top, 0px));
+}
+
+/* 아이콘 행은 확대 화면에서만 표시 */
+#profileFeedScreen .recent-run-card > .frt-profile-post-actions {
   display: none;
+}
+
+#profileFeedScreen .frt-profile-expanded
+  > .recent-run-card > .frt-profile-post-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+
+  box-sizing: border-box;
+  min-height: 52px;
+  margin: 0;
+  padding: 4px 14px;
+}
+
+#profileFeedScreen .frt-profile-post-actions > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  padding: 4px 0;
+
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #304765;
+  box-shadow: none;
+
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+#profileFeedScreen .frt-profile-post-actions > button[aria-pressed="true"] {
+  color: #d62954;
+}
+
+#profileFeedScreen .frt-profile-post-actions > button:disabled {
+  opacity: 0.5;
+}
+
+#profileFeedScreen .frt-profile-post-actions svg {
+  display: block;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+#profileFeedScreen .frt-profile-post-actions > button:focus-visible,
+#profileFeedScreen .frt-profile-list-bar > button:focus-visible {
+  outline: 2px solid #304765;
+  outline-offset: 2px;
+}
+
+/* 본문 아래에는 펼친 댓글과 입력창을 표시 */
+#profileFeedScreen .frt-profile-expanded
+  > .recent-run-card > .frt-profile-reactions {
+  min-height: 0;
+  padding: 0 14px;
+}
+
+#profileRecentRuns.frt-profile-expanded
+  > .recent-run-card > .frt-published-caption,
+#frtPublicProfile .frt-profile-post-grid.frt-profile-expanded
+  > .recent-run-card > .frt-published-caption {
+  padding: 0 14px 14px;
 }
 
 /* 프로필 화면에서 열린 팔로워·팔로잉 목록의 닫기 버튼 숨김 */
@@ -13138,4 +13267,58 @@ body:has(#frtFollowDialog.frt-following-page[open]) {
   grid-column: 1;
   grid-row: 2;
   pointer-events: auto;
+}
+/* 프로필 게시물 설명글: 기본 3줄 */
+#profileFeedScreen .frt-published-caption > .frt-caption-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  line-height: 1.7;
+}
+
+/* 펼친 설명글은 전체 표시 */
+#profileFeedScreen
+  .frt-published-caption[data-frt-caption-expanded="true"]
+  > .frt-caption-text {
+  display: block;
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+  overflow: visible;
+}
+
+/* 더 보기 / 접기 버튼 */
+#profileFeedScreen .frt-published-caption > .frt-caption-toggle {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+
+  margin: 0;
+  padding: 0;
+
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #64748b;
+  box-shadow: none;
+
+  font: inherit;
+  cursor: pointer;
+}
+
+#profileFeedScreen
+  .frt-published-caption > .frt-caption-toggle[hidden] {
+  display: none;
+}
+
+#profileFeedScreen
+  .frt-published-caption > .frt-caption-toggle:focus-visible {
+  outline: 2px solid #304765;
+  outline-offset: 2px;
+}
+
+/* 접은 뒤 본문이 상단 고정 바에 가리지 않게 표시 */
+#profileFeedScreen .frt-published-caption {
+  scroll-margin-top: calc(52px + env(safe-area-inset-top, 0px));
 }

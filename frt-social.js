@@ -312,6 +312,46 @@
     token,
     container
   ) {
+        const iconsOnly =
+      container.classList.contains('frt-profile-reactions');
+
+    function paintReaction(control, kind, count, selected = false) {
+      const isLike = kind === 'like';
+      const label = isLike ? '좋아요' : '댓글';
+      const value = count == null ? '…' : String(count);
+
+      control.setAttribute(
+        'aria-label',
+        count == null
+          ? `${label} 불러오는 중`
+          : `${label} ${value}개`
+      );
+
+      if (!iconsOnly) {
+        control.textContent = isLike
+          ? `${selected ? '♥' : '♡'} 좋아요 ${value}`
+          : `댓글 ${value}`;
+        return;
+      }
+
+      const path = isLike
+        ? 'M12 20.5L3.7 12.6A5.3 5.3 0 0 1 11.2 5L12 5.8 12.8 5a5.3 5.3 0 0 1 7.5 7.6Z'
+        : 'M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20.5l1.6-5.4A8.5 8.5 0 1 1 21 11.5Z';
+
+      control.innerHTML = `
+        <svg viewBox="0 0 24 24" width="26" height="26"
+          fill="${isLike && selected ? 'currentColor' : 'none'}"
+          stroke="currentColor" stroke-width="1.8"
+          stroke-linecap="round" stroke-linejoin="round"
+          aria-hidden="true" focusable="false">
+          <path d="${path}"></path>
+        </svg>
+      `;
+
+      const number = el('span', value);
+      number.setAttribute('aria-hidden', 'true');
+      control.append(number);
+    }
     const valid = () =>
       typeof token === 'function'
         ? token()
@@ -394,10 +434,9 @@
 
       liked = (mine.data || []).length > 0;
 
-      like.textContent =
-        `${liked ? '♥' : '♡'} 좋아요 ${count.count || 0}`;
-
+      paintReaction(like, 'like', count.count || 0, liked);
       like.setAttribute('aria-pressed', String(liked));
+      like.disabled = false;
     }
 
     const toggle = button('댓글', async () => {
@@ -476,7 +515,7 @@
       checked(result);
 
       if (valid() && request === countRequest) {
-        toggle.textContent = `댓글 ${result.count || 0}`;
+        paintReaction(toggle, 'comment', result.count || 0);
       }
     }
 
@@ -496,7 +535,25 @@
 
     area.append(panel, form);
     actions.append(like, toggle);
-    wrap.append(actions, area, status);
+
+    if (iconsOnly) {
+      paintReaction(like, 'like', null);
+      paintReaction(toggle, 'comment', null);
+
+      like.setAttribute('aria-pressed', 'false');
+      like.disabled = true;
+
+      actions.classList.add('frt-profile-post-actions');
+
+      container.parentElement
+        .querySelector(':scope > .recent-run-photo')
+        .after(actions);
+
+      wrap.append(area, status);
+    } else {
+      wrap.append(actions, area, status);
+    }
+
     container.append(wrap);
 
     postReactionViews.add({
@@ -2141,7 +2198,7 @@
       ':scope > .recent-run-card'
     ).forEach(card => {
       card.querySelectorAll(
-        ':scope > .frt-profile-reactions'
+        ':scope > .frt-profile-reactions, :scope > .frt-profile-post-actions'
       ).forEach(node => node.remove());
 
       const image = card.querySelector(
@@ -2248,6 +2305,104 @@
 
     const selector =
       '#profileRecentRuns, #frtPublicProfile .frt-profile-post-grid';
+          let captionFrame = 0;
+    let captionNumber = 0;
+
+    function refreshProfileCaptions(grid, reset = false) {
+      if (
+        !grid?.isConnected ||
+        !grid.classList.contains('frt-profile-expanded')
+      ) {
+        return;
+      }
+
+      grid.querySelectorAll(
+        ':scope > .recent-run-card > .frt-published-caption'
+      ).forEach(caption => {
+        let text = caption.querySelector(':scope > .frt-caption-text');
+        let toggle = caption.querySelector(':scope > .frt-caption-toggle');
+
+        if (!text || !toggle) {
+          text = el('span', caption.textContent, 'frt-caption-text');
+          text.id = `frt-post-caption-${++captionNumber}`;
+
+          toggle = button('더 보기', () => {
+            const expanded =
+              toggle.getAttribute('aria-expanded') !== 'true';
+
+            caption.dataset.frtCaptionExpanded = String(expanded);
+            toggle.setAttribute('aria-expanded', String(expanded));
+            toggle.textContent = expanded ? '접기' : '더 보기';
+
+            if (!expanded) {
+              const headerBottom = screen
+                .querySelector('.frt-profile-list-bar')
+                ?.getBoundingClientRect().bottom || 0;
+
+              if (caption.getBoundingClientRect().top < headerBottom) {
+                caption.scrollIntoView({
+                  block: 'start',
+                  behavior: 'auto'
+                });
+              }
+            }
+          });
+
+          toggle.className = 'frt-caption-toggle';
+          toggle.hidden = true;
+          toggle.setAttribute('aria-expanded', 'false');
+          toggle.setAttribute('aria-controls', text.id);
+
+          caption.dataset.frtCaptionExpanded = 'false';
+          caption.replaceChildren(text, toggle);
+        }
+
+        if (!text.getClientRects().length) return;
+
+        const lineHeight = parseFloat(
+          getComputedStyle(text).lineHeight
+        );
+
+        if (!Number.isFinite(lineHeight) || lineHeight <= 0) {
+          return;
+        }
+
+        const wasExpanded =
+          !reset && toggle.getAttribute('aria-expanded') === 'true';
+
+        // 전체 글 높이를 측정한 뒤 표시 상태를 복원한다.
+        caption.dataset.frtCaptionExpanded = 'true';
+
+        const needsToggle =
+          text.scrollHeight > lineHeight * 3 + 1;
+
+        const expanded = needsToggle && wasExpanded;
+
+        caption.dataset.frtCaptionExpanded = String(expanded);
+        toggle.hidden = !needsToggle;
+        toggle.setAttribute('aria-expanded', String(expanded));
+
+        const label = expanded ? '접기' : '더 보기';
+
+        if (toggle.textContent !== label) {
+          toggle.textContent = label;
+        }
+      });
+    }
+
+    function scheduleCaptionLayout() {
+      if (captionFrame) return;
+
+      captionFrame = requestAnimationFrame(() => {
+        captionFrame = 0;
+
+        if (!active || screen.classList.contains('hidden')) {
+          return;
+        }
+
+        refreshProfileCaptions(active.grid);
+      });
+    }
 
     // 사진 격자로 돌아오기
     function collapse(restore = true) {
@@ -2303,9 +2458,23 @@
         'frt-profile-list-bar'
       );
 
-      bar.append(
-        button('← 사진 격자로', () => collapse())
+      const back = button('', () => collapse());
+
+      back.setAttribute(
+        'aria-label',
+        '프로필 게시물 목록으로 돌아가기'
       );
+
+      back.innerHTML = `
+        <svg viewBox="0 0 24 24" width="28" height="28"
+          fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round"
+          aria-hidden="true" focusable="false">
+          <path d="M15 5L8 12L15 19"></path>
+        </svg>
+      `;
+
+      bar.append(back, el('strong', '게시물'));
 
       active = {
         grid,
@@ -2318,7 +2487,8 @@
 
       grid.before(bar);
       grid.classList.add('frt-profile-expanded');
-      
+
+      refreshProfileCaptions(grid, true);
       void mountProfileReactions(grid);
 
       requestAnimationFrame(() => {
@@ -2416,12 +2586,18 @@
     screen.addEventListener('click', activate);
     screen.addEventListener('keydown', activate);
 
-    new MutationObserver(prepare).observe(screen, {
+        new MutationObserver(() => {
+      prepare();
+      scheduleCaptionLayout();
+    }).observe(screen, {
       childList: true,
       subtree: true,
       attributes: true,
       attributeFilter: ['class']
     });
+
+    window.addEventListener('resize', scheduleCaptionLayout);
+    document.fonts?.ready.then(scheduleCaptionLayout);
 
     prepare();
   }
