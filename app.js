@@ -10256,6 +10256,16 @@ let isGettingRunTripCurrentLocation = false;
 let mapboxRunTripPlannedRouteSourceReady = false;
 let mapboxRunTripPreviewMarkers = [];
 
+// RunTrip 검색 지도 전용 위치마커
+let mapboxRunTripSearchPreviewMarkers = [];
+const RUNTRIP_SEARCH_ROUTE_SOURCE_ID =
+  'freeruntrip-search-route-source';
+
+const RUNTRIP_SEARCH_ROUTE_LAYER_ID =
+  'freeruntrip-search-route-layer';
+
+let runTripSearchRouteRequestId = 0;
+
 let mapboxRunTripActualRouteSourceReady = false;
 
 let runTripPlannedRouteProgressMetrics = null;
@@ -20873,7 +20883,12 @@ function initializeRunTripSearchMap() {
     console.log(
       'FreeRunTrip 장소 검색 지도 준비 완료'
     );
-    syncRunTripCafeIcons(freeRunTripMapboxSearchMap);
+
+   syncRunTripCafeIcons(freeRunTripMapboxSearchMap);
+
+   // 검색 지도 최초 로딩 시 기존 위치마커 표시
+   renderRunTripSearchPreviewMarkers();
+   initializeRunTripSearchRouteLayer();
 
     freeRunTripMapboxSearchMap.on(
   'click',
@@ -20913,12 +20928,17 @@ function initializeRunTripSearchMap() {
 
   return freeRunTripMapboxSearchMap;
 }
+
 function closeRunTripSearchScreen() {
   runTripSearchRequestId++;
+
+  // 검색 지도 보행 경로 요청 무효화
+  runTripSearchRouteRequestId++;
 
   clearTimeout(runTripSearchTimer);
 
   runTripSearchScreen.classList.add('hidden');
+
   runTripSearchResults.innerHTML = '';
   runTripSearchInput.value = '';
   activeRunTripSearchTarget = null;
@@ -20980,20 +21000,41 @@ runTripSearchInput.value = isDefaultCurrentLocation
      'none';
   }
 
+  
   requestAnimationFrame(function () {
-  const searchMap =
-    initializeRunTripSearchMap();
+    const searchMap =
+      initializeRunTripSearchMap();
 
-  if (!searchMap) {
-    return;
-  }
+    if (!searchMap) {
+      return;
+    }
 
-  requestAnimationFrame(function () {
-    searchMap.resize();
-   });
- });
-}
+    requestAnimationFrame(function () {
+      searchMap.resize();
+
+      // 기존 위치마커 표시
+      renderRunTripSearchPreviewMarkers();
+
+      // 현재 설정된 장소들의 보행 경로 표시
+      if (searchMap.isStyleLoaded()) {
+        renderRunTripSearchRoute();
+      } else {
+        searchMap.once('load', function () {
+          if (
+            !runTripSearchScreen.classList.contains('hidden')
+          ) {
+            renderRunTripSearchRoute();
+          }
+        });
+      }
+    });
+  });
+
+} // openRunTripSearchScreen 함수 종료
+
+
 function getRunTripCafeAddressKey(place) {
+
   if (
     !place ||
     place.isCurrentLocation === true ||
@@ -21978,6 +22019,317 @@ function createMapboxRunTripPreviewMarker(
   return marker;
 }
 
+
+function clearRunTripSearchPreviewMarkers() {
+  mapboxRunTripSearchPreviewMarkers.forEach(
+    function (marker) {
+      marker.remove();
+    }
+  );
+
+  mapboxRunTripSearchPreviewMarkers = [];
+}
+
+// 검색 지도에도 확정된 출발지·경유지·도착지를 표시
+function renderRunTripSearchPreviewMarkers() {
+  if (!freeRunTripMapboxSearchMap) {
+    return;
+  }
+
+  // 기존 검색 지도 마커를 정리해 중복 표시 방지
+  clearRunTripSearchPreviewMarkers();
+
+  const draft = getRunTripDraft();
+
+  const originLatLng =
+    getRunTripPlaceLatLng(draft.origin);
+
+  const destinationLatLng =
+    getRunTripPlaceLatLng(draft.destination);
+
+  const isReturnToStartRoute =
+    draft.returnToStart === true &&
+    isSameRunTripLatLng(
+      originLatLng,
+      destinationLatLng
+    );
+
+  function addSearchMarker(
+    label,
+    type,
+    latLng,
+    horizontalOffset = 0
+  ) {
+    if (
+      !Array.isArray(latLng) ||
+      latLng.length < 2
+    ) {
+      return;
+    }
+
+    const latitude = Number(latLng[0]);
+    const longitude = Number(latLng[1]);
+
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude)
+    ) {
+      return;
+    }
+
+    const markerElement =
+      document.createElement('div');
+
+    markerElement.className =
+      `runtrip-preview-marker ${type}`;
+
+    markerElement.innerHTML = `
+      <div class="runtrip-preview-marker-body">
+        <span>${escapePlaceSearchText(label)}</span>
+      </div>
+      <div class="runtrip-preview-marker-tip"></div>
+    `;
+
+    // Mapbox의 위치 transform과 CSS 등장 애니메이션 충돌 방지
+    markerElement.style.animation = 'none';
+
+    // 기존 지도 터치 및 장소 선택 동작 유지
+    markerElement.style.pointerEvents = 'none';
+
+    const marker = new mapboxgl.Marker({
+      element: markerElement,
+      anchor: 'bottom',
+      offset: [
+        Number(horizontalOffset || 0),
+        0
+      ]
+    })
+      .setLngLat([
+        longitude,
+        latitude
+      ])
+      .addTo(freeRunTripMapboxSearchMap);
+
+    mapboxRunTripSearchPreviewMarkers.push(
+      marker
+    );
+  }
+
+  // 출발지 S
+  addSearchMarker(
+    'S',
+    'start',
+    originLatLng,
+    isReturnToStartRoute ? -19 : 0
+  );
+
+  // 경유지 1, 2, 3
+  draft.waypoints.forEach(
+    function (waypoint, index) {
+      addSearchMarker(
+        String(index + 1),
+        'waypoint',
+        getRunTripPlaceLatLng(waypoint)
+      );
+    }
+  );
+
+  // 도착지 D
+  addSearchMarker(
+    'D',
+    'destination',
+    destinationLatLng,
+    isReturnToStartRoute ? 19 : 0
+  );
+}
+
+function initializeRunTripSearchRouteLayer() {
+  const searchMap = freeRunTripMapboxSearchMap;
+
+  if (!searchMap || !searchMap.isStyleLoaded()) {
+    return false;
+  }
+
+  if (!searchMap.getSource(RUNTRIP_SEARCH_ROUTE_SOURCE_ID)) {
+    searchMap.addSource(RUNTRIP_SEARCH_ROUTE_SOURCE_ID, {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: []
+        }
+      }
+    });
+  }
+
+  if (!searchMap.getLayer(RUNTRIP_SEARCH_ROUTE_LAYER_ID)) {
+    searchMap.addLayer({
+  id: RUNTRIP_SEARCH_ROUTE_LAYER_ID,
+  type: 'line',
+  source: RUNTRIP_SEARCH_ROUTE_SOURCE_ID,
+  slot: 'top',
+  layout: {
+    'line-cap': 'round',
+    'line-join': 'round'
+  },
+      paint: {
+        'line-color': '#76e4d2',
+        'line-width': 6,
+        'line-opacity': 0.95
+      }
+    });
+  }
+
+  return true;
+}
+
+function updateRunTripSearchRouteLine(coordinates) {
+  if (!initializeRunTripSearchRouteLayer()) {
+    return;
+  }
+
+  const points = Array.isArray(coordinates)
+    ? coordinates
+        .filter(function (point) {
+          return (
+            Array.isArray(point) &&
+            point.length >= 2 &&
+            Number.isFinite(Number(point[0])) &&
+            Number.isFinite(Number(point[1]))
+          );
+        })
+        .map(function (point) {
+          return [
+            Number(point[1]),
+            Number(point[0])
+          ];
+        })
+    : [];
+
+  const source = freeRunTripMapboxSearchMap.getSource(
+    RUNTRIP_SEARCH_ROUTE_SOURCE_ID
+  );
+
+  if (!source) {
+    return;
+  }
+
+  source.setData({
+    type: 'Feature',
+    properties: {},
+    geometry: {
+      type: 'LineString',
+      coordinates: points.length >= 2 ? points : []
+    }
+  });
+}
+
+// 검색 화면에서 현재 설정된 장소들 사이의 보행 경로 표시
+async function renderRunTripSearchRoute() {
+  const requestId = ++runTripSearchRouteRequestId;
+  const draft = getRunTripDraft();
+
+  updateRunTripSearchRouteLine([]);
+
+  if (!draft.origin) {
+    return;
+  }
+
+  const selectedPlaces = [
+    draft.origin,
+    ...draft.waypoints
+  ];
+
+  if (draft.destination) {
+    selectedPlaces.push(draft.destination);
+  }
+
+  // 최소 두 지점이 있어야 경로 계산 가능
+  if (selectedPlaces.length < 2) {
+    return;
+  }
+
+  const destination =
+    selectedPlaces[selectedPlaces.length - 1];
+
+  const intermediatePlaces =
+    selectedPlaces.slice(1, -1);
+
+  const originPoint =
+    convertRunTripPlaceToRoutePoint(draft.origin);
+
+  const destinationPoint =
+    convertRunTripPlaceToRoutePoint(destination);
+
+  const waypointPoints =
+    intermediatePlaces.map(
+      convertRunTripPlaceToRoutePoint
+    );
+
+  if (
+    !originPoint ||
+    !destinationPoint ||
+    waypointPoints.some(function (point) {
+      return !point;
+    })
+  ) {
+    return;
+  }
+
+  try {
+    let routeCoordinates = null;
+
+    // 이미 계산된 전체 보행 경로가 있으면 재사용
+    if (
+      draft.destination &&
+      latestRunTripRouteSummary &&
+      Array.isArray(latestRunTripRouteSummary.coordinates)
+    ) {
+      routeCoordinates =
+        latestRunTripRouteSummary.coordinates;
+    } else {
+      // 도착지 미설정 시 마지막 경유지까지 부분 경로 계산
+      const result = await requestRunTripRoute(
+        originPoint,
+        destinationPoint,
+        waypointPoints,
+        getRunTripPlaceDisplayName(draft.origin) || '출발지',
+        getRunTripPlaceDisplayName(destination) || '마지막 지점',
+        {
+          autoAdjustDestination: false,
+          destinationPlaceId: ''
+        }
+      );
+
+      routeCoordinates = result.coordinates;
+    }
+
+    // 검색 화면이 닫히거나 새 요청이 시작되면 이전 결과 무시
+    if (
+      requestId !== runTripSearchRouteRequestId ||
+      runTripSearchScreen.classList.contains('hidden')
+    ) {
+      return;
+    }
+
+    updateRunTripSearchRouteLine(routeCoordinates);
+  } catch (error) {
+    if (requestId !== runTripSearchRouteRequestId) {
+      return;
+    }
+
+    console.warn(
+      'RunTrip 검색 지도 보행 경로 표시 실패:',
+      error
+    );
+
+    updateRunTripSearchRouteLine([]);
+  }
+}
+
+
 function clearMapboxRunTripPreviewMarkers() {
   mapboxRunTripPreviewMarkers.forEach(
     function (marker) {
@@ -22649,19 +23001,115 @@ async function renderRunTripMapPreview(prefetchedRoute = null) {
     );
   });
 
-  if (!originLatLng || !destinationLatLng) {
-    const markerBounds = L.latLngBounds(
-      previewMarkers.map(function (marker) {
-        return marker.latLng;
-      })
-    );
+  
+if (!originLatLng || !destinationLatLng) {
+  const markerBounds = L.latLngBounds(
+    previewMarkers.map(function (marker) {
+      return marker.latLng;
+    })
+  );
 
-   fitRunTripMapBounds(markerBounds);
+  fitRunTripMapBounds(markerBounds);
 
-   isRunTripRoutePreviewLoading = false;
-
+  // 출발지와 경유지가 있어야 부분 경로 계산
+  if (
+    !originLatLng ||
+    draft.waypoints.length === 0
+  ) {
+    isRunTripRoutePreviewLoading = false;
     return;
   }
+
+  // 마지막 경유지를 임시 도착점으로 사용
+  const lastWaypoint =
+    draft.waypoints[draft.waypoints.length - 1];
+
+  const intermediateWaypoints =
+    draft.waypoints.slice(0, -1);
+
+  const originPoint =
+    convertRunTripPlaceToRoutePoint(draft.origin);
+
+  const destinationPoint =
+    convertRunTripPlaceToRoutePoint(lastWaypoint);
+
+  const waypointPoints =
+    intermediateWaypoints.map(
+      convertRunTripPlaceToRoutePoint
+    );
+
+  if (
+    !originPoint ||
+    !destinationPoint ||
+    waypointPoints.some(function (point) {
+      return !point;
+    })
+  ) {
+    isRunTripRoutePreviewLoading = false;
+    return;
+  }
+
+  try {
+    const partialRoute = await requestRunTripRoute(
+      originPoint,
+      destinationPoint,
+      waypointPoints,
+      getRunTripPlaceDisplayName(draft.origin) || '출발지',
+      getRunTripPlaceDisplayName(lastWaypoint) || '마지막 경유지',
+      {
+        autoAdjustDestination: false,
+        destinationPlaceId: ''
+      }
+    );
+
+    // 경유지 변경 중 도착한 이전 응답은 무시
+    if (!isRunTripRoutePreviewCurrent(draft, requestId)) {
+      return;
+    }
+
+    const coordinates = partialRoute.coordinates;
+
+    if (
+      !Array.isArray(coordinates) ||
+      coordinates.length < 2
+    ) {
+      throw new Error('부분 보행 경로 좌표가 없습니다.');
+    }
+
+    // 기존 마커를 유지한 채 경로선만 추가
+    L.polyline(coordinates, {
+      color: '#76e4d2',
+      weight: 6,
+      opacity: 0.95,
+      lineCap: 'round',
+      lineJoin: 'round'
+    }).addTo(runTripPreviewLayer);
+
+    updateMapboxRunTripPlannedRoute(
+      coordinates,
+      partialRoute.legSteps
+    );
+
+    isRunTripRoutePreviewLoading = false;
+  } catch (error) {
+    if (!isRunTripRoutePreviewCurrent(draft, requestId)) {
+      return;
+    }
+
+    isRunTripRoutePreviewLoading = false;
+
+    console.warn(
+      'RunTrip 부분 경로 계산 실패:',
+      error
+    );
+
+    runTripStatus.textContent =
+      '부분 경로를 표시하지 못했어요. 장소를 확인해 주세요.';
+  }
+
+  return;
+}
+
 
   const originPoint = convertRunTripPlaceToRoutePoint(
     draft.origin
